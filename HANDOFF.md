@@ -86,16 +86,30 @@ C:\Users\LIN\Documents\github\SoundArena\
 - Supabase 的 `additional_redirect_urls` 已加上 `https://web-mocha-xi-12.vercel.app/**` 跟 `https://web-*-galaxyus-projects.vercel.app/**`(涵蓋這個 team/project 底下所有 preview deploy 網址,沒有開放到任意 `*.vercel.app`,範圍有收斂)。
 - **要重新部署**:`cd web && vercel deploy --prod`。**改了環境變數要重新部署才會生效**(Vercel 是 build-time 注入)。
 
-### Next.js 真實骨架(`web/`,08-16 這輪把全部 11 個畫面都搬完了)
+### Next.js 真實骨架(`web/`)
 
 真的能動、不是佔位頁的路由:
 - `/login`、`/register` — 真的接 Supabase Auth,`/register` 有 Server Component 層的登入 gate(未登入會被 `src/proxy.ts` 導回登入頁)
-- `/`(Discovery)、`/competitions`(擂台+播放器)、`/submit`(投稿表單)、`/vote`(投票)、`/judge`(評審評分)、`/status`(個人狀態)、`/admin/review`(審核後台)、`/admin/format`(賽制建立)、`/admin/schedule`(時程設定)— 全部從 `design/prototype.html` 忠實搬過來,用 Tailwind 重寫,已用瀏覽器實測互動(播放器切歌、AdminShell 雙視角切換、檢舉標記已處理、時程邊界紅字警告都驗證過真的有效,不只是編譯過)
+- `/`(Discovery)、`/competitions`(擂台+播放器)、`/submit`(投稿表單)、`/vote`(投票)、`/judge`(評審評分)、`/status`(個人狀態)、`/admin/review`(審核後台)、`/admin/format`(賽制建立)、`/admin/schedule`(時程設定)— 全部從 `design/prototype.html` 忠實搬過來,用 Tailwind 重寫
+- `/updates`(公開更新記錄)、`/feedback`(意見回饋,登入才能寫)— 08-16 這輪新加的功能,不在原本 SPEC 裡,是對話中臨時加的需求
+- **導覽**:`SiteHeader` 的 nav 曾經只有 3 個項目(活動/比賽/上傳作品),`/vote`/`/judge`/`/status`/`/admin/*` 完全沒有入口只能打網址進去——已擴到 7 個項目全部涵蓋,見 `src/components/SiteHeader.tsx` 的 `NAV_ITEMS`(目前是「全部攤平顯示」,還沒有依角色收合,見下方缺口 2)
+
+**已經接上真實 Supabase 資料的部分**(不是假資料了):
+- **`/admin/format`(建立比賽)**:Organizer 沒有比賽時顯示建立表單,送出後真的 INSERT `competitions` + 初賽/決賽兩輪 `rounds` + 預設 `scoring_rules`(投票40/影片流量25/外部投票35,總和100%)。建立後畫面讀真實資料,賽制積木 chip、新增/移除輪次、ScoringRuleOverride 開關、計分項目權重編輯,全部透過 `src/app/admin/format/actions.ts` 的 Server Actions 寫回資料庫。程式碼在 `page.tsx`(Server Component 抓資料)+ `AdminFormatClient.tsx`(互動邏輯)+ `CreateCompetitionForm.tsx`。
+- **`/admin/schedule`**:讀寫 `competitions` 的宣傳/公布/報名截止日 + 所有 `rounds` 的投稿/投票日期(目前是套用到「每一輪」,還沒做到每輪各自不同投稿窗口,那是 SPEC 第2節「僅開放特定輪次投稿」的獨立功能)。
+- **Discovery(`/`)**:讀真實的公開比賽(`is_public = true`),狀態徽章(報名中/已截止/籌備中)是從 `registration_closes_at` 真實算出來的,不是假資料。主辦方名稱透過新的 profiles RLS policy 讀真實 `display_name`。
+- **feedback/changelog**:兩張新表,不在 CONTEXT.md 原本的實體清單裡。`feedback` 只能寫不能讀(RLS 只開 insert,審閱走 Supabase dashboard 或 service_role);`changelog_entries` 任何人都能讀,只有 service_role 能寫(目前一筆真實紀錄:「Google / Discord 登入上線」)。
+
+**這輪測試時抓到、已修正的真實 bug(不是憑空猜的,每個都是實測炸掉才發現)**:
+1. `profiles` 的「PlatformAdmin 可讀」RLS policy 在自己的判斷條件裡查詢 `profiles` 表本身 → **infinite recursion**,擋住任何「寫入後讀回」的操作(包括建立比賽這個最基本的動作)。修法是 `is_platform_admin()` 這個 `SECURITY DEFINER` function(見 `20260816100724_fix_profiles_rls_recursion.sql`),同樣的複製貼上錯誤在另外 5 條 policy 裡也存在,一起修了。
+2. `AdminFormatClient` 一開始還在用 `mockData.ts` 的 `FORMAT_BLOCKS`(key 像 `single-elim`)當賽制積木選單,但資料庫真正 seed 的 key 是 `single_elimination`——兩邊對不上,點擊賽制積木會靜默失敗(找不到積木、悄悄不寫入,UI 上看起來像選中其實只是滑鼠 hover 的錯覺)。現在積木選單改成從 `format_blocks` 表即時查詢,不會再跟資料庫脫鉤。
+3. 加權計分項目權重總和=100% 的檢查是 deferred constraint trigger,一次交易內要看到最終狀態——用 PostgREST 個別 UPDATE/DELETE 每筆都會各自觸發、各自可能失敗。解法是 `replace_score_items` 這個 Postgres function(見 `20260816095858_score_items_replace_fn.sql`),把整批異動包在同一個交易裡。
+4. `<input type="date">` 空著時送出的是 `""`,不是 `null`——Postgres 的 `timestamptz` 不接受空字串,會報 `invalid input syntax`。`saveSchedule` 現在會把空字串轉成 `null` 再送出。
 
 **已知缺口,不是漏了、是還沒排到**:
-1. **這 11 個畫面全部還是假資料**(`src/lib/mockData.ts` + 各頁面內的 mock),沒有一個真的讀寫 Supabase 的 `competitions`/`submissions`/`votes` 等表。上面五張留白 RLS 的表也還沒有對應的後端寫入邏輯。
-2. **`/admin/*` 目前沒有真的權限保護**——proxy.ts 只擋了 `/register` 這一條路徑,誰都能直接打網址進 `/admin/format` 等頁面。要等「使用者建立第一場比賽自動成為 Organizer」這個流程做出來、`profiles.is_platform_admin` 有實際用途,才能接上真的角色檢查。
-3. **通知系統完全沒動**——SPEC 第 6 節已經把觸發時機寫完整(報名/投稿提醒/投稿完成/投票開始/晉級提醒投稿/淘汰結果/最終名次,全部要透過 UID 精準通知,不是廣播),也決定加 Email 管道(只有 Google 登入的人能收,LINE/Discord 使用者不提供這個選項)——但**沒有 schema、沒有寄信服務商**,純粹記在 SPEC 裡待實作。
+1. **投稿/投票/評分四張表還是空的**:`registrations` / `submissions` / `votes` / `submission_scores` 這幾張表(連同 `/submit`、`/vote`、`/judge`、`/status`、`/admin/review` 幾個畫面)還是 mock 資料,RLS 也刻意留白(見上)。「建立比賽」這條線做完了,下一條自然的線是「報名 → 投稿」。
+2. **`/admin/*` 的權限保護只到「有沒有登入」**,proxy.ts 沒有檢查「這個人是不是這場比賽的 Organizer」——目前是靠 RLS 擋(別人的比賽你查不到、改不了),但 UI 層面任何登入使用者都能打開 `/admin/format` 看到「建立你的第一場比賽」表單。等有多個 Organizer 的真實情境出現,要重新檢視這塊。
+3. **通知系統完全沒動**——SPEC 第 6 節已經把觸發時機寫完整,也決定加 Email 管道(只有 Google 登入的人能收)——但沒有 schema、沒有寄信服務商。
 
 ### 已驗證的技術事實(不要重新查一次,直接信,除非官方又改版)
 
@@ -111,13 +125,12 @@ C:\Users\LIN\Documents\github\SoundArena\
 
 ## 下一步(哪個先做,使用者可以自己選)
 
-1. **接真實資料**:把 11 個畫面從 mockData 換成真的 Supabase 讀寫——第一步通常是先做「建立比賽」的完整流程(對應 `/admin/format` + `/admin/schedule`),因為使用者要先能建立一場真的 Competition,其他畫面(報名/投稿/投票)才有東西可以接
-2. **Discord guilds.join 補完**:使用者把 Bot 邀進 SoundArena Discord 伺服器,把伺服器 ID 填進 `DISCORD_GUILD_ID`
-3. **`/admin/*` 真的權限保護**:等第 1 點的「建立比賽自動成為 Organizer」邏輯做出來後,一起把 proxy.ts 的 gate 擴大到 admin 路徑
+1. **接下一段真實資料**:「建立比賽」這條線(`/admin/format` + `/admin/schedule`)已經做完並實測過。自然的下一步是「報名 → 投稿」(`/register` 已經有 gate 但沒真的寫 `registrations` 表;`/submit` 還是 mock),再來是投票/評分。每接一塊都要照這輪的模式:寫 Server Action → build → 真的在瀏覽器點過 → 用 service_role 查資料庫驗證,不要只看畫面渲染就當作成功(這輪至少 3 次「畫面看起來對,資料庫其實是空的」)。
+2. **Discord guilds.join 補完**:使用者把 Bot 邀進 SoundArena Discord 伺服器,把伺服器 ID 填進 `.env.local` 跟 Vercel 的 `DISCORD_GUILD_ID`
+3. **`/admin/*` 的角色級權限保護**:目前只檢查「有沒有登入」,見上方已知缺口 2
 4. **Cloudflare R2**:建 bucket、拿金鑰、接上音檔上傳/簽章下載
 5. **通知系統**:先決定 schema(SPEC 第 6 節需求已經很完整了),再選 email 服務商
 6. **LINE 登入**:使用者能申請的時候回來補
-7. **补第一次 git commit**(看使用者要不要現在做,見文件最開頭)
 
 ---
 
@@ -140,6 +153,21 @@ C:\Users\LIN\Documents\github\SoundArena\
 8. **每個 session 第一次呼叫 Bash 工具前,GateGuard 的 fact-forcing hook 會擋下來**,要求先用文字講清楚「使用者請求是什麼(一句話)」+「這個指令要驗證/產生什麼」。
 
 9. **這個 session 一開始還審查過一個完全不相關的 GitHub repo**(`zhaoxuya520/reverse-skill`,藏了 prompt injection 框架)——跟 SoundArena 專案完全無關,只是同一個對話串的歷史紀錄,不用理會。
+
+10. **寫 RLS policy 時,絕對不要在某張表的 policy 條件裡查詢那張表自己**(即使是透過別名 `p`)——會觸發 infinite recursion,而且是複製貼上就會一路複製這個錯誤的那種 bug(這輪一次踩了 6 個 policy)。要檢查角色權限(如 `is_platform_admin`),寫一個 `SECURITY DEFINER` 的 helper function 繞過 RLS 去查,不要用行內 subquery。
+
+11. **前端拿來畫選單/按鈕的資料,如果資料庫已經有對應的真實資料表,不要繼續用寫死的 mock 常數**——這輪 `AdminFormatClient` 忘記把 `FORMAT_BLOCKS` 從 mockData.ts 換成真的資料庫查詢,兩邊 key 對不上,點擊會靜默失敗還看不出來(UI 上誤以為選中,其實只是滑鼠 hover 效果)。串接真實資料時,搜一次 `mockData` 的 import,確認每個都真的換掉了。
+
+12. **`<input type="date">` 空著送出的是 `""` 不是 `null`**,直接塞進 `timestamptz` 欄位會被 Postgres 拒絕(`invalid input syntax`)。串資料庫前先把空字串轉 `null`。
+
+13. **用瀏覽器自動化工具對原生 `<input type="date">` 打字容易出亂子**(年份欄位會不正常累加數字,變成 `90120/02/06` 這種畸形值)——這是 date picker widget 跟自動化按鍵模擬互動的已知怪癖,不是程式碼的 bug。要測試就跳過鍵盤模擬,直接用 JS 呼叫原生 setter 設值再觸發 `input` 事件:
+    ```js
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+    setter.call(inputEl, '2026-09-01');
+    inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+    ```
+
+14. **Session 過期比想像中頻繁**(這輪跳出好幾次),`/auth/callback` 沒問題但要重新走一次 Google 帳號選擇畫面——如果瀏覽器已經對這個 App 授權過,選帳號後會直接跳過同意畫面。
 
 ---
 
