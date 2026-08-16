@@ -1,23 +1,32 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
+import { useRouter, usePathname } from "next/navigation";
 import { SiteHeader } from "@/components/SiteHeader";
 import { Icon } from "@/lib/icons";
 import { Switch } from "@/components/Switch";
 import { EmptyState } from "@/components/EmptyState";
 import { MOCK_ALL_COMPETITIONS_PLATFORM, MOCK_REPORTS } from "@/lib/mockData";
 
-type Section = "review" | "format" | "schedule" | "platform-competitions" | "platform-reports";
+type Section = "review" | "format" | "schedule" | "profile" | "platform-competitions" | "platform-reports";
+
+interface AdminCompetitionOption {
+  id: string;
+  name: string;
+}
 
 interface AdminShellProps {
-  active: "review" | "format" | "schedule";
+  active: "review" | "format" | "schedule" | "profile";
   children: ReactNode;
+  competitions?: AdminCompetitionOption[];
+  activeCompetitionId?: string;
 }
 
 const ORG_ITEMS = [
   { key: "review" as const, label: "審核後台", icon: "shield" as const },
   { key: "format" as const, label: "賽制建立", icon: "crown" as const },
   { key: "schedule" as const, label: "時程設定", icon: "calendar" as const },
+  { key: "profile" as const, label: "主辦人身分", icon: "user" as const },
 ];
 
 const PLATFORM_ITEMS = [
@@ -25,11 +34,25 @@ const PLATFORM_ITEMS = [
   { key: "platform-reports" as const, label: "檢舉處理", icon: "alert" as const },
 ];
 
-export function AdminShell({ active, children }: AdminShellProps) {
+const ORG_ROUTES: Record<AdminShellProps["active"], string> = {
+  review: "/admin/review",
+  format: "/admin/format",
+  schedule: "/admin/schedule",
+  profile: "/admin/profile",
+};
+
+export function AdminShell({ active, children, competitions, activeCompetitionId }: AdminShellProps) {
+  const router = useRouter();
+  const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   const [viewpoint, setViewpoint] = useState<"organizer" | "platform">("organizer");
   const [section, setSection] = useState<Section>(active);
   const [reports, setReports] = useState(MOCK_REPORTS);
+
+  function goTo(key: AdminShellProps["active"]) {
+    const suffix = activeCompetitionId ? `?c=${activeCompetitionId}` : "";
+    router.push(`${ORG_ROUTES[key]}${suffix}`);
+  }
 
   const resolveReport = (id: number) =>
     setReports((rs) => rs.map((r) => (r.id === id ? { ...r, state: "resolved" as const } : r)));
@@ -67,13 +90,30 @@ export function AdminShell({ active, children }: AdminShellProps) {
             </div>
           )}
 
+          {!collapsed && viewpoint === "organizer" && competitions && competitions.length > 0 && (
+            <div className="mb-3.5">
+              <label className="mb-1 block text-[10.5px] tracking-wide text-ink-faint uppercase">管理中的比賽</label>
+              <select
+                value={activeCompetitionId ?? ""}
+                onChange={(e) => router.push(`${pathname}?c=${e.target.value}`)}
+                className="w-full appearance-none rounded-[9px] border border-panel-border bg-black/25 px-2.5 py-2 text-[12px] text-ink outline-none focus:border-accent/50 [color-scheme:dark]"
+              >
+                {competitions.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           {viewpoint === "organizer" &&
             ORG_ITEMS.map((it) => (
               <button
                 key={it.key}
-                onClick={() => setSection(it.key)}
+                onClick={() => goTo(it.key)}
                 className={`mb-1 flex w-full items-center gap-2.5 rounded-[9px] px-2.5 py-2.25 text-left text-[13px] whitespace-nowrap ${
-                  section === it.key
+                  active === it.key
                     ? "border border-accent/28 bg-accent/12 text-ink"
                     : "border border-transparent text-ink-dim hover:bg-white/[0.04] hover:text-ink"
                 }`}

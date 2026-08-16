@@ -1,15 +1,18 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { SiteHeader } from "@/components/SiteHeader";
 import { EmptyState } from "@/components/EmptyState";
 import { Icon } from "@/lib/icons";
 import { SUBMISSION_STATE_META, STATE_PILL_CLASS, type SubmissionState } from "@/lib/mockData";
+import { PrivacyPanel, type PrivacyRegistration, type PrivacySubmission } from "./PrivacyPanel";
 
 interface RegistrationRow {
   id: string;
   status: "active" | "eliminated";
   eliminated_in_round_id: string | null;
   competition_id: string;
+  is_public: boolean;
   competitions: { name: string } | { name: string }[] | null;
 }
 
@@ -19,6 +22,17 @@ interface RoundRow {
   round_index: number;
   competition_id: string;
   allows_new_submissions: boolean;
+}
+
+interface SubmissionRow {
+  round_id: string;
+  registration_id: string;
+  status: SubmissionState;
+  title: string | null;
+  suno_share_url: string;
+  review_note: string | null;
+  allow_public_playback: boolean;
+  id: string;
 }
 
 function oneName(value: { name: string } | { name: string }[] | null): string {
@@ -34,7 +48,7 @@ export default async function StatusPage() {
 
   const { data: registrations } = await supabase
     .from("registrations")
-    .select("id, status, eliminated_in_round_id, competition_id, competitions(name)")
+    .select("id, status, eliminated_in_round_id, competition_id, is_public, competitions(name)")
     .eq("user_id", userId);
 
   const regs = (registrations ?? []) as unknown as RegistrationRow[];
@@ -51,14 +65,15 @@ export default async function StatusPage() {
   const { data: submissions } = regs.length
     ? await supabase
         .from("submissions")
-        .select("round_id, registration_id, status")
+        .select("id, round_id, registration_id, status, title, suno_share_url, review_note, allow_public_playback")
         .in(
           "registration_id",
           regs.map((r) => r.id),
         )
-    : { data: [] };
+    : { data: [] as SubmissionRow[] };
 
-  const submissionByKey = new Map((submissions ?? []).map((s) => [`${s.round_id}:${s.registration_id}`, s.status as SubmissionState]));
+  const subs = (submissions ?? []) as unknown as SubmissionRow[];
+  const submissionByKey = new Map(subs.map((s) => [`${s.round_id}:${s.registration_id}`, s]));
 
   return (
     <div>
@@ -96,24 +111,44 @@ export default async function StatusPage() {
                   <EmptyState icon="inbox" title="這場比賽還沒有任何輪次" sub="等主辦方設定賽制後再回來看看" />
                 ) : (
                   compRounds.map((round) => {
-                    const subState = submissionByKey.get(`${round.id}:${reg.id}`);
-                    const meta = subState ? SUBMISSION_STATE_META[subState] : null;
+                    const sub = submissionByKey.get(`${round.id}:${reg.id}`);
+                    const meta = sub ? SUBMISSION_STATE_META[sub.status] : null;
                     return (
-                      <div key={round.id} className="glass mb-2 flex items-center gap-4 px-4.5 py-4">
-                        <div className="flex-1 text-[13.5px]">{round.name}</div>
-                        <div className="text-[11.5px] text-ink-faint">
-                          {!subState && !round.allows_new_submissions ? "本輪未開放投稿" : " "}
+                      <div key={round.id} className="glass mb-2 px-4.5 py-4">
+                        <div className="flex items-center gap-4">
+                          <div className="flex-1 text-[13.5px]">
+                            {round.name}
+                            {sub?.title && <span className="ml-2 text-ink-dim">— {sub.title}</span>}
+                          </div>
+                          <div className="text-[11.5px] text-ink-faint">
+                            {!sub && !round.allows_new_submissions ? "本輪未開放投稿" : " "}
+                          </div>
+                          {meta ? (
+                            <span
+                              className={`inline-flex items-center gap-1.25 rounded-full border px-2.5 py-1 text-[11px] ${STATE_PILL_CLASS[meta.cls]}`}
+                            >
+                              {meta.label}
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.25 rounded-full border border-panel-border px-2.5 py-1 text-[11px] text-ink-faint">
+                              尚未投稿
+                            </span>
+                          )}
                         </div>
-                        {meta ? (
-                          <span
-                            className={`inline-flex items-center gap-1.25 rounded-full border px-2.5 py-1 text-[11px] ${STATE_PILL_CLASS[meta.cls]}`}
-                          >
-                            {meta.label}
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1.25 rounded-full border border-panel-border px-2.5 py-1 text-[11px] text-ink-faint">
-                            尚未投稿
-                          </span>
+                        {sub && (
+                          <div className="mt-2 flex items-center gap-2 border-t border-panel-border pt-2 text-[11.5px] text-ink-faint">
+                            <a
+                              href={sub.suno_share_url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="flex items-center gap-1 text-accent hover:underline"
+                            >
+                              在 Suno 上查看 <Icon name="externalLink" size={11} />
+                            </a>
+                            {sub.status === "rejected" && sub.review_note && (
+                              <span className="text-bad">・退回原因：{sub.review_note}</span>
+                            )}
+                          </div>
                         )}
                       </div>
                     );
@@ -122,6 +157,33 @@ export default async function StatusPage() {
               </div>
             );
           })
+        )}
+
+        {regs.length > 0 && (
+          <div className="mt-10 border-t border-panel-border pt-7">
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <h2 className="text-[16px] font-semibold">隱私設定</h2>
+                <p className="mt-1 text-[12px] text-ink-dim">
+                  選擇哪些報名紀錄、哪些投稿作品要出現在你的
+                  <Link href={`/u/${userId}`} className="mx-1 text-accent hover:underline">
+                    公開檔案
+                  </Link>
+                  上，可以個別設定，也可以一次全部切換。
+                </p>
+              </div>
+            </div>
+            <PrivacyPanel
+              registrations={regs.map((r): PrivacyRegistration => ({
+                id: r.id,
+                competitionName: oneName(r.competitions),
+                isPublic: r.is_public,
+              }))}
+              submissions={subs
+                .filter((s) => s.title)
+                .map((s): PrivacySubmission => ({ id: s.id, title: s.title as string, isPublic: s.allow_public_playback }))}
+            />
+          </div>
         )}
       </div>
     </div>

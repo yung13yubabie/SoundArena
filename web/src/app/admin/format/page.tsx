@@ -34,23 +34,35 @@ function toScoreItems(rows: ScoreItemRow[]): ScoreItemData[] {
     .map((r) => ({ id: r.id, label: r.label, kind: r.kind, weightPercent: r.weight_percent }));
 }
 
-export default async function AdminFormatPage() {
+export default async function AdminFormatPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ c?: string }>;
+}) {
+  const { c: requestedId } = await searchParams;
   const supabase = await createClient();
   const { data: claims } = await supabase.auth.getClaims();
   if (!claims?.claims?.sub) redirect("/login");
   const userId = claims.claims.sub as string;
 
-  const { data: competition } = await supabase
+  const { data: profile } = await supabase.from("profiles").select("host_setup_completed").eq("id", userId).maybeSingle();
+  if (!profile?.host_setup_completed) redirect("/admin/profile");
+
+  const { data: myCompetitions } = await supabase
     .from("competitions")
     .select("id, name, anonymity_mode")
     .eq("organizer_id", userId)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .order("created_at", { ascending: false });
+
+  const competition = requestedId
+    ? (myCompetitions ?? []).find((c) => c.id === requestedId)
+    : (myCompetitions ?? [])[0];
 
   if (!competition) {
     return <CreateCompetitionForm />;
   }
+
+  const competitionList = (myCompetitions ?? []).map((c) => ({ id: c.id, name: c.name }));
 
   const { data: rounds } = await supabase
     .from("rounds")
@@ -117,6 +129,7 @@ export default async function AdminFormatPage() {
       defaultScoreItems={defaultItems}
       rounds={roundData}
       formatBlockCatalog={formatBlockCatalog}
+      competitionList={competitionList}
     />
   );
 }

@@ -8,6 +8,7 @@ type ActionResult = { success: true } | { error: string };
 export async function reviewSubmission(
   submissionId: string,
   status: "approved" | "rejected" | "pending_review",
+  note?: string,
 ): Promise<ActionResult> {
   const supabase = await createClient();
   const {
@@ -17,7 +18,12 @@ export async function reviewSubmission(
 
   const { error } = await supabase
     .from("submissions")
-    .update({ status, reviewed_by: user.id, reviewed_at: new Date().toISOString() })
+    .update({
+      status,
+      reviewed_by: user.id,
+      reviewed_at: new Date().toISOString(),
+      review_note: note?.trim() || null,
+    })
     .eq("id", submissionId);
   if (error) return { error: error.message };
 

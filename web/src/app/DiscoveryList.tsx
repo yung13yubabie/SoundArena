@@ -9,6 +9,7 @@ export interface Competition {
   id: string;
   name: string;
   registration_closes_at: string | null;
+  organizer_id: string;
   organizer: { display_name: string | null } | { display_name: string | null }[] | null;
 }
 
@@ -90,7 +91,13 @@ export function DiscoveryList({ competitions }: { competitions: Competition[] })
                     <span className={`rounded-full border px-2.25 py-0.75 text-[11px] ${meta.className}`}>{meta.label}</span>
                   </div>
                   <div className="mb-1 text-[15.5px]">{c.name}</div>
-                  <div className="mb-3 text-[12px] text-ink-faint">由 {organizerName(c.organizer)} 主辦</div>
+                  <div className="mb-3 text-[12px] text-ink-faint">
+                    由{" "}
+                    <Link href={`/u/${c.organizer_id}`} className="text-ink-dim hover:text-accent hover:underline">
+                      {organizerName(c.organizer)}
+                    </Link>{" "}
+                    主辦
+                  </div>
                   <Link
                     href={`/register?competition=${c.id}`}
                     className="text-[12px] font-semibold text-accent hover:underline"

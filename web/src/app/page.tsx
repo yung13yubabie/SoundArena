@@ -5,7 +5,7 @@ export default async function HomePage() {
   const supabase = await createClient();
   const { data } = await supabase
     .from("competitions")
-    .select("id, name, registration_closes_at, organizer:profiles(display_name)")
+    .select("id, name, registration_closes_at, organizer_id, organizer:profiles(display_name)")
     .eq("is_public", true)
     .order("created_at", { ascending: false });
 

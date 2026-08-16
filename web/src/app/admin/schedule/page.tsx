@@ -7,21 +7,31 @@ function toDateInput(value: string | null): string {
   return value ? value.slice(0, 10) : "";
 }
 
-export default async function AdminSchedulePage() {
+export default async function AdminSchedulePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ c?: string }>;
+}) {
+  const { c: requestedId } = await searchParams;
   const supabase = await createClient();
   const { data: claims } = await supabase.auth.getClaims();
   if (!claims?.claims?.sub) redirect("/login");
   const userId = claims.claims.sub as string;
 
-  const { data: competition } = await supabase
+  const { data: profile } = await supabase.from("profiles").select("host_setup_completed").eq("id", userId).maybeSingle();
+  if (!profile?.host_setup_completed) redirect("/admin/profile");
+
+  const { data: myCompetitions } = await supabase
     .from("competitions")
     .select(
       "id, name, registration_closes_at, promotion_starts_at, promotion_ends_at, announcement_starts_at, announcement_ends_at",
     )
     .eq("organizer_id", userId)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .order("created_at", { ascending: false });
+
+  const competition = requestedId
+    ? (myCompetitions ?? []).find((c) => c.id === requestedId)
+    : (myCompetitions ?? [])[0];
 
   if (!competition) {
     return (
@@ -36,6 +46,8 @@ export default async function AdminSchedulePage() {
       </AdminShell>
     );
   }
+
+  const competitionList = (myCompetitions ?? []).map((c) => ({ id: c.id, name: c.name }));
 
   const { data: rounds } = await supabase
     .from("rounds")
@@ -61,6 +73,7 @@ export default async function AdminSchedulePage() {
         announcementEnd: toDateInput(competition.announcement_ends_at),
         registrationDeadline: toDateInput(competition.registration_closes_at),
       }}
+      competitionList={competitionList}
     />
   );
 }

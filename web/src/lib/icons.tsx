@@ -16,6 +16,7 @@ export const ICONS = {
   calendar: "M7 3v3M17 3v3M4 8h16M5 6h14a1 1 0 011 1v12a1 1 0 01-1 1H5a1 1 0 01-1-1V7a1 1 0 011-1z",
   close: "M18 6L6 18M6 6l12 12",
   plus: "M12 5v14M5 12h14",
+  user: "M12 12a4 4 0 100-8 4 4 0 000 8zM4 21a8 8 0 0116 0",
 } as const;
 
 export type IconName = keyof typeof ICONS;
