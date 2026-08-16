@@ -5,11 +5,13 @@
 
 ---
 
-## ⚠️ 最先要處理的事:專案完全沒有 git 版本歷史
+## Git 狀態(08-16 已解決,新 session 不用重查)
 
-`C:\Users\LIN\Documents\github` 是個 git repo(`.git` 存在),但 **`git log` 回報 zero commits,`git remote -v` 是空的**。SoundArena 資料夾本身沒有自己的 `.git`,一直是這個空 repo 底下的未追蹤資料夾。
+SoundArena 現在有**自己獨立的 git repo**(`SoundArena/.git`,跟上層 `C:\Users\LIN\Documents\github` 那個沒有任何關係——那個上層 repo 是空的、zero commits,而且底下混了 `SUNOprompt`/`backend`/`lottery` 幾個不相關的專案資料夾,SoundArena 不用它)。
 
-這代表從 08-09 到 08-16 的所有工作(SPEC.md、CONTEXT.md、prototype.html、Next.js app、Supabase schema、Auth 串接)**都沒有版本歷史**。沒人主動 commit 過,不是不小心漏掉。新 session 不要假設「應該已經 commit 了」——先確認使用者要不要現在補第一次 commit,不要自己動手(commit 屬於使用者才能決定的事)。
+第一個 commit(`f604235`)已建立,涵蓋 08-09 ~ 08-16 累積的所有工作。**沒有設定遠端(GitHub)**,目前只有本機版本歷史。
+
+踩過的坑,別再犯:`web/` 之前有它自己的巢狀 `.git`(`create-next-app` 自動產生,只有一個沒有價值的初始 commit),導致 `git add` 把整個 `web/` 當成內嵌 repo(gitlink)處理、內容完全沒被追蹤到。已經刪掉那個巢狀 `.git`,`web/` 現在是 SoundArena repo 底下的普通資料夾。**如果之後又看到 `git add` 跳出「adding embedded git repository」的警告,表示某個子資料夾又長出了自己的 `.git`,要先處理掉才能繼續。**
 
 ---
 
