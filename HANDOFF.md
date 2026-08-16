@@ -1,7 +1,7 @@
 # HANDOFF — 聲擂 SoundArena
 
 > 寫給完全沒有上一輪對話記憶的新 session 看。這份文件是唯一的真相來源,不要假設你「應該知道」任何背景。
-> 寫入時間:2026-08-16(對話跨了 08-09 ~ 08-16 多天,以下依實際完成順序整理,不是猜測)
+> 寫入時間:2026-08-16(對話跨了 08-09 ~ 08-16 多天,以下依實際完成順序整理,不是猜測;本次更新加在文件尾端「08-16 晚間追加」段落,前面內容原樣保留)
 
 ---
 
@@ -107,7 +107,7 @@ C:\Users\LIN\Documents\github\SoundArena\
 4. `<input type="date">` 空著時送出的是 `""`,不是 `null`——Postgres 的 `timestamptz` 不接受空字串,會報 `invalid input syntax`。`saveSchedule` 現在會把空字串轉成 `null` 再送出。
 
 **已知缺口,不是漏了、是還沒排到**:
-1. **投稿/投票/評分四張表還是空的**:`registrations` / `submissions` / `votes` / `submission_scores` 這幾張表(連同 `/submit`、`/vote`、`/judge`、`/status`、`/admin/review` 幾個畫面)還是 mock 資料,RLS 也刻意留白(見上)。「建立比賽」這條線做完了,下一條自然的線是「報名 → 投稿」。
+1. **投票/評分兩張表還是空的**:`votes` / `submission_scores`(連同 `/vote`、`/judge` 兩個畫面)還是 mock 資料,RLS 也刻意留白。**`registrations` / `submissions` 已經在 08-16 晚間那輪接上真實資料**,見文件尾端「08-16 晚間追加」段落——「報名 → 投稿 → 審核」這條線已經做完並實測過,下一條自然的線是「投票 → 評分」。
 2. **`/admin/*` 的權限保護只到「有沒有登入」**,proxy.ts 沒有檢查「這個人是不是這場比賽的 Organizer」——目前是靠 RLS 擋(別人的比賽你查不到、改不了),但 UI 層面任何登入使用者都能打開 `/admin/format` 看到「建立你的第一場比賽」表單。等有多個 Organizer 的真實情境出現,要重新檢視這塊。
 3. **通知系統完全沒動**——SPEC 第 6 節已經把觸發時機寫完整,也決定加 Email 管道(只有 Google 登入的人能收)——但沒有 schema、沒有寄信服務商。
 
@@ -125,12 +125,16 @@ C:\Users\LIN\Documents\github\SoundArena\
 
 ## 下一步(哪個先做,使用者可以自己選)
 
-1. **接下一段真實資料**:「建立比賽」這條線(`/admin/format` + `/admin/schedule`)已經做完並實測過。自然的下一步是「報名 → 投稿」(`/register` 已經有 gate 但沒真的寫 `registrations` 表;`/submit` 還是 mock),再來是投票/評分。每接一塊都要照這輪的模式:寫 Server Action → build → 真的在瀏覽器點過 → 用 service_role 查資料庫驗證,不要只看畫面渲染就當作成功(這輪至少 3 次「畫面看起來對,資料庫其實是空的」)。
+1. **接下一段真實資料:投票 → 評分**。「報名 → 投稿 → 審核」這條線已經做完並實測過(見文件尾端「08-16 晚間追加」),`/vote`、`/judge` 還是 mock。每接一塊都要照這輪的模式:寫 Server Action → build → 真的在瀏覽器點過 → 用 service_role 查資料庫驗證,不要只看畫面渲染就當作成功。
 2. **Discord guilds.join 補完**:使用者把 Bot 邀進 SoundArena Discord 伺服器,把伺服器 ID 填進 `.env.local` 跟 Vercel 的 `DISCORD_GUILD_ID`
 3. **`/admin/*` 的角色級權限保護**:目前只檢查「有沒有登入」,見上方已知缺口 2
 4. **Cloudflare R2**:建 bucket、拿金鑰、接上音檔上傳/簽章下載
-5. **通知系統**:先決定 schema(SPEC 第 6 節需求已經很完整了),再選 email 服務商
+5. **通知系統**:schema 還沒建,但訂閱範圍的鐵律已經定案並寫進 SPEC.md 第 6 節——**報名才會訂閱,單純建立/主辦比賽不會訂閱,訂閱可取消**,實作時直接照這條規則設計 schema,不用重新討論範圍。
 6. **LINE 登入**:使用者能申請的時候回來補
+7. **以下三項使用者提過、明確要做但這輪還沒排進去的功能,下次要問使用者要先做哪個**:
+   - **FormatBlock 的 `config` 具體設定 UI**:選中賽制積木後目前只是勾選,`format_blocks`/`round_format_blocks` 已有 `config` jsonb 欄位但沒有對應的設定畫面(例如主題輪要填關鍵字/曲風)——範圍還沒訂。
+   - **邀請連結整合模板訊息**:主辦分享比賽連結時,希望能帶出整合賽制/投票資訊的訊息模板,並支援 `{變數}` 填入——範圍還沒訂(模板存哪裡、哪些變數、UI 長怎樣都待設計)。
+   - **主辦者履歷頁**:列出「主辦過幾場比賽」「可貼社群連結(如 YT)」「頭像可選擇不上傳,不上傳時比照 Gmail 預設顯示兩個字」——範圍還沒訂,`profiles` 表可能需要加欄位(bio/social_links/avatar_url)。
 
 ---
 
@@ -179,3 +183,32 @@ C:\Users\LIN\Documents\github\SoundArena\
 - 喜歡追根究底查證技術限制,不接受用猜的回答——這輪查證過 Supabase LINE provider 是否存在、Google OAuth 同意畫面顯示網域的真正原因,都是先查證再回答,不是憑印象。
 - 輸入常常很精簡/口語(例如「UIUX似乎還沒從本地搬運過來喔 完成他!」),需要自己判斷完整範圍再動手,不要照字面窄義解讀。
 - 過程中會直接否決或修正我的建議、要求照他的方向做,正常收下,不用堅持己見。
+
+---
+
+## 08-16 晚間追加:報名 → 投稿 → 審核這條線做完了
+
+### 這輪做了什麼
+
+- **`registrations` / `submissions` 兩張表接上真實 RLS**(`supabase/migrations/20260816104605_registrations_submissions_rls.sql`):自己可以 insert/select 自己的報名跟投稿,比賽的 Organizer 可以 select/update 自己比賽底下的所有報名跟投稿(透過 `rounds`→`competitions` 兩層 join 到 `organizer_id`)。`registrations` 新增 `display_name text not null` 欄位(舊資料用 drop-default pattern 補值)。
+- **`/register`**:沒帶 `?competition=` 參數時列出所有公開比賽當選單;帶了參數就查該場比賽,檢查是否已報名、報名是否已截止,真的 insert 進 `registrations`。重複報名會被 `23505` unique constraint 擋下,轉成「你已經報名過這場比賽了」的訊息。
+- **`/submit`**:查使用者「已報名且該輪開放投稿且還沒投過」的組合當選單,真的 insert 進 `submissions`(status 直接是 `pending_review`)。Suno 分享連結解析出的 handle 會跟該筆報名真正的 `suno_handle` 動態比對,不是寫死的 true/false。
+- **`/status`**:改成查真實 `registrations` + `rounds` + `submissions`,依比賽分組顯示每輪的投稿狀態徽章;被淘汰的比賽會顯示淘汰輪次橫幅。
+- **`/admin/review`**:查 Organizer 名下所有比賽的待審投稿,身份比對(`sharer_handle` vs `registrations.suno_handle`)即時算出,新增「通過/退回/人工放行」三個 Server Action 按鈕(`web/src/app/admin/review/actions.ts` 的 `reviewSubmission`)。
+- **Discovery(`/`)**:每張比賽卡片加上「查看並報名 →」連結,直接帶 `?competition=<id>` 進 `/register`。
+
+**端到端實測過(不是只看畫面),流程:Discovery → 報名 → 投稿 → 個人狀態頁 → 審核後台核准,每一步都用 service_role 查過資料庫確認寫入,不是只看 UI 渲染**。已 commit(`ef77d3e`)、push、`vercel deploy --prod` 重新部署上線(`https://web-mocha-xi-12.vercel.app`)。
+
+### 這輪修的 bug
+
+1. **`<select>` 下拉選單灰底白字**:`<option>` 彈出清單是作業系統原生渲染,不吃網頁 CSS 背景色——修法是在父層 `<select>` 加 `[color-scheme:dark]`,不是 Tailwind 打錯字(這輪一度誤判成打錯字,Read 工具核對原始檔案內容後自我更正,`bg-black/25` 本來就是對的,是 Grep 顯示層把斜線畫成反斜線的視覺假象)。四個 select 都補上了:`submit/SubmitForm.tsx`、`admin/format/CreateCompetitionForm.tsx`、`admin/format/AdminFormatClient.tsx`(兩處)。
+2. **瀏覽器自動化打中文字時偶發觸發瀏覽器導覽快捷鍵**——測試填報名表單暱稱欄位時,網址中途無預警跳掉。跟第 13 條 date input 那個坑同一類,解法一樣:繞過鍵盤模擬,直接用 JS 呼叫原生 setter 設值再 dispatch `input` 事件。
+3. **合成 `blur` 事件不會觸發 React 的 `onBlur`**——用 JS 設完 Suno 網址的值、手動 dispatch `blur` 事件後,畫面沒有跑身份比對(靠 `onBlur` 觸發)。改用真的滑鼠點擊該欄位、再點別處,React 才正常收到 blur。
+
+### 澄清:Supabase 跟 Cloudflare R2 不是誰輔助誰的關係
+
+使用者一度誤會「Supabase 存音檔、R2 是輔助角色」。實際架構是**平行分工,不是主從**:Supabase 只存結構化資料(帳號、比賽、報名、投稿的 metadata……),音檔完全不會進 Supabase;R2 專門存音檔二進位檔案本身(`submissions.audio_object_key` 存的是 R2 物件路徑字串)。Supabase 的免費額度是資料庫用量,不會因為音檔而爆——因為音檔從頭到尾就不會經過 Supabase。R2 目前還沒建 bucket,見「下一步」第 4 項。
+
+### 通知訂閱範圍鐵律(已寫進 SPEC.md 第 6 節,schema 還沒做)
+
+使用者明確定調:**報名(Registration)才是唯一的訂閱觸發點**,單純建立/主辦比賽不會訂閱那場比賽的通知(不然每個 Organizer 一辦比賽就被轟炸)。訂閱可以主動取消。通知管道(Email/Discord/LINE)由登入方式決定收不收得到,但「要不要收」這件事的範圍還是綁在「報名了哪些比賽」。下次做通知系統時直接照這條設計 schema,不用重新跟使用者確認範圍。
