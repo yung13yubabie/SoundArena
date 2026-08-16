@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { SiteHeader } from "@/components/SiteHeader";
 import { EmptyState } from "@/components/EmptyState";
 
@@ -89,7 +90,13 @@ export function DiscoveryList({ competitions }: { competitions: Competition[] })
                     <span className={`rounded-full border px-2.25 py-0.75 text-[11px] ${meta.className}`}>{meta.label}</span>
                   </div>
                   <div className="mb-1 text-[15.5px]">{c.name}</div>
-                  <div className="text-[12px] text-ink-faint">由 {organizerName(c.organizer)} 主辦</div>
+                  <div className="mb-3 text-[12px] text-ink-faint">由 {organizerName(c.organizer)} 主辦</div>
+                  <Link
+                    href={`/register?competition=${c.id}`}
+                    className="text-[12px] font-semibold text-accent hover:underline"
+                  >
+                    查看並報名 →
+                  </Link>
                 </div>
               );
             })}

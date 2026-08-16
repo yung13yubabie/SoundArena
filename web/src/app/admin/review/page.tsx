@@ -1,117 +1,71 @@
-"use client";
-
-import { useState } from "react";
+import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
 import { AdminShell } from "@/components/AdminShell";
 import { EmptyState } from "@/components/EmptyState";
-import { Icon } from "@/lib/icons";
-import { MOCK_COMPETITION, MOCK_REVIEW_QUEUE, SUBMISSION_STATE_META, STATE_PILL_CLASS, type SubmissionState } from "@/lib/mockData";
+import { ReviewQueue, type ReviewRow } from "./ReviewQueue";
 
-export default function AdminReviewPage() {
-  const [rows, setRows] = useState(MOCK_REVIEW_QUEUE);
-  const [showEmpty, setShowEmpty] = useState(false);
-  const act = (id: number, state: SubmissionState) =>
-    setRows((rs) => rs.map((r) => (r.id === id ? { ...r, state } : r)));
+interface SubmissionRow {
+  id: string;
+  title: string | null;
+  sharer_handle: string | null;
+  status: string;
+  registrations: { display_name: string; suno_handle: string } | { display_name: string; suno_handle: string }[] | null;
+}
+
+function oneRegistration(value: SubmissionRow["registrations"]) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+export default async function AdminReviewPage() {
+  const supabase = await createClient();
+  const { data: claims } = await supabase.auth.getClaims();
+  const userId = claims?.claims?.sub as string | undefined;
+  if (!userId) redirect("/login");
+
+  const { data: myCompetitions } = await supabase.from("competitions").select("id, name").eq("organizer_id", userId);
+  const competitionIds = (myCompetitions ?? []).map((c) => c.id);
+  const competitionName = myCompetitions?.[0]?.name ?? "";
+
+  const { data: rounds } = competitionIds.length
+    ? await supabase.from("rounds").select("id").in("competition_id", competitionIds)
+    : { data: [] };
+  const roundIds = (rounds ?? []).map((r) => r.id);
+
+  const { data: submissions } = roundIds.length
+    ? await supabase
+        .from("submissions")
+        .select("id, title, sharer_handle, status, registrations(display_name, suno_handle)")
+        .in("round_id", roundIds)
+        .in("status", ["pending_review", "identity_mismatched", "approved", "rejected"])
+        .order("created_at", { ascending: false })
+    : { data: [] };
+
+  const rows: ReviewRow[] = ((submissions ?? []) as unknown as SubmissionRow[]).map((s) => {
+    const reg = oneRegistration(s.registrations);
+    return {
+      id: s.id,
+      title: s.title ?? "未命名作品",
+      nickname: reg?.display_name ?? "未知參賽者",
+      handle: s.sharer_handle ?? "unknown",
+      identityMatch: s.sharer_handle && reg?.suno_handle && s.sharer_handle === reg.suno_handle ? "match" : "mismatch",
+      status: s.status as ReviewRow["status"],
+    };
+  });
 
   return (
     <AdminShell active="review">
       <div className="mb-7">
         <div className="mb-2 text-xs uppercase tracking-widest text-accent">Screen · 審核後台</div>
-        <h1 className="font-display text-[30px]">投稿審核清單 — {MOCK_COMPETITION.name}</h1>
+        <h1 className="font-display text-[30px]">投稿審核清單{competitionName && ` — ${competitionName}`}</h1>
         <p className="mt-1.5 max-w-[680px] text-sm leading-relaxed text-ink-dim">
           身份比對由系統自動判定，不公開設定需要你打開作者主頁人工核對。比對不通過時可以人工放行。
         </p>
       </div>
-      <div className="mb-3.5 flex justify-end">
-        <button
-          onClick={() => setShowEmpty(!showEmpty)}
-          className="rounded-[10px] border border-panel-border bg-white/[0.04] px-3 py-1.5 text-[11.5px] font-semibold text-ink"
-        >
-          {showEmpty ? "顯示範例資料" : "檢視空狀態"}
-        </button>
-      </div>
 
-      {showEmpty ? (
+      {rows.length === 0 ? (
         <EmptyState icon="inbox" title="目前沒有待審核的投稿" sub="投稿者送出投稿並通過身份比對後，會出現在這個清單" />
       ) : (
-        <div>
-          <div className="grid grid-cols-[1fr_140px_160px_220px] gap-4 px-4 py-3.5 text-[11px] tracking-wide text-ink-faint uppercase">
-            <div>投稿</div>
-            <div>身份比對</div>
-            <div>不公開檢查</div>
-            <div className="text-right">操作</div>
-          </div>
-          {rows.map((r) => (
-            <div key={r.id} className="glass mb-1.5 grid grid-cols-[1fr_140px_160px_220px] items-center gap-4 px-4 py-3.5">
-              <div className="text-[13px]">
-                {r.track}
-                <div className="text-[11px] text-ink-faint">
-                  {r.nickname} · Suno @{r.handle}
-                </div>
-              </div>
-              <div>
-                {r.identityMatch === "match" ? (
-                  <span className="flex w-fit items-center gap-1 rounded-full border border-ok/35 bg-ok/8 px-2.25 py-0.75 text-[11px] text-ok">
-                    <Icon name="check" size={11} /> 比對通過
-                  </span>
-                ) : (
-                  <span className="flex w-fit items-center gap-1 rounded-full border border-bad/35 bg-bad/8 px-2.25 py-0.75 text-[11px] text-bad">
-                    <Icon name="alert" size={11} /> 比對不通過
-                  </span>
-                )}
-              </div>
-              <div>
-                {r.unlistedOk === true && (
-                  <span className="rounded-full border border-ok/35 bg-ok/8 px-2.25 py-0.75 text-[11px] text-ok">未列於公開頁</span>
-                )}
-                {r.unlistedOk === false && (
-                  <span className="rounded-full border border-bad/35 bg-bad/8 px-2.25 py-0.75 text-[11px] text-bad">仍列於公開頁</span>
-                )}
-                {r.unlistedOk === null && (
-                  <span className="rounded-full border border-panel-border px-2.25 py-0.75 text-[11px] text-ink-dim">待人工開啟核對</span>
-                )}
-              </div>
-              <div className="flex justify-end gap-1.5">
-                {r.state === "identity_mismatched" ? (
-                  <>
-                    <button
-                      onClick={() => act(r.id, "rejected")}
-                      className="rounded-[10px] border border-panel-border bg-white/[0.04] px-3 py-1.5 text-[11.5px] font-semibold text-ink"
-                    >
-                      打回重投
-                    </button>
-                    <button
-                      onClick={() => act(r.id, "pending_review")}
-                      className="rounded-[10px] bg-gradient-to-r from-[#ff9457] via-accent to-accent-2 px-3 py-1.5 text-[11.5px] font-semibold text-[#1a0e08]"
-                    >
-                      人工放行
-                    </button>
-                  </>
-                ) : r.state === "pending_review" ? (
-                  <>
-                    <button
-                      onClick={() => act(r.id, "rejected")}
-                      className="rounded-[10px] border border-panel-border bg-white/[0.04] px-3 py-1.5 text-[11.5px] font-semibold text-ink"
-                    >
-                      退回
-                    </button>
-                    <button
-                      onClick={() => act(r.id, "approved")}
-                      className="rounded-[10px] bg-gradient-to-r from-[#ff9457] via-accent to-accent-2 px-3 py-1.5 text-[11.5px] font-semibold text-[#1a0e08]"
-                    >
-                      通過
-                    </button>
-                  </>
-                ) : (
-                  <span
-                    className={`inline-flex items-center gap-1.25 rounded-full border px-2.5 py-1 text-[11px] ${STATE_PILL_CLASS[SUBMISSION_STATE_META[r.state].cls]}`}
-                  >
-                    {SUBMISSION_STATE_META[r.state].label}
-                  </span>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
+        <ReviewQueue rows={rows} />
       )}
     </AdminShell>
   );
