@@ -38,7 +38,7 @@ export function AdminShell({ active, children }: AdminShellProps) {
 
   return (
     <div>
-      <SiteHeader authed roleLabel={viewpoint === "platform" ? "PlatformAdmin" : "Organizer"} />
+      <SiteHeader authed active="admin" roleLabel={viewpoint === "platform" ? "PlatformAdmin" : "Organizer"} />
       <div className="flex min-h-[calc(100vh-44px)]">
         <aside
           className={`flex-none overflow-hidden border-r border-panel-border bg-black/15 transition-[width,padding] ${

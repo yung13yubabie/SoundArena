@@ -18,8 +18,7 @@ export default function AdminReviewPage() {
         <div className="mb-2 text-xs uppercase tracking-widest text-accent">Screen · 審核後台</div>
         <h1 className="font-display text-[30px]">投稿審核清單 — {MOCK_COMPETITION.name}</h1>
         <p className="mt-1.5 max-w-[680px] text-sm leading-relaxed text-ink-dim">
-          身份比對結果由系統自動判定；不公開設定需人工開啟作者主頁核對；身份比對不通過時保留「人工放行」入口，對應
-          Submission 狀態機裡的管理員覆寫分支。
+          身份比對由系統自動判定，不公開設定需要你打開作者主頁人工核對。比對不通過時可以人工放行。
         </p>
       </div>
       <div className="mb-3.5 flex justify-end">

@@ -37,7 +37,7 @@ export default function HomePage() {
           <div className="mb-2 text-xs uppercase tracking-widest text-accent">Screen · Discovery（不需登入）</div>
           <h1 className="font-display text-[30px]">探索比賽</h1>
           <p className="mt-1.5 max-w-[680px] text-sm leading-relaxed text-ink-dim">
-            全平台各個 Organizer 建立的比賽都會出現在這裡；允許公開展示的作品可直接試聽，不需要先登入（見 SPEC.md 第 5 節「公開試聽」）。
+            這裡列出全站主辦方建立的所有比賽。開放公開展示的作品可以直接試聽，不用登入。
           </p>
         </div>
 

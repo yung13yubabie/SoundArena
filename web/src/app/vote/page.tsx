@@ -13,20 +13,20 @@ export default function VotePage() {
 
   return (
     <div>
-      <SiteHeader authed active="competitions" />
+      <SiteHeader authed active="vote" />
       <div className="mx-auto max-w-[1180px] px-11 pt-10 pb-24">
         <div className="mb-7">
           <div className="mb-2 text-xs uppercase tracking-widest text-accent">Screen · 投票</div>
           <h1 className="font-display text-[30px]">本輪投票</h1>
           <p className="mt-1.5 max-w-[680px] text-sm leading-relaxed text-ink-dim">
-            此輪比賽規則設定為匿名，作者資訊不顯示；清單順序每次讀取重新隨機排列。
+            本輪投票匿名進行，看不到作者是誰。
           </p>
         </div>
 
         <div className="mb-5 flex items-center justify-between">
           <div className="flex items-center gap-2 rounded-[9px] border border-accent/25 bg-accent/8 px-3 py-2 text-[11.5px] text-accent">
             <Icon name="eyeOff" size={14} />
-            本輪匿名投票 · 投票截止後公開作者（單輪匿名模式）· 清單順序每次刷新皆重新隨機
+            投票截止後會公開作者身份
           </div>
           <button
             onClick={() => setShowEmpty(!showEmpty)}

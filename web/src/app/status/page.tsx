@@ -9,13 +9,13 @@ const ELIMINATED = true;
 export default function StatusPage() {
   return (
     <div>
-      <SiteHeader authed active="competitions" />
+      <SiteHeader authed active="status" />
       <div className="mx-auto max-w-[1180px] px-11 pt-10 pb-24">
         <div className="mb-7">
           <div className="mb-2 text-xs uppercase tracking-widest text-accent">Screen · 個人投稿狀態</div>
           <h1 className="font-display text-[30px]">我的投稿 — {MOCK_COMPETITION.name}</h1>
           <p className="mt-1.5 max-w-[680px] text-sm leading-relaxed text-ink-dim">
-            依 Submission 狀態機呈現每一輪投稿進度；ParticipantStatus 若為 eliminated，後續輪次只保留投票資格。
+            查看你在這場比賽每一輪的投稿進度。已被淘汰的話，後續輪次只能投票，不能再投稿。
           </p>
         </div>
 

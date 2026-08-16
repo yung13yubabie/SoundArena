@@ -104,8 +104,7 @@ export default function CompetitionsPage() {
           <div className="mb-2 text-xs uppercase tracking-widest text-accent">Screen · 擂台</div>
           <h1 className="font-display text-[30px]">深夜擂台 EP.03</h1>
           <p className="mt-1.5 max-w-[680px] text-sm leading-relaxed text-ink-dim">
-            全站僅一個播放器實例；清單只是可點擊列表，不是各自獨立的嵌入播放器 —
-            換歌時銷毀重建音源，避免同時播放。清單依輪次摺疊分組，比照播放清單的瀏覽習慣。
+            點選任一首開始播放，同一時間只會有一首在播。歌曲依輪次分組，點開輪次就能看到清單。
           </p>
           <ReportButton target="深夜擂台 EP.03" />
         </div>

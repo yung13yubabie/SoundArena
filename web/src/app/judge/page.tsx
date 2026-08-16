@@ -23,13 +23,13 @@ export default function JudgePage() {
 
   return (
     <div>
-      <SiteHeader authed roleLabel="評審模式" />
+      <SiteHeader authed active="judge" roleLabel="評審模式" />
       <div className="mx-auto max-w-[1180px] px-11 pt-10 pb-24">
         <div className="mb-7">
           <div className="mb-2 text-xs uppercase tracking-widest text-accent">Screen · 評審評分（角色：評審）</div>
           <h1 className="font-display text-[30px]">本輪待評分作品</h1>
           <p className="mt-1.5 max-w-[680px] text-sm leading-relaxed text-ink-dim">
-            評分公式由主辦於「賽制建立」頁自訂啟用哪些項目與權重；計入排名的項目權重總和固定為 100%，額外加分項（如魔王加給）另外累加、不受 100% 封頂限制。
+            為本輪投稿評分。加權項目的權重總和固定 100%，額外加分項另外累加，詳細算法可在下方展開查看。
           </p>
         </div>
 

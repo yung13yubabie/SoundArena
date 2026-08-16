@@ -41,7 +41,7 @@ export function RegisterForm() {
           <div className="mb-2 text-xs uppercase tracking-widest text-accent">Screen · 報名</div>
           <h1 className="font-display text-[30px]">報名參賽</h1>
           <p className="mt-1.5 max-w-[680px] text-sm leading-relaxed text-ink-dim">
-            填寫站內帳號基本資料，並提供 Suno 帳號資訊 — 之後每輪投稿的身份比對都依賴這裡填的帳號名稱。
+            填寫基本資料並提供 Suno 帳號，之後每一輪投稿都會用這組帳號核對身份。
           </p>
         </div>
 

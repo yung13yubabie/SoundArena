@@ -37,7 +37,7 @@ export default function AdminSchedulePage() {
         <div className="mb-2 text-xs uppercase tracking-widest text-accent">Screen · 時程設定</div>
         <h1 className="font-display text-[30px]">賽事時程 — {MOCK_COMPETITION.name}</h1>
         <p className="mt-1.5 max-w-[680px] text-sm leading-relaxed text-ink-dim">
-          宣傳／投稿／投票／公布四階段起訖日期；跨階段邊界規則即時檢查，不合法不能靜默通過。
+          設定宣傳、投稿、投票、公布四個階段的起訖日期，時間衝突會立即提示。
         </p>
       </div>
 

@@ -225,7 +225,7 @@ export default function AdminFormatPage() {
         <div className="mb-2 text-xs uppercase tracking-widest text-accent">Screen · 賽制建立</div>
         <h1 className="font-display text-[30px]">建立比賽</h1>
         <p className="mt-1.5 max-w-[680px] text-sm leading-relaxed text-ink-dim">
-          先設定 Competition 外框，再逐輪設定 FormatBlock 組合；評分規則預設整場沿用同一套，只有需要的輪次才個別覆寫（見 ADR-0001）。
+          先填比賽的基本資料，再逐輪決定賽制怎麼組合。評分規則預設整場共用，只有需要的輪次才個別調整。
         </p>
       </div>
 

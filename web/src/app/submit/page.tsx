@@ -89,7 +89,7 @@ export default function SubmitPage() {
           <div className="mb-2 text-xs uppercase tracking-widest text-accent">Screen · 投稿</div>
           <h1 className="font-display text-[30px]">投稿本輪作品</h1>
           <p className="mt-1.5 max-w-[680px] text-sm leading-relaxed text-ink-dim">
-            貼上 Suno 分享連結後系統自動帶出標題／封面／作者，並比對是否為報名時填寫的 Suno 帳號本人。
+            貼上 Suno 分享連結，系統會自動帶出標題、封面、作者，並確認是不是你本人的作品。
           </p>
         </div>
 
