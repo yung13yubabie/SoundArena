@@ -127,14 +127,13 @@ C:\Users\LIN\Documents\github\SoundArena\
 
 1. **接下一段真實資料:投票 → 評分**。「報名 → 投稿 → 審核」這條線已經做完並實測過(見文件尾端「08-16 晚間追加」),`/vote`、`/judge` 還是 mock。每接一塊都要照這輪的模式:寫 Server Action → build → 真的在瀏覽器點過 → 用 service_role 查資料庫驗證,不要只看畫面渲染就當作成功。
 2. **Discord guilds.join 補完**:使用者把 Bot 邀進 SoundArena Discord 伺服器,把伺服器 ID 填進 `.env.local` 跟 Vercel 的 `DISCORD_GUILD_ID`
-3. **`/admin/*` 的角色級權限保護**:目前只檢查「有沒有登入」,見上方已知缺口 2
+3. **`/admin/*` 的角色級權限保護**:proxy.ts 目前只檢查「有沒有登入」,沒檢查「這個人是不是這場比賽的 Organizer」——RLS 是實際擋著的那層,08-16 晚間那輪加了 UI 層的競賽切換器(只列自己的比賽)跟主辦身分設定閘門,但 route 層級的角色檢查還是沒做,見上方已知缺口 2
 4. **Cloudflare R2**:建 bucket、拿金鑰、接上音檔上傳/簽章下載
 5. **通知系統**:schema 還沒建,但訂閱範圍的鐵律已經定案並寫進 SPEC.md 第 6 節——**報名才會訂閱,單純建立/主辦比賽不會訂閱,訂閱可取消**,實作時直接照這條規則設計 schema,不用重新討論範圍。
 6. **LINE 登入**:使用者能申請的時候回來補
-7. **以下三項使用者提過、明確要做但這輪還沒排進去的功能,下次要問使用者要先做哪個**:
+7. **以下兩項使用者提過、明確要做但還沒排進去的功能,下次要問使用者要先做哪個**(主辦者履歷頁已在 08-16 晚間那輪做完,見文件尾端):
    - **FormatBlock 的 `config` 具體設定 UI**:選中賽制積木後目前只是勾選,`format_blocks`/`round_format_blocks` 已有 `config` jsonb 欄位但沒有對應的設定畫面(例如主題輪要填關鍵字/曲風)——範圍還沒訂。
    - **邀請連結整合模板訊息**:主辦分享比賽連結時,希望能帶出整合賽制/投票資訊的訊息模板,並支援 `{變數}` 填入——範圍還沒訂(模板存哪裡、哪些變數、UI 長怎樣都待設計)。
-   - **主辦者履歷頁**:列出「主辦過幾場比賽」「可貼社群連結(如 YT)」「頭像可選擇不上傳,不上傳時比照 Gmail 預設顯示兩個字」——範圍還沒訂,`profiles` 表可能需要加欄位(bio/social_links/avatar_url)。
 
 ---
 
@@ -212,3 +211,30 @@ C:\Users\LIN\Documents\github\SoundArena\
 ### 通知訂閱範圍鐵律(已寫進 SPEC.md 第 6 節,schema 還沒做)
 
 使用者明確定調:**報名(Registration)才是唯一的訂閱觸發點**,單純建立/主辦比賽不會訂閱那場比賽的通知(不然每個 Organizer 一辦比賽就被轟炸)。訂閱可以主動取消。通知管道(Email/Discord/LINE)由登入方式決定收不收得到,但「要不要收」這件事的範圍還是綁在「報名了哪些比賽」。下次做通知系統時直接照這條設計 schema,不用重新跟使用者確認範圍。
+
+---
+
+## 08-16 晚間第二輪追加:主辦人身分檔案、比賽切換器、審核理由、參加者公開檔案
+
+### 這輪做了什麼
+
+- **主辦人「主持人身分」檔案**:`profiles` 新增 `bio`/`social_link`/`featured_track_url`/`host_setup_completed` 欄位。`/admin/profile`(`ProfileForm.tsx`)讓 Organizer 填簡介、社群連結、一首推薦曲目(YouTube 連結,`web/src/lib/youtube.ts` 解析各種網址格式轉成 embed URL)。**`/admin/format`/`/admin/schedule`/`/admin/review` 三頁現在會檢查 `host_setup_completed`,沒設定過會先導去 `/admin/profile`**,存檔後才放行——這是使用者這輪明確要求的「才可以看」。
+- **公開個人檔案頁 `/u/[id]`**:任何人(含未登入)都能看,顯示:大頭貼(有 `avatar_url` 就用圖,沒有就跟 Gmail 一樣顯示姓名前兩碼,`web/src/lib/avatar.ts` + `components/Avatar.tsx`)、簡介、社群連結、YouTube 推薦曲嵌入播放、主辦過的公開比賽清單、使用者自己標記公開的參賽紀錄(名次功能還沒做,因為投票/評分系統本身還沒建,先顯示「名次功能開發中」佔位)、使用者自己標記公開且審核通過的投稿作品(**刻意排除退回的投稿**,不然使用者的公開履歷會被自己審核沒過的作品拉低)。Discovery 卡片的主辦人名稱現在會連到這頁。
+- **管理後台比賽切換器 + 側欄導覽修復**:這輪動工時才發現 `AdminShell` 的側欄按鈕(審核後台/賽制建立/時程設定)**只改本地 state,從來沒有真的導頁**——三個畫面各自是獨立路由,點側欄完全沒反應,靠使用者自己打網址切換。連帶發現 `/admin/format`、`/admin/schedule` 一直是「抓 Organizer 最新建立的那一場比賽」(`order by created_at desc limit 1`),Organizer 若辦了不只一場比賽,舊的那幾場完全打不開、連清單都沒有。兩個一起修了:側欄改成真的 `<Link>` 導頁,並在側欄加一個「管理中的比賽」下拉選單(`?c=<competitionId>` 決定當前管理哪一場,三個管理頁 + `AdminShell` 都吃這個參數)。這正好對應使用者這輪要的「只能看自己舉辦的[比賽],且要先選」。
+- **審核退回理由**:`submissions` 新增 `review_note` 欄位。`/admin/review` 點「退回」現在會展開一個原因輸入框(不是瀏覽器原生 `prompt()`,因為那種對話框會擋住自動化測試工具,也不是好的真實使用者體驗),存進 `review_note`,`/status` 頁在該輪次下方顯示「退回原因:xxx」給投稿者看。
+- **`/status` 顯示具體投稿內容**:原本每輪只有一個狀態徽章,現在同時顯示投稿標題、「在 Suno 上查看」連結,退回時額外顯示退回原因。
+- **參加者隱私設定**:`registrations` 新增 `is_public` 欄位(語意跟已存在的 `submissions.allow_public_playback` 一致,都是「這筆紀錄要不要出現在我的公開檔案」)。`/status` 頁底部新增「隱私設定」區塊(`PrivacyPanel.tsx`),逐筆報名紀錄、逐筆投稿都能個別開關,也有「全部公開/全部私密」一鍵切換按鈕(對應使用者原話「可個別公開也可全公開」)。切換走 `set_registration_public`/`set_submission_public` 兩個 `SECURITY DEFINER` function(`web/src/app/status/actions.ts`),函式內部用 `where user_id = auth.uid()` 鎖定只能改自己的資料——**沒有開放一般的 self-update RLS policy**,因為 `registrations` 還有 `status`/`eliminated_in_round_id` 這種只該由 Organizer 改的欄位,開放整列 self-update 等於讓參賽者能自己把自己從「已淘汰」改回「active」。
+
+**端到端實測過(不是只看畫面)**:主辦人檔案填寫→儲存→用 service_role 查 DB 確認四個欄位都寫入;側欄導覽點擊確認真的換路由(之前完全沒反應);審核退回填理由→確認 `review_note` 寫入且 `/status` 正確顯示;隱私開關切換→用 service_role 查 DB 確認 `is_public`/`allow_public_playback` 真的翻轉;公開檔案頁確認退回的投稿不會出現、只有審核通過且標記公開的才會出現。已 commit(`93d572f`)、push、`vercel deploy --prod` 重新部署上線。
+
+### 這輪抓到的安全問題(不是這輪引入的,是做這輪功能時順手查出來的既有缺口)
+
+1. **`profiles updatable by self` 這條 RLS 沒有限制欄位**——RLS 是列級權限,不是欄級。這條 policy 的 USING/CHECK 都只驗證 `auth.uid() = id`(這一列是不是你自己的),完全沒管「你能改哪些欄位」。實際後果:任何登入使用者理論上可以直接呼叫 `PATCH /rest/v1/profiles?id=eq.<自己的id>` 帶 `{"is_platform_admin": true}`,RLS 會放行(因為那確實是他自己的 row),直接自我提權成平台管理員。目前沒有任何程式碼會這樣寫,純粹是設計疏漏。
+2. **`profiles readable when organizing a public competition` 開放整列可讀**——這條 policy 原本是為了讓 Discovery 頁顯示主辦人名稱,但 policy 本身沒有限制欄位,任何人查詢公開比賽主辦人的 `line_user_id`/`discord_user_id` 都查得到,即使前端從來沒用到這兩個值。
+3. **修法**:Postgres 的欄位級 `GRANT`/`REVOKE`(RLS 完全不管欄位,要收緊欄位只能靠這個)。**踩坑記錄**:第一次用 `revoke select (line_user_id, discord_user_id) on profiles from anon, authenticated;` 完全沒生效,查證後才搞懂——Postgres 的欄位權限判斷是「table-level 授權 OR column-level 授權」,只要 table-level 還留著 blanket `grant select on profiles to anon, authenticated`(Supabase 建表預設會下這個),欄位級 REVOKE 完全不會限制到任何東西,必須先把 table-level 整個收回、再用 column-level GRANT 只重新開放安全欄位,兩者順序不能反。用一個臨時的 `SECURITY DEFINER` 診斷 function 直接查 `information_schema.column_privileges` 才確認修對了(這個 function 事後已刪除)。最終狀態:`authenticated` 對 `profiles` 的 UPDATE 只能碰 `display_name`/`avatar_url`/`bio`/`social_link`/`featured_track_url`/`host_setup_completed`,SELECT 排除 `line_user_id`/`discord_user_id`(這兩個目前全站沒有任何畫面需要顯示給使用者本人看,乾脆整個排除在 anon/authenticated 的欄位授權外,維持純 service_role-only 存取,模型更單純)。
+
+### 已知缺口(這輪新產生的,不是漏了、是還沒排到)
+
+- **「名次」還沒有資料可顯示**:`/u/[id]` 的參賽紀錄區塊目前固定顯示「名次功能開發中」,因為名次要等投票/評分系統(`votes`/`submission_scores`)把分數跑出來才有意義——見「下一步」第 1 項。
+- **推薦曲目/YT embed 沒有做內容審核**:任何人貼什麼 YouTube 連結都會被嵌入播放,目前沒有防護(例如檢查是否為不當內容),風險等級低(YouTube iframe 本身受 YouTube 自己的內容政策管,不是 SoundArena 代管內容),暫不處理。
+- **`AdminShell` 平台視角(全站比賽/檢舉處理)還是 mock 資料**,沒被這輪碰到,維持原狀。
