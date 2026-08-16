@@ -1,0 +1,6 @@
+# OS cruft
+.DS_Store
+Thumbs.db
+
+# design/verify.js 產出的截圖,可重跑腳本重新產生,不當永久檔案看
+design/screenshots/

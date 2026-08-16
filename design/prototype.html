@@ -1,0 +1,1403 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>聲擂 SoundArena — 高保真原型</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,wght@0,400;0,500;0,600;1,400&family=Noto+Serif+TC:wght@500;600&display=swap" rel="stylesheet" />
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<style>
+  :root{
+    --bg: #130b09;
+    --panel: rgba(255,255,255,0.055);
+    --panel-border: rgba(255,255,255,0.09);
+    --ink: #f3ece7;
+    --ink-dim: #b9a89f;
+    --ink-faint: #7d6a62;
+    --accent: #ff6a3d;
+    --accent-2: #c0392b;
+    --accent-grad: linear-gradient(120deg, #ff9457 0%, #ff6a3d 45%, #c0392b 100%);
+    --ok: #6fbf8b;
+    --warn: #e0b04a;
+    --bad: #d9614f;
+    --radius: 14px;
+    font-size: 16px;
+  }
+  *{ box-sizing: border-box; }
+  html,body{ margin:0; min-height:100%; background:var(--bg); color:var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang TC", "Microsoft JhengHei", sans-serif;
+  }
+  body{ background:
+      radial-gradient(1200px 600px at 15% -10%, rgba(255,106,61,0.14), transparent 60%),
+      radial-gradient(900px 500px at 100% 0%, rgba(192,57,43,0.10), transparent 55%),
+      var(--bg);
+  }
+  h1,h2,h3,.serif{ font-family: "Newsreader","Noto Serif TC", serif; font-weight:500; letter-spacing:.01em; }
+  ::selection{ background: rgba(255,106,61,0.35); }
+  a{ color:inherit; text-decoration:none; }
+  button{ font-family:inherit; cursor:pointer; }
+
+  /* ---------- Meta review strip (NOT part of the product — my design-checkpoint tool) ---------- */
+  .review-strip{
+    position:sticky; top:0; z-index:60; display:flex; align-items:center; gap:14px;
+    padding:10px 20px; background:#0a0605; border-bottom:1px dashed rgba(255,255,255,.14);
+  }
+  .review-strip .rlabel{ font-size:10.5px; color:var(--ink-faint); text-transform:uppercase; letter-spacing:.12em; flex:0 0 auto; }
+  .review-pills{ display:flex; gap:6px; flex-wrap:wrap; flex:1; }
+  .review-pill{
+    font-size:11.5px; padding:5px 11px; border-radius:99px; background:rgba(255,255,255,.04);
+    border:1px solid var(--panel-border); color:var(--ink-dim); transition: all .15s ease;
+  }
+  .review-pill:hover{ background:rgba(255,255,255,.08); color:var(--ink); }
+  .review-pill.active{ background:rgba(255,106,61,.16); border-color:rgba(255,106,61,.4); color:var(--ink); }
+  .review-note{ font-size:10.5px; color:var(--ink-faint); flex:0 0 auto; }
+
+  /* ---------- Real product header (this IS what a user sees) ---------- */
+  .site-header{
+    display:flex; align-items:center; gap:28px; padding:14px 32px;
+    border-bottom:1px solid var(--panel-border); background: rgba(0,0,0,0.16);
+  }
+  .site-header .brand{ display:flex; align-items:center; gap:9px; }
+  .site-header .brand .mark{ width:28px;height:28px;border-radius:8px;background:var(--accent-grad);
+    display:flex;align-items:center;justify-content:center;font-size:13px; }
+  .site-header .brand .name{ font-size:14.5px; font-weight:600; }
+  .site-header nav{ display:flex; gap:22px; flex:1; }
+  .site-header nav a{ font-size:13px; color:var(--ink-dim); padding:6px 2px; border-bottom:2px solid transparent; transition: color .15s ease; }
+  .site-header nav a:hover{ color:var(--ink); }
+  .site-header nav a.active{ color:var(--ink); border-color:var(--accent); }
+  .site-header .right{ display:flex; align-items:center; gap:12px; }
+  .role-badge{ font-size:11px; padding:5px 11px; border-radius:99px; background:rgba(224,176,74,.1); border:1px solid rgba(224,176,74,.3); color:var(--warn); }
+  .avatar{ width:30px;height:30px;border-radius:50%; background:linear-gradient(155deg,#3a2018,#1a0f0c); border:1px solid var(--panel-border); }
+
+  .stage-inner{ max-width: 1180px; margin:0 auto; padding: 40px 44px 140px; }
+  .assumption{
+    font-size:12px; color: var(--ink-faint); background: rgba(255,255,255,0.03);
+    border:1px dashed var(--panel-border); border-radius:10px; padding:10px 14px; margin-bottom:26px;
+    line-height:1.6;
+  }
+  .assumption b{ color:var(--ink-dim); }
+
+  /* ---------- shared bits ---------- */
+  .page-head{ margin-bottom: 28px; }
+  .page-head .eyebrow{ font-size:12px; color:var(--accent); letter-spacing:.14em; text-transform:uppercase; margin-bottom:8px; }
+  .page-head h1{ font-size: 30px; margin:0 0 6px; }
+  .page-head p{ color:var(--ink-dim); font-size:14px; margin:0; max-width:680px; line-height:1.6; }
+
+  .glass{
+    background: var(--panel); border:1px solid var(--panel-border); border-radius: var(--radius);
+    backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+  }
+  .btn{
+    border-radius: 10px; padding: 10px 18px; font-size:13.5px; font-weight:600; border:1px solid transparent;
+    display:inline-flex; align-items:center; gap:8px; transition: transform .12s ease, filter .15s ease;
+  }
+  .btn:hover{ filter:brightness(1.08); }
+  .btn:active{ transform:scale(.97); }
+  .btn-primary{ background: var(--accent-grad); color:#1a0e08; }
+  .btn-ghost{ background: rgba(255,255,255,0.04); border-color:var(--panel-border); color:var(--ink); }
+  .btn-line{ background:#06C755; color:#08210f; }
+  .btn-discord{ background:#5865F2; color:#0d0e21; }
+  .btn-google{ background:#fff; color:#3c3c3c; }
+  .btn[disabled]{ opacity:.45; cursor:not-allowed; }
+  .btn[disabled]:active{ transform:none; }
+
+  .badge{ font-size:11px; padding:3px 9px; border-radius:99px; border:1px solid var(--panel-border); color:var(--ink-dim); }
+  .badge.ok{ color:var(--ok); border-color:rgba(111,191,139,.35); background:rgba(111,191,139,.08); }
+  .badge.warn{ color:var(--warn); border-color:rgba(224,176,74,.35); background:rgba(224,176,74,.08); }
+  .badge.bad{ color:var(--bad); border-color:rgba(217,97,79,.35); background:rgba(217,97,79,.08); }
+  .badge.accent{ color:var(--accent); border-color:rgba(255,106,61,.35); background:rgba(255,106,61,.08); }
+  .badge.auto{ color:#8fb3d9; border-color:rgba(143,179,217,.35); background:rgba(143,179,217,.08); }
+  .badge.manual{ color:var(--accent); border-color:rgba(255,106,61,.4); background:rgba(255,106,61,.1); }
+
+  .icon{ width:16px; height:16px; display:inline-block; vertical-align:-3px; transition: transform .15s ease; }
+  .icon-btn{
+    background:none; border:none; color:var(--ink-dim); display:inline-flex; align-items:center; justify-content:center;
+    transition: transform .14s ease, color .14s ease, background .14s ease; border-radius:8px;
+  }
+  .icon-btn:hover{ color:var(--ink); transform: scale(1.1); }
+  .icon-btn:active{ transform: scale(.88); }
+  .chevron{ transition: transform .2s ease; }
+  .chevron.open{ transform: rotate(90deg); }
+
+  @keyframes eqbar{ 0%,100%{ height:4px; } 50%{ height:12px; } }
+  .now-playing-eq{ display:inline-flex; align-items:flex-end; gap:2px; height:12px; width:14px; }
+  .now-playing-eq i{ display:block; width:2.5px; background: var(--accent); border-radius:1px; animation: eqbar 0.9s ease-in-out infinite; }
+  .now-playing-eq i:nth-child(2){ animation-delay:.2s; }
+  .now-playing-eq i:nth-child(3){ animation-delay:.4s; }
+
+  /* ---------- Login screen ---------- */
+  .login-wrap{ min-height: calc(100vh - 200px); display:flex; align-items:center; justify-content:center; }
+  .login-card{ width: 420px; padding: 40px 34px; text-align:center; }
+  .login-card .mark{ width:52px;height:52px;border-radius:16px;background:var(--accent-grad); margin:0 auto 18px;
+    display:flex;align-items:center;justify-content:center; font-size:22px; }
+  .login-card h1{ font-size:22px; margin:0 0 6px; }
+  .login-card > p{ color:var(--ink-dim); font-size:13px; margin: 0 0 26px; }
+  .oauth-btn{ width:100%; justify-content:center; padding:11px; margin-bottom:10px; font-size:13.5px; }
+  .oauth-note{ text-align:left; margin-top:22px; padding:14px 16px; font-size:11.5px; line-height:1.7; color:var(--ink-faint); }
+  .oauth-note b{ color:var(--ink-dim); }
+
+  /* ---------- Submission form ---------- */
+  .form-grid{ display:grid; grid-template-columns: 1fr 300px; gap:24px; align-items:start; }
+  .field{ margin-bottom:20px; }
+  .field label{ display:block; font-size:12.5px; color:var(--ink-dim); margin-bottom:7px; font-weight:600; }
+  .field .hint{ font-size:11.5px; color:var(--ink-faint); margin-top:6px; line-height:1.6; }
+  .input{
+    width:100%; padding:11px 13px; border-radius:10px; background:rgba(0,0,0,0.25);
+    border:1px solid var(--panel-border); color:var(--ink); font-size:13.5px; font-family:inherit;
+  }
+  select.input{ appearance:none; }
+  .input:focus{ outline:none; border-color: rgba(255,106,61,.5); }
+  textarea.input{ min-height:150px; resize:vertical; font-family:inherit; line-height:1.7; }
+
+  .parse-state{ display:flex; align-items:center; gap:10px; padding:12px 14px; border-radius:10px; font-size:12.5px; margin-top:10px; }
+  .parse-state.loading{ background:rgba(255,255,255,.04); color:var(--ink-dim); border:1px solid var(--panel-border); }
+  .parse-state.error{ background:rgba(217,97,79,.08); color:var(--bad); border:1px solid rgba(217,97,79,.3); }
+  .parse-state.ok{ background:rgba(111,191,139,.08); color:var(--ok); border:1px solid rgba(111,191,139,.3); }
+  .spinner{ width:13px;height:13px;border-radius:50%; border:2px solid rgba(255,255,255,.2); border-top-color:var(--ink-dim); animation:spin 0.8s linear infinite; flex:0 0 auto; }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+
+  .preview-card{ padding:20px; position:sticky; top:76px; }
+  .preview-card .cover{ width:100%; aspect-ratio:1; border-radius:10px; margin-bottom:14px;
+    background: linear-gradient(155deg, #2a1712, #1a0f0c); border:1px solid var(--panel-border);
+    display:flex; align-items:center; justify-content:center; color:var(--ink-faint); font-size:11.5px; text-align:center; }
+  .preview-card .t{ font-size:15px; margin:0 0 4px; }
+  .preview-card .a{ font-size:12.5px; color:var(--ink-dim); margin:0 0 14px; }
+  .preview-card .row{ display:flex; justify-content:space-between; font-size:11.5px; color:var(--ink-faint); padding:7px 0; border-top:1px solid var(--panel-border); }
+
+  .upload-drop{ border:1.5px dashed var(--panel-border); border-radius:12px; padding: 26px; text-align:center; color:var(--ink-faint); font-size:12.5px; }
+  .upload-drop.filled{ border-style:solid; border-color: rgba(111,191,139,.35); color:var(--ok); background:rgba(111,191,139,.05); }
+
+  /* ---------- Song list + player ---------- */
+  .round-group{ margin-bottom:10px; border-radius:12px; overflow:hidden; }
+  .round-header{
+    display:flex; align-items:center; gap:10px; padding:13px 16px; width:100%;
+    background: rgba(255,255,255,.03); border:1px solid var(--panel-border); border-radius:12px;
+  }
+  .round-header:hover{ background: rgba(255,255,255,.05); }
+  .round-header .t{ font-size:12.5px; color:var(--accent); letter-spacing:.08em; text-transform:uppercase; flex:1; text-align:left; }
+  .round-header .count{ font-size:11px; color:var(--ink-faint); }
+  .round-body{ padding:8px 4px 14px; display:flex; flex-direction:column; gap:6px; }
+  .track-list{ display:flex; flex-direction:column; gap:6px; }
+  .track-row{ display:flex; align-items:center; gap:14px; padding:10px 14px; border-radius:11px; border:1px solid transparent; }
+  .track-row:hover{ background:rgba(255,255,255,.03); }
+  .track-row.playing{ background:rgba(255,106,61,.09); border-color:rgba(255,106,61,.25); }
+  .track-row .thumb{ width:40px;height:40px;border-radius:8px; background:linear-gradient(155deg,#2a1712,#1a0f0c);
+    border:1px solid var(--panel-border); flex:0 0 auto; display:flex;align-items:center;justify-content:center; }
+  .track-row .meta{ flex:1; min-width:0; }
+  .track-row .meta .t{ font-size:13.5px; margin:0 0 2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .track-row .meta .a{ font-size:11.5px; color:var(--ink-faint); }
+  .track-row .play-ico{ width:28px;height:28px;border-radius:50%; background:rgba(255,255,255,.06); border:1px solid var(--panel-border);
+    display:flex;align-items:center;justify-content:center; flex:0 0 auto; transition: background .2s ease, border-color .2s ease; }
+  .track-row.playing .play-ico{ background:var(--accent-grad); border-color:transparent; }
+
+  .empty-state{
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px;
+    padding: 34px 20px; color:var(--ink-faint); text-align:center;
+    border:1px dashed var(--panel-border); border-radius:12px; background:rgba(255,255,255,.015);
+  }
+  .empty-state .icon{ width:26px; height:26px; opacity:.5; }
+  .empty-state .t{ font-size:12.5px; color:var(--ink-dim); }
+  .empty-state .s{ font-size:11.5px; }
+
+  .duel-wrap{ display:grid; grid-template-columns:1fr auto 1fr; gap:18px; align-items:center; margin-bottom:22px; }
+  .duel-card{ padding:22px; text-align:center; }
+  .duel-card .cover{ width:120px;height:120px;border-radius:12px; margin:0 auto 14px;
+    background:linear-gradient(155deg,#2a1712,#1a0f0c); border:1px solid var(--panel-border);
+    display:flex;align-items:center;justify-content:center; color:var(--ink-faint); font-size:11px; }
+  .duel-vs{ font-family:"Newsreader",serif; font-size:22px; color:var(--ink-faint); font-style:italic; }
+
+  .player-bar{
+    position:fixed; left:0; right:0; bottom:0; padding: 12px 26px; z-index:40;
+    background: rgba(20,12,10,0.62); border-top:1px solid var(--panel-border);
+    backdrop-filter: blur(22px); -webkit-backdrop-filter: blur(22px);
+    display:flex; align-items:center; gap:18px;
+  }
+  .player-bar .thumb{ width:44px;height:44px;border-radius:9px; background:linear-gradient(155deg,#2a1712,#1a0f0c); border:1px solid var(--panel-border); flex:0 0 auto; }
+  .player-bar .meta{ width:180px; flex:0 0 auto; }
+  .player-bar .meta .t{ font-size:13px; margin:0 0 2px; display:flex; align-items:center; gap:7px; }
+  .player-bar .meta .a{ font-size:11px; color:var(--ink-faint); }
+  .player-bar .ctrl{ display:flex; align-items:center; gap:14px; flex:0 0 auto; }
+  .player-bar .ctrl .play{ width:34px;height:34px;border-radius:50%; background:var(--accent-grad); color:#1a0e08; border:none;
+    display:flex;align-items:center;justify-content:center; transition: transform .14s ease; }
+  .player-bar .ctrl .play:hover{ transform: scale(1.08); }
+  .player-bar .ctrl .play:active{ transform: scale(.92); }
+  .player-bar .track{ flex:1; display:flex; align-items:center; gap:10px; font-size:10.5px; color:var(--ink-faint); }
+  .player-bar .bar{ flex:1; height:3px; border-radius:99px; background:rgba(255,255,255,.12); position:relative; overflow:hidden; }
+  .player-bar .bar i{ position:absolute; left:0;top:0;bottom:0; width:38%; background:var(--accent-grad); border-radius:99px; }
+
+  /* ---------- Voting ---------- */
+  .anon-flag{ display:flex; align-items:center; gap:8px; font-size:11.5px; color:var(--accent); background:rgba(255,106,61,.08);
+    border:1px solid rgba(255,106,61,.25); padding:8px 12px; border-radius:9px; margin-bottom:20px; width:fit-content; }
+  .vote-grid{ display:grid; grid-template-columns: repeat(2,1fr); gap:16px; }
+  .vote-card{ padding:18px; }
+  .vote-card .num{ font-size:11px; color:var(--ink-faint); margin-bottom:10px; }
+  .vote-card .cover{ width:100%; aspect-ratio:16/9; border-radius:9px; margin-bottom:12px; background:linear-gradient(155deg,#2a1712,#1a0f0c); border:1px solid var(--panel-border); }
+  .vote-card .anon-title{ font-size:13.5px; color:var(--ink-dim); font-style:italic; margin-bottom:14px; }
+  .vote-card .actions{ display:flex; gap:8px; }
+
+  /* ---------- Judge scoring ---------- */
+  .judge-banner{ display:flex; align-items:center; gap:10px; padding:11px 16px; border-radius:11px;
+    background: rgba(224,176,74,.08); border:1px solid rgba(224,176,74,.3); color:var(--warn); font-size:12.5px; margin-bottom:24px; }
+  .calc-table{ width:100%; border-collapse:collapse; font-size:12.5px; }
+  .calc-table th{ text-align:left; color:var(--ink-faint); font-weight:600; padding:9px 14px; border-bottom:1px solid var(--panel-border); font-size:10.5px; text-transform:uppercase; letter-spacing:.06em; }
+  .calc-table td{ padding:12px 14px; border-bottom:1px solid rgba(255,255,255,.05); vertical-align:middle; }
+  .calc-table tr:last-child td{ border-bottom:none; }
+  .calc-table .item-label{ font-size:13px; }
+  .calc-table input[type=range]{ width:110px; vertical-align:middle; }
+  .subtotal{ font-weight:600; color:var(--ink); }
+  .total-row{ display:flex; justify-content:space-between; align-items:baseline; padding:16px 14px 4px; }
+  .total-row .n{ font-size:26px; font-family:"Newsreader",serif; color:var(--accent); }
+  .formula-toggle{ font-size:11.5px; color:var(--accent); background:none; border:none; padding:0; text-decoration:underline; text-underline-offset:3px; }
+  .formula-box{ margin-top:14px; padding:14px 16px; font-size:12px; color:var(--ink-dim); line-height:1.9; }
+  .formula-box code{ color:var(--accent); font-family: ui-monospace, monospace; }
+
+  /* ---------- Admin shell (left collapsible sidebar — 審核後台/賽制建立/時程設定) ---------- */
+  .admin-wrap{ display:flex; min-height:calc(100vh - 44px); }
+  .admin-sidebar{ width:208px; flex:0 0 208px; border-right:1px solid var(--panel-border); background:rgba(0,0,0,0.15);
+    padding:18px 12px; transition: width .18s ease, padding .18s ease; overflow:hidden; }
+  .admin-sidebar.collapsed{ width:56px; flex-basis:56px; padding:18px 8px; }
+  .admin-toggle{ width:100%; display:flex; justify-content:center; padding:8px; margin-bottom:16px; border-radius:9px; background:rgba(255,255,255,.04); border:1px solid var(--panel-border); color:var(--ink-dim); }
+  .admin-nav-item{ display:flex; align-items:center; gap:10px; padding:9px 10px; border-radius:9px; font-size:13px; color:var(--ink-dim); width:100%; text-align:left; margin-bottom:4px; white-space:nowrap; }
+  .admin-nav-item:hover{ background:rgba(255,255,255,.04); color:var(--ink); }
+  .admin-nav-item.active{ background:rgba(255,106,61,.12); border:1px solid rgba(255,106,61,.28); color:var(--ink); }
+  .admin-sidebar.collapsed .admin-nav-item span.label{ display:none; }
+  .admin-main{ flex:1; min-width:0; padding:36px 40px 100px; }
+
+  /* status pills for submission state machine */
+  .state-pill{ font-size:11px; padding:4px 10px; border-radius:99px; border:1px solid var(--panel-border); color:var(--ink-dim); display:inline-flex; align-items:center; gap:5px; }
+  .state-pill.draft{ color:var(--ink-faint); }
+  .state-pill.checking{ color:#8fb3d9; border-color:rgba(143,179,217,.35); background:rgba(143,179,217,.08); }
+  .state-pill.mismatched{ color:var(--bad); border-color:rgba(217,97,79,.35); background:rgba(217,97,79,.08); }
+  .state-pill.pending{ color:var(--warn); border-color:rgba(224,176,74,.35); background:rgba(224,176,74,.08); }
+  .state-pill.approved{ color:var(--ok); border-color:rgba(111,191,139,.35); background:rgba(111,191,139,.08); }
+  .state-pill.rejected{ color:var(--ink-faint); text-decoration:line-through; }
+
+  .status-round-row{ display:flex; align-items:center; gap:16px; padding:16px 18px; border-radius:12px; margin-bottom:8px; }
+  .status-round-row .name{ flex:1; font-size:13.5px; }
+  .status-round-row .hint{ font-size:11.5px; color:var(--ink-faint); }
+
+  /* review queue */
+  .review-row{ display:grid; grid-template-columns: 1fr 140px 160px 220px; gap:16px; align-items:center; padding:14px 16px; border-radius:11px; margin-bottom:6px; }
+  .review-row .who{ font-size:13px; }
+  .review-row .who .sub{ font-size:11px; color:var(--ink-faint); }
+  .review-actions{ display:flex; gap:6px; justify-content:flex-end; }
+  .review-actions .btn{ padding:6px 12px; font-size:11.5px; }
+
+  /* format builder */
+  .comp-frame-field{ display:grid; grid-template-columns:1fr 280px; gap:20px; margin-bottom:28px; }
+  .round-card{ margin-bottom:16px; padding:20px; }
+  .round-card .rc-head{ display:flex; align-items:center; gap:10px; margin-bottom:16px; }
+  .round-card .rc-head .name{ font-size:15px; font-weight:600; flex:1; }
+  .block-group{ margin-bottom:14px; }
+  .block-group .bg-label{ font-size:11px; color:var(--ink-faint); text-transform:uppercase; letter-spacing:.08em; margin-bottom:8px; }
+  .chip-row{ display:flex; flex-wrap:wrap; gap:7px; }
+  .chip{ font-size:12px; padding:6px 13px; border-radius:99px; border:1px solid var(--panel-border); background:rgba(255,255,255,.03); color:var(--ink-dim); transition:all .14s ease; }
+  .chip:hover{ background:rgba(255,255,255,.06); color:var(--ink); }
+  .chip.selected{ background:rgba(255,106,61,.16); border-color:rgba(255,106,61,.4); color:var(--ink); }
+  .toggle-row{ display:flex; align-items:center; gap:10px; padding-top:10px; border-top:1px solid var(--panel-border); margin-top:14px; }
+  .switch{ width:36px; height:20px; border-radius:99px; background:rgba(255,255,255,.1); position:relative; border:1px solid var(--panel-border); flex:0 0 auto; }
+  .switch.on{ background: var(--accent-grad); border-color:transparent; }
+  .switch i{ position:absolute; top:2px; left:2px; width:14px; height:14px; border-radius:50%; background:#fff; transition:transform .16s ease; }
+  .switch.on i{ transform:translateX(16px); }
+
+  .score-editor-row{ display:grid; grid-template-columns: 1fr 110px 90px 90px 32px; gap:10px; align-items:center; padding:8px 0; }
+  .score-editor-row select, .score-editor-row input[type=number]{ padding:7px 9px; border-radius:8px; background:rgba(0,0,0,.25); border:1px solid var(--panel-border); color:var(--ink); font-size:12.5px; width:100%; }
+  .weight-sum-bar{ display:flex; align-items:center; gap:12px; padding:10px 14px; border-radius:10px; margin-top:10px; font-size:12.5px; }
+  .weight-sum-bar.ok{ background:rgba(111,191,139,.08); border:1px solid rgba(111,191,139,.3); color:var(--ok); }
+  .weight-sum-bar.bad{ background:rgba(217,97,79,.08); border:1px solid rgba(217,97,79,.3); color:var(--bad); }
+
+  /* schedule */
+  .phase-row{ display:grid; grid-template-columns: 140px 1fr 1fr; gap:16px; align-items:center; padding:14px 0; border-bottom:1px solid var(--panel-border); }
+  .phase-row:last-child{ border-bottom:none; }
+  .phase-row .phase-name{ font-size:13.5px; font-weight:600; }
+  .date-field label{ display:block; font-size:10.5px; color:var(--ink-faint); margin-bottom:5px; text-transform:uppercase; letter-spacing:.06em; }
+  .date-field input[type=date]{ width:100%; padding:8px 10px; border-radius:8px; background:rgba(0,0,0,.25); border:1px solid var(--panel-border); color:var(--ink); font-size:12.5px; color-scheme:dark; }
+  .date-error{ grid-column:1/-1; display:flex; align-items:center; gap:8px; font-size:11.5px; color:var(--bad); background:rgba(217,97,79,.08); border:1px solid rgba(217,97,79,.3); padding:8px 12px; border-radius:8px; margin-top:6px; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState } = React;
+
+/* ---------------- shared icon set (thin stroke, no emoji) ---------------- */
+const Icon = ({ d, size=16, className="" }) => (
+  <svg className={"icon " + className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+    <path d={d} />
+  </svg>
+);
+const ICONS = {
+  play: "M6 4.5v15l13-7.5-13-7.5z",
+  pause: "M7 4.5h3.5v15H7zM13.5 4.5H17v15h-3.5z",
+  next: "M5 5l9 7-9 7V5zM17 5v14",
+  prev: "M19 5l-9 7 9 7V5zM7 5v14",
+  check: "M20 6L9 17l-5-5",
+  alert: "M12 2 1 21h22L12 2zm0 7v5m0 3h.01",
+  shield: "M12 3l7 3v6c0 4.5-3 8-7 9-4-1-7-4.5-7-9V6l7-3z",
+  eyeOff: "M3 3l18 18M10.6 10.6a3 3 0 004.24 4.24M9.9 5.1A10.6 10.6 0 0122 12s-1.1 2.2-3.2 4.1M6.3 6.3C4 8 2 12 2 12s3.5 7 10 7c1.3 0 2.5-.2 3.6-.6",
+  upload: "M12 16V4m0 0l-4 4m4-4l4 4M4 16v3a2 2 0 002 2h12a2 2 0 002-2v-3",
+  externalLink: "M14 5h5v5M19 5l-9 9M8 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-2",
+  chevron: "M9 6l6 6-6 6",
+  inbox: "M3 12h4l2 3h6l2-3h4M5 5h14l2 7v7a1 1 0 01-1 1H4a1 1 0 01-1-1v-7l2-7z",
+  crown: "M4 18h16l1-9-5 3-4-6-4 6-5-3 1 9z",
+  calendar: "M7 3v3M17 3v3M4 8h16M5 6h14a1 1 0 011 1v12a1 1 0 01-1 1H5a1 1 0 01-1-1V7a1 1 0 011-1z",
+  close: "M18 6L6 18M6 6l12 12",
+  plus: "M12 5v14M5 12h14",
+};
+
+function Assumption({ children }) {
+  return <div className="assumption">{children}</div>;
+}
+function EmptyState({ icon, title, sub }) {
+  return (
+    <div className="empty-state">
+      <Icon d={icon} size={26} />
+      <div className="t">{title}</div>
+      <div className="s">{sub}</div>
+    </div>
+  );
+}
+
+/* ---------------- real product header (not the review tool) ---------------- */
+function SiteHeader({ authed=true, active="", roleLabel=null }){
+  return (
+    <header className="site-header">
+      <div className="brand"><div className="mark">◈</div><div className="name">聲擂 SoundArena</div></div>
+      {authed && (
+        <nav>
+          <a className={active==='events'?'active':''}>活動</a>
+          <a className={active==='competitions'?'active':''}>比賽</a>
+          <a className={active==='submit'?'active':''}>上傳作品</a>
+        </nav>
+      )}
+      {!authed && <div style={{flex:1}}/>}
+      <div className="right">
+        {roleLabel && <span className="role-badge">{roleLabel}</span>}
+        {authed ? <div className="avatar"/> : <button className="btn btn-ghost">登入</button>}
+      </div>
+    </header>
+  );
+}
+
+/* ================= 1. 登入頁 ================= */
+function LoginScreen(){
+  return (
+    <div>
+      <SiteHeader authed={false} />
+      <div className="stage-inner">
+        <Assumption><b>Assumption：</b>假設多數使用者第一次來訪不知道「為什麼登入要加好友/加伺服器」，因此在按鈕下方直接放說明文字，不藏進 tooltip。</Assumption>
+        <div className="login-wrap">
+          <div className="glass login-card">
+            <div className="mark">◈</div>
+            <h1>聲擂 SoundArena</h1>
+            <p>登入以投稿、投票、追蹤賽事進度</p>
+            <button className="btn btn-google oauth-btn"><Icon d={ICONS.externalLink}/> 使用 Google 繼續</button>
+            <button className="btn btn-line oauth-btn"><Icon d={ICONS.externalLink}/> 使用 LINE 登入</button>
+            <button className="btn btn-discord oauth-btn"><Icon d={ICONS.externalLink}/> 使用 Discord 登入</button>
+            <div className="glass oauth-note">
+              <b>LINE 登入</b>後會另外詢問是否加入官方帳號好友 — 用於接收報名確認、晉級/淘汰通知。<br/><br/>
+              <b>Discord 登入</b>後會另外詢問是否加入 SoundArena 伺服器 — bot 需在同一伺服器內才能私訊或公告賽事結果。<br/><br/>
+              兩者皆可跳過，之後在「通知設定」頁再連結。
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ================= 2. 報名頁 ================= */
+function RegisterScreen(){
+  const [nickname, setNickname] = useState('');
+  const [sunoHandle, setSunoHandle] = useState('');
+  const [submitted, setSubmitted] = useState(false);
+  const canSubmit = nickname.trim() !== '' && sunoHandle.trim() !== '';
+
+  if (submitted) {
+    return (
+      <div>
+        <SiteHeader authed={true} active="events" />
+        <div className="stage-inner">
+          <div className="page-head"><div className="eyebrow">Screen · 報名</div><h1>報名完成</h1></div>
+          <div className="glass" style={{padding:28, maxWidth:560}}>
+            <div className="parse-state ok" style={{marginTop:0}}><Icon d={ICONS.check}/> 已報名「{nickname}」，Suno 帳號 {sunoHandle} 已登記，可以前往「投稿」頁提交作品了</div>
+            <button className="btn btn-ghost" style={{marginTop:14}} onClick={()=>setSubmitted(false)}>返回修改</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <SiteHeader authed={true} active="events" />
+      <div className="stage-inner">
+        <div className="page-head">
+          <div className="eyebrow">Screen · 報名</div>
+          <h1>報名參賽</h1>
+          <p>填寫站內帳號基本資料，並提供 Suno 帳號資訊 — 之後每輪投稿的身份比對都依賴這裡填的帳號名稱。</p>
+        </div>
+        <div className="glass" style={{padding:28, maxWidth:560}}>
+          <div className="field">
+            <label>參賽者暱稱（比賽公開頁面顯示用，匿名輪次不會顯示）</label>
+            <input className="input" placeholder="例如：夜遊者" value={nickname} onChange={e=>setNickname(e.target.value)} />
+          </div>
+          <div className="field">
+            <label>Suno 帳號名稱 或 個人主頁網址</label>
+            <input className="input" placeholder="my13u 或 https://suno.com/@my13u" value={sunoHandle} onChange={e=>setSunoHandle(e.target.value)} />
+            <div className="hint">用於投稿時自動比對「投稿連結的作者」是否為本人 — 沒有這欄，系統無法驗證投稿是否為你自己的作品。</div>
+          </div>
+          <div className="hint" style={{marginBottom:16}}>報名開放時間不會晚於本場比賽的投稿期結束 — 投稿期一旦截止，此表單會自動關閉，不會再收到新報名。</div>
+          <button className="btn btn-primary" style={{width:'100%', justifyContent:'center', padding:'12px'}} disabled={!canSubmit} onClick={()=>setSubmitted(true)}>送出報名</button>
+          {!canSubmit && <div className="hint" style={{marginTop:8}}>兩個欄位都填寫後才能送出。</div>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ================= 3. 投稿表單 ================= */
+/* Mock 解析結果——依貼上的連結內容分支，不是無論輸入什麼都同一個結果。
+   兩筆是本輪訪談實際測過的真實 Suno 分享碼；其餘一律視為「格式看起來對但非本人」示範 error 分支。
+   這是原型的模擬資料庫，正式串接時由後端呼叫 Suno 公開 API 取代（見 SPEC.md 第 3 節）。 */
+const MOCK_SUNO_LOOKUP = {
+  'IKWrakvC2p7TUqRZ': { title:'抽象善良', author:'MY', handle:'my13u', match:true },
+  'hl1nj5kSmsClebsu': { title:'路上ランウェイ', author:'Grudge Grocery Store', handle:'grudgegrocerystore', match:false },
+};
+function mockParseSunoLink(url){
+  // Suno 分享連結有兩種等價格式，兩種都要認得：
+  //   短連結：suno.com/s/{code}
+  //   展開後的完整網址：suno.com/song/{uuid}?sh={code}（點開短連結、或使用者從網址列複製時常見的樣子）
+  const code = (url.match(/\/s\/([A-Za-z0-9]+)/) || url.match(/[?&]sh=([A-Za-z0-9]+)/) || [])[1];
+  if (!code) return { kind:'invalid' };
+  if (MOCK_SUNO_LOOKUP[code]) return { kind: MOCK_SUNO_LOOKUP[code].match ? 'match' : 'mismatch', ...MOCK_SUNO_LOOKUP[code] };
+  return { kind:'mismatch', title:'（未知作品）', author:'未知帳號', handle:'unknown' };
+}
+
+function SubmitScreen(){
+  const [url, setUrl] = useState('https://suno.com/s/IKWrakvC2p7TUqRZ');
+  const [state, setState] = useState('idle'); // idle | loading | ok | error | invalid
+  const [result, setResult] = useState(null);
+  const [submitted, setSubmitted] = useState(false);
+
+  const runParse = () => {
+    setState('loading'); setResult(null);
+    setTimeout(() => {
+      const r = mockParseSunoLink(url);
+      if (r.kind === 'invalid') { setState('invalid'); return; }
+      if (r.kind === 'mismatch') { setState('error'); setResult(r); return; }
+      setState('ok'); setResult(r);
+    }, 1000);
+  };
+
+  if (submitted) {
+    return (
+      <div>
+        <SiteHeader authed={true} active="submit" />
+        <div className="stage-inner">
+          <div className="page-head"><div className="eyebrow">Screen · 投稿</div><h1>投稿已送出</h1></div>
+          <div className="glass" style={{padding:28, maxWidth:560}}>
+            <div className="parse-state ok" style={{marginTop:0}}><Icon d={ICONS.check}/> 「{result?.title}」已送出，狀態轉為「待人工審核」（Submission 狀態機下一站，見「個人狀態」頁查看進度）</div>
+            <button className="btn btn-ghost" style={{marginTop:14}} onClick={()=>{ setSubmitted(false); setState('idle'); setResult(null); }}>投稿另一首</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <SiteHeader authed={true} active="submit" />
+      <div className="stage-inner">
+        <div className="page-head">
+          <div className="eyebrow">Screen · 投稿</div>
+          <h1>投稿本輪作品</h1>
+          <p>貼上 Suno 分享連結後系統自動帶出標題／封面／作者，並比對是否為報名時填寫的 Suno 帳號本人。</p>
+        </div>
+        <Assumption>
+          <b>Assumption：</b>連結解析與上傳音檔是兩個獨立步驟——連結只負責「驗證身份＋帶元資料」，播放用的音檔另外上傳（見 SPEC.md 第 4 節，短效簽章網址架構）。<br/>
+          <b>此區塊為原型模擬：</b>目前沒有真的呼叫 Suno API，欄位失焦後會依貼上的連結對照一份小型 mock 對照表回應（試試看清空後分別貼 <code>https://suno.com/s/IKWrakvC2p7TUqRZ</code> 跟 <code>https://suno.com/s/hl1nj5kSmsClebsu</code>，結果不一樣）；封面圖同樣是誠實的文字佔位、不是真圖，正式開發才會接上真實圖片。
+        </Assumption>
+
+        <div className="form-grid">
+          <div>
+            <div className="field">
+              <label>所屬賽制 / 比賽場次</label>
+              <select className="input" defaultValue="r2">
+                <option value="r1">深夜擂台 EP.03 · 第 1 輪 海選（已截止）</option>
+                <option value="r2">深夜擂台 EP.03 · 第 2 輪 複賽（投稿開放中）</option>
+              </select>
+              <div className="hint">審核通過後，系統會自動把這首作品加入所選賽制對應輪次的歌曲清單，不需要另外操作。</div>
+            </div>
+
+            <div className="field">
+              <label>Suno 作品分享連結</label>
+              <input className="input" value={url} onChange={e=>{ setUrl(e.target.value); setState('idle'); setResult(null); }} onBlur={runParse} />
+              {state==='loading' && <div className="parse-state loading"><span className="spinner"/> 解析連結中，正在比對投稿者身份…</div>}
+              {state==='invalid' && <div className="parse-state error"><Icon d={ICONS.alert}/> 看不出這是 Suno 分享連結，請確認網址格式（例如 suno.com/s/…）</div>}
+              {state==='ok' && <div className="parse-state ok"><Icon d={ICONS.check}/> 身份比對通過（sharer 與報名帳號一致），已自動帶入下方資料</div>}
+              {state==='error' && <div className="parse-state error"><Icon d={ICONS.alert}/> 這個連結的作者帳號（{result?.handle}）與你報名時填寫的 Suno 帳號不一致，請確認貼的是自己的作品連結</div>}
+            </div>
+
+            <div className="field">
+              <label>上傳音檔案（播放用）</label>
+              <div className={"upload-drop" + (state==='ok' ? ' filled':'')}>
+                {state==='ok'
+                  ? <><Icon d={ICONS.check}/> {result?.title}.mp3 — 已上傳（3:22）</>
+                  : <><Icon d={ICONS.upload}/><br/>拖曳音檔到此，或點擊選擇檔案</>}
+              </div>
+              <div className="hint">從 Suno 下載後上傳的原始檔案，將存放於私有儲存空間，播放時由系統動態簽發短效網址。</div>
+            </div>
+
+            <div className="field">
+              <label>歌詞</label>
+              <textarea className="input" placeholder="請貼上完整歌詞（此欄位無法自動抓取，需自行提供）"></textarea>
+            </div>
+
+            <button className="btn btn-primary" disabled={state!=='ok'} onClick={()=>setSubmitted(true)}>送出投稿</button>
+          </div>
+
+          <div className="glass preview-card">
+            <div className="cover">{state==='ok' ? `封面圖（自動帶入・${result.title}）` : '尚未解析'}</div>
+            <div className="t">{state==='ok' ? result.title : '— 標題待帶入 —'}</div>
+            <div className="a">{state==='ok' ? `by ${result.author} (@${result.handle})` : '作者待帶入'}</div>
+            <div className="row"><span>投稿至</span><span>第 2 輪 複賽</span></div>
+            <div className="row"><span>資料來源</span><span>Suno 公開分享 API</span></div>
+            <div className="row"><span>身份比對</span><span>{state==='ok' ? <span className="badge ok">通過</span> : state==='error' ? <span className="badge bad">不通過</span> : <span className="badge">待驗證</span>}</span></div>
+            <div className="row"><span>審核狀態</span><span><span className="badge warn">待人工審核</span></span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ================= 4. 播放器 + 歌曲清單（含對戰並排、摺疊、空狀態） ================= */
+function tracks(n, prefix, playingIdx=-1){
+  return Array.from({length:n}).map((_,i)=>({ id:`${prefix}-${i}`, title: `未命名作品 #${i+1}`, playing: i===playingIdx }));
+}
+function RoundGroup({ label, count, defaultOpen=false, children, empty=false }){
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="round-group">
+      <button className="round-header" onClick={()=>setOpen(!open)}>
+        <Icon d={ICONS.chevron} className={"chevron" + (open?' open':'')} size={14}/>
+        <span className="t">{label}</span>
+        <span className="count">{empty ? '0 首' : `${count} 首`}</span>
+      </button>
+      {open && <div className="round-body">{children}</div>}
+    </div>
+  );
+}
+function TrackRow({ t, active, onPlay }){
+  return (
+    <div className={"track-row" + (active?' playing':'')} onClick={onPlay} style={{cursor:'pointer'}}>
+      <div className="play-ico"><Icon d={active?ICONS.pause:ICONS.play} size={13}/></div>
+      <div className="thumb"/>
+      <div className="meta">
+        <div className="t">{active && <span className="now-playing-eq"><i/><i/><i/></span>} {t.title}</div>
+        <div className="a">作者於匿名輪次不顯示</div>
+      </div>
+      <span className="badge accent">未投票</span>
+      <button className="icon-btn" title="查看所屬活動" onClick={e=>e.stopPropagation()}><Icon d={ICONS.externalLink} size={14}/></button>
+    </div>
+  );
+}
+function ReportButton({ target }){
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState('');
+  const [sent, setSent] = useState(false);
+  if (sent) return <div className="parse-state ok" style={{maxWidth:'fit-content', marginTop:2}}><Icon d={ICONS.check} size={13}/> 檢舉已送出，PlatformAdmin 會盡快處理</div>;
+  return (
+    <div style={{marginTop:2}}>
+      <button className="icon-btn" style={{fontSize:11.5, color:'var(--ink-faint)', gap:5}} onClick={()=>setOpen(!open)}>
+        <Icon d={ICONS.alert} size={13}/> 檢舉此比賽
+      </button>
+      {open && (
+        <div className="glass" style={{padding:14, marginTop:8, maxWidth:420}}>
+          <label style={{fontSize:11.5, color:'var(--ink-dim)', display:'block', marginBottom:6}}>檢舉「{target}」— 檢舉對象是整場比賽,不是個別投稿</label>
+          <textarea className="input" style={{minHeight:70}} placeholder="請描述具體情況" value={reason} onChange={e=>setReason(e.target.value)} />
+          <div style={{display:'flex', gap:8, marginTop:8, justifyContent:'flex-end'}}>
+            <button className="btn btn-ghost" style={{fontSize:11.5, padding:'6px 12px'}} onClick={()=>setOpen(false)}>取消</button>
+            <button className="btn btn-primary" style={{fontSize:11.5, padding:'6px 12px'}} disabled={!reason.trim()} onClick={()=>setSent(true)}>送出檢舉</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+function ListScreen(){
+  const [mode, setMode] = useState('海選');
+  const [nowPlaying, setNowPlaying] = useState('r1-1');
+  const allTracks = { ...Object.fromEntries(tracks(5,'r1').map(t=>[t.id,t])), ...Object.fromEntries(tracks(3,'r2').map(t=>[t.id,t])), 'duel-a':{title:'參賽作品 A'}, 'duel-b':{title:'參賽作品 B'} };
+  return (
+    <div>
+      <SiteHeader authed={true} active="competitions" />
+      <div className="stage-inner">
+        <div className="page-head">
+          <div className="eyebrow">Screen · 擂台</div>
+          <h1>深夜擂台 EP.03</h1>
+          <p>全站僅一個播放器實例；清單只是可點擊列表，不是各自獨立的嵌入播放器 — 換歌時銷毀重建音源，避免同時播放。清單依輪次摺疊分組，比照播放清單的瀏覽習慣。</p>
+          <ReportButton target="深夜擂台 EP.03" />
+        </div>
+        <div style={{display:'flex', gap:8, marginBottom:22}}>
+          <button className={"btn " + (mode==='海選'?'btn-primary':'btn-ghost')} onClick={()=>setMode('海選')}>海選模式（清單）</button>
+          <button className={"btn " + (mode==='對戰'?'btn-primary':'btn-ghost')} onClick={()=>setMode('對戰')}>對戰模式（並排）</button>
+        </div>
+
+        {mode==='海選' ? (
+          <>
+            <RoundGroup label="第 1 輪 · 海選" count={5} defaultOpen={true}>
+              <div className="track-list">{tracks(5,'r1').map(t=><TrackRow key={t.id} t={t} active={nowPlaying===t.id} onPlay={()=>setNowPlaying(t.id)}/>)}</div>
+            </RoundGroup>
+            <RoundGroup label="第 2 輪 · 複賽" count={3}>
+              <div className="track-list">{tracks(3,'r2').map(t=><TrackRow key={t.id} t={t} active={nowPlaying===t.id} onPlay={()=>setNowPlaying(t.id)}/>)}</div>
+            </RoundGroup>
+            <RoundGroup label="第 3 輪 · 決賽" count={0} empty={true} defaultOpen={true}>
+              <EmptyState icon={ICONS.inbox} title="決賽尚未開放投稿" sub="複賽晉級名單公布後，本輪清單才會出現作品"/>
+            </RoundGroup>
+          </>
+        ) : (
+          <div className="duel-wrap">
+            <div className="glass duel-card">
+              <div className="cover">A</div>
+              <div className="t" style={{fontSize:14, marginBottom:4}}>參賽作品 A</div>
+              <button className={"btn "+(nowPlaying==='duel-a'?'btn-primary':'btn-ghost')} style={{width:'100%', justifyContent:'center'}} onClick={()=>setNowPlaying('duel-a')}>
+                {nowPlaying==='duel-a' ? <span className="now-playing-eq"><i/><i/><i/></span> : <Icon d={ICONS.play}/>} 播放
+              </button>
+            </div>
+            <div className="duel-vs">VS</div>
+            <div className="glass duel-card">
+              <div className="cover">B</div>
+              <div className="t" style={{fontSize:14, marginBottom:4}}>參賽作品 B</div>
+              <button className={"btn "+(nowPlaying==='duel-b'?'btn-primary':'btn-ghost')} style={{width:'100%', justifyContent:'center'}} onClick={()=>setNowPlaying('duel-b')}>
+                {nowPlaying==='duel-b' ? <span className="now-playing-eq"><i/><i/><i/></span> : <Icon d={ICONS.play}/>} 播放
+              </button>
+            </div>
+          </div>
+        )}
+        <PlayerBar title={allTracks[nowPlaying]?.title || '未命名作品'} />
+      </div>
+    </div>
+  );
+}
+function PlayerBar({ title='未命名作品 #2' }){
+  const [playing, setPlaying] = useState(true);
+  return (
+    <div className="glass player-bar">
+      <div className="thumb"/>
+      <div className="meta"><div className="t">{playing && <span className="now-playing-eq"><i/><i/><i/></span>} {title}</div><div className="a">{playing?'播放中':'已暫停'} · 匿名</div></div>
+      <div className="ctrl">
+        <button className="icon-btn"><Icon d={ICONS.prev}/></button>
+        <button className="play" onClick={()=>setPlaying(!playing)}><Icon d={playing?ICONS.pause:ICONS.play} size={15}/></button>
+        <button className="icon-btn"><Icon d={ICONS.next}/></button>
+      </div>
+      <div className="track">
+        <span>1:14</span>
+        <div className="bar"><i/></div>
+        <span>3:22</span>
+      </div>
+    </div>
+  );
+}
+
+/* ================= 5. 投票介面（含空狀態） ================= */
+function VoteScreen(){
+  const [showEmpty, setShowEmpty] = useState(false);
+  const [votedId, setVotedId] = useState(null);
+  const [playingId, setPlayingId] = useState(null);
+  return (
+    <div>
+      <SiteHeader authed={true} active="competitions" />
+      <div className="stage-inner">
+        <div className="page-head">
+          <div className="eyebrow">Screen · 投票</div>
+          <h1>本輪投票</h1>
+          <p>此輪比賽規則設定為匿名，作者資訊不顯示；清單順序每次讀取重新隨機排列。</p>
+        </div>
+        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20}}>
+          <div className="anon-flag"><Icon d={ICONS.eyeOff} size={14}/> 本輪匿名投票 · 投票截止後公開作者（單輪匿名模式）· 清單順序每次刷新皆重新隨機</div>
+          <button className="btn btn-ghost" onClick={()=>setShowEmpty(!showEmpty)} style={{fontSize:'11.5px', padding:'6px 12px'}}>
+            {showEmpty ? '顯示範例資料' : '檢視空狀態'}
+          </button>
+        </div>
+
+        {showEmpty ? (
+          <EmptyState icon={ICONS.inbox} title="目前沒有可投票的作品" sub="本輪投稿審核尚未完成，通過審核的作品會自動出現在這裡"/>
+        ) : (
+          <div className="vote-grid">
+            {[1,2,3,4].map(n=>(
+              <div key={n} className="glass vote-card" style={playingId===n ? {borderColor:'rgba(255,106,61,.4)'} : undefined}>
+                <div className="num">投稿 #{String(n).padStart(2,'0')}</div>
+                <div className="cover"/>
+                <div className="anon-title">— 標題於匿名階段不顯示 —</div>
+                <div className="actions">
+                  <button className="btn btn-ghost" onClick={()=>setPlayingId(n)}>
+                    {playingId===n ? <span className="now-playing-eq"><i/><i/><i/></span> : <Icon d={ICONS.play} size={13}/>} 播放
+                  </button>
+                  {n===2
+                    ? <button className="btn btn-ghost" disabled style={{flex:1, justifyContent:'center'}}>這是你的作品</button>
+                    : votedId===n
+                      ? <button className="btn btn-ghost" disabled style={{flex:1, justifyContent:'center', color:'var(--ok)'}}><Icon d={ICONS.check} size={13}/> 已投這首</button>
+                      : <button className="btn btn-primary" style={{flex:1, justifyContent:'center'}} disabled={votedId!==null} onClick={()=>setVotedId(n)}><Icon d={ICONS.check} size={13}/> 投這首</button>}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        {votedId && <div className="parse-state ok" style={{maxWidth:'fit-content'}}><Icon d={ICONS.check}/> 已完成本輪投票，感謝參與</div>}
+        <PlayerBar/>
+      </div>
+    </div>
+  );
+}
+
+/* ================= 6. 評審評分介面（匿名、加權需達 100% + 額外加分不設限） ================= */
+const WEIGHTED_ITEMS = [
+  { key:'vote', label:'投票', source:'auto', raw:'128 票', weight:0.40, contrib:3.6 },
+  { key:'video', label:'影片流量', source:'auto', raw:'4520 次觀看', weight:0.25, contrib:2.5 },
+  { key:'keyword', label:'主題關鍵字符合', source:'auto', raw:'符合本輪限定主題', weight:0.20, contrib:2.0 },
+  { key:'external', label:'外部投票', source:'auto', raw:'56 票', weight:0.15, contrib:0.9 },
+];
+const WEIGHT_SUM = WEIGHTED_ITEMS.reduce((s,i)=>s+i.weight,0); // 須為 1.00（100%），系統會擋不合法設定
+const WEIGHTED_SUBTOTAL = WEIGHTED_ITEMS.reduce((s,i)=>s+i.contrib,0);
+
+function JudgeScreen(){
+  const [showFormula, setShowFormula] = useState(false);
+  const [showEmpty, setShowEmpty] = useState(false);
+  const [boss, setBoss] = useState(6);
+  const total = WEIGHTED_SUBTOTAL + boss;
+  return (
+    <div>
+      <SiteHeader authed={true} roleLabel="評審模式" />
+      <div className="stage-inner">
+        <div className="page-head">
+          <div className="eyebrow">Screen · 評審評分（角色：評審）</div>
+          <h1>本輪待評分作品</h1>
+          <p>評分公式由主辦於「賽制建立」頁自訂啟用哪些項目與權重；計入排名的項目權重總和固定為 100%，額外加分項（如魔王加給）另外累加、不受 100% 封頂限制。</p>
+        </div>
+        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:24}}>
+          <div className="judge-banner"><Icon d={ICONS.shield} size={15}/> 你目前是「內容評分」角色，系統不會顯示任何投稿者身份線索</div>
+          <button className="btn btn-ghost" onClick={()=>setShowEmpty(!showEmpty)} style={{fontSize:'11.5px', padding:'6px 12px'}}>
+            {showEmpty ? '顯示範例資料' : '檢視空狀態'}
+          </button>
+        </div>
+
+        {showEmpty ? (
+          <EmptyState icon={ICONS.inbox} title="目前沒有待評分作品" sub="等待本輪投稿審核完成後，待評分清單才會出現作品"/>
+        ) : (
+          <>
+            <div className="glass" style={{marginBottom:14, padding:'6px 0 0'}}>
+              <table className="calc-table">
+                <thead><tr><th>加權計分項目（合計 {Math.round(WEIGHT_SUM*100)}%）</th><th>來源</th><th>數值</th><th>權重</th><th style={{textAlign:'right'}}>貢獻分</th></tr></thead>
+                <tbody>
+                  {WEIGHTED_ITEMS.map(item=>(
+                    <tr key={item.key}>
+                      <td className="item-label">— 匿名作品 #03 — <br/><span style={{color:'var(--ink-dim)'}}>{item.label}</span></td>
+                      <td><span className="badge auto">系統自動</span></td>
+                      <td>{item.raw}</td>
+                      <td>{Math.round(item.weight*100)}%</td>
+                      <td className="subtotal" style={{textAlign:'right'}}>{item.contrib.toFixed(1)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div className="total-row">
+                <span style={{fontSize:'12.5px', color:'var(--ink-dim)'}}>加權小計（滿分 10）</span>
+                <span className="n" style={{fontSize:18}}>{WEIGHTED_SUBTOTAL.toFixed(1)}</span>
+              </div>
+            </div>
+
+            <div className="glass" style={{marginBottom:16, padding:'14px 18px'}}>
+              <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:4}}>
+                <span style={{fontSize:12.5, color:'var(--ink-dim)'}}>額外加分項（不計入 100%，直接加總）</span>
+                <span className="badge manual"><Icon d={ICONS.crown} size={11}/> 人工輸入</span>
+              </div>
+              <div style={{fontSize:13, marginBottom:10}}>— 匿名作品 #03 — <span style={{color:'var(--ink-dim)'}}>魔王加給</span></div>
+              <span style={{display:'flex',alignItems:'center',gap:10}}>
+                <input type="range" min="0" max="10" value={boss} onChange={e=>setBoss(Number(e.target.value))} style={{flex:1}}/>
+                <b style={{fontSize:15}}>+{boss}</b>
+              </span>
+            </div>
+
+            <div className="total-row" style={{padding:'2px 4px 20px'}}>
+              <span style={{fontSize:13, color:'var(--ink-dim)'}}>總分（加權小計 + 額外加分）</span>
+              <span className="n">{total.toFixed(1)}</span>
+            </div>
+
+            <button className="formula-toggle" onClick={()=>setShowFormula(!showFormula)}>
+              {showFormula ? '收起' : '查看'}計算方式（規格要求評分公式須公開透明）
+            </button>
+            {showFormula && (
+              <div className="glass formula-box">
+                加權小計 = <code>投票 × 40%</code> + <code>影片流量 × 25%</code> + <code>主題關鍵字符合 × 20%</code> + <code>外部投票 × 15%</code>（權重總和固定 100%）<br/>
+                總分 = <code>加權小計</code> + <code>魔王加給</code>（額外加分項，不受 100% 限制，直接加總）<br/>
+                <span style={{color:'var(--ink-faint)'}}>此區塊為主辦方於「賽制建立」頁勾選啟用項目、設定權重後，系統自動生成的公開說明文字；未啟用的項目不會出現在公式裡。</span>
+              </div>
+            )}
+          </>
+        )}
+        <PlayerBar/>
+      </div>
+    </div>
+  );
+}
+
+/* ================= Domain mock data(依 CONTEXT.md 的實體定義) ================= */
+const FORMAT_BLOCKS = {
+  elimination: [
+    { key:'single-elim', label:'單敗淘汰' },
+    { key:'double-elim', label:'雙敗淘汰（敗部復活）' },
+    { key:'round-robin', label:'循環賽' },
+    { key:'monthly', label:'月度／週期累積制' },
+  ],
+  grouping: [
+    { key:'individual', label:'個人賽' },
+    { key:'team-3v3', label:'隊伍賽（3 對 3）' },
+    { key:'draw', label:'抽籤分組' },
+  ],
+  special: [
+    { key:'wildcard', label:'敗部復活戰' },
+    { key:'theme', label:'限定主題輪' },
+    { key:'mentor', label:'業界導師制' },
+  ],
+};
+const SUBMISSION_STATE_META = {
+  draft:               { label:'草稿',              cls:'draft' },
+  identity_checking:   { label:'身份比對中',         cls:'checking' },
+  identity_mismatched: { label:'身份比對不通過，待更正', cls:'mismatched' },
+  pending_review:      { label:'待人工審核',         cls:'pending' },
+  approved:            { label:'已通過',             cls:'approved' },
+  rejected:            { label:'已退回',             cls:'rejected' },
+};
+const MOCK_COMPETITION = {
+  name: '深夜擂台 EP.03',
+  anonymityMode: 'single-round',
+  rounds: [
+    { id:'r1', name:'第 1 輪 · 海選', locked:'preliminary', elimination:'round-robin', grouping:'individual', special:[], scoringOverride:false },
+    { id:'r2', name:'第 2 輪 · 複賽',  locked:null,          elimination:'single-elim', grouping:'team-3v3',   special:['theme'], scoringOverride:true },
+    { id:'r3', name:'決賽',           locked:'final',        elimination:'single-elim', grouping:'individual', special:[], scoringOverride:false },
+  ],
+};
+const MOCK_MY_SUBMISSIONS = [
+  { round:'第 1 輪 · 海選', state:'approved' },
+  { round:'第 2 輪 · 複賽', state:'pending_review' },
+  { round:'決賽', state:'draft', locked:true },
+];
+const MOCK_REVIEW_QUEUE = [
+  { id:1, nickname:'夜遊者', track:'未命名作品 #1', handle:'my13u', identityMatch:'match',    unlistedOk:true,  state:'pending_review' },
+  { id:2, nickname:'霓虹貓',  track:'未命名作品 #4', handle:'grudgegrocerystore', identityMatch:'mismatch', unlistedOk:null, state:'identity_mismatched' },
+  { id:3, nickname:'午夜鯨',  track:'未命名作品 #7', handle:'unknown', identityMatch:'match',   unlistedOk:false, state:'pending_review' },
+];
+const MOCK_ALL_COMPETITIONS_PLATFORM = [
+  { id:'c1', name:'深夜擂台 EP.03', organizer:'夜遊者', status:'active' },
+  { id:'c2', name:'Lo-fi 對決之夜', organizer:'霓虹貓', status:'active' },
+  { id:'c3', name:'新手擂台盃', organizer:'午夜鯨', status:'upcoming' },
+];
+const MOCK_REPORTS = [
+  { id:1, competition:'Lo-fi 對決之夜', reporter:'匿名參賽者', reason:'疑似要求參賽者私下轉帳才能晉級,懷疑詐騙。', state:'pending' },
+  { id:2, competition:'新手擂台盃', reporter:'午夜鯨', reason:'賽制規則賽中途更改,未事先公告。', state:'pending' },
+];
+
+/* ================= 共用：管理頁面左側可收合側欄（Organizer / PlatformAdmin 兩層視角） ================= */
+function AdminShell({ active, children }){
+  const [collapsed, setCollapsed] = useState(false);
+  const [viewpoint, setViewpoint] = useState('organizer'); // organizer | platform
+  const [section, setSection] = useState(active);
+  const [reports, setReports] = useState(MOCK_REPORTS);
+
+  const orgItems = [
+    { key:'review', label:'審核後台', icon:ICONS.shield },
+    { key:'format', label:'賽制建立', icon:ICONS.crown },
+    { key:'schedule', label:'時程設定', icon:ICONS.calendar },
+  ];
+  const platformItems = [
+    { key:'platform-competitions', label:'全站比賽', icon:ICONS.inbox },
+    { key:'platform-reports', label:'檢舉處理', icon:ICONS.alert },
+  ];
+  const resolveReport = (id) => setReports(rs => rs.map(r => r.id===id ? {...r, state:'resolved'} : r));
+
+  return (
+    <div>
+      <SiteHeader authed={true} roleLabel={viewpoint==='platform' ? 'PlatformAdmin' : 'Organizer'} />
+      <div className="admin-wrap">
+        <aside className={"admin-sidebar" + (collapsed?' collapsed':'')}>
+          <button className="admin-toggle" onClick={()=>setCollapsed(!collapsed)} title={collapsed?'展開側欄':'收合側欄'}>
+            <Icon d={ICONS.chevron} size={13} className={collapsed?'':'chevron open'}/>
+          </button>
+
+          {!collapsed && (
+            <div className="toggle-row" style={{marginTop:0, paddingTop:0, borderTop:'none', marginBottom:14}}>
+              <button className={"switch"+(viewpoint==='platform'?' on':'')} onClick={()=>{ const nv = viewpoint==='platform'?'organizer':'platform'; setViewpoint(nv); setSection(nv==='platform'?'platform-competitions':active); }}><i/></button>
+              <span style={{fontSize:11.5}}>{viewpoint==='platform' ? 'PlatformAdmin 視角' : 'Organizer 視角'}</span>
+            </div>
+          )}
+
+          {viewpoint==='organizer' && orgItems.map(it=>(
+            <button key={it.key} className={"admin-nav-item"+(section===it.key?' active':'')} onClick={()=>setSection(it.key)}>
+              <Icon d={it.icon} size={15}/><span className="label">{it.label}</span>
+            </button>
+          ))}
+          {viewpoint==='platform' && platformItems.map(it=>(
+            <button key={it.key} className={"admin-nav-item"+(section===it.key?' active':'')} onClick={()=>setSection(it.key)}>
+              <Icon d={it.icon} size={15}/><span className="label">{it.label}</span>
+              {it.key==='platform-reports' && reports.some(r=>r.state==='pending') && <span className="badge bad" style={{marginLeft:'auto'}}>{reports.filter(r=>r.state==='pending').length}</span>}
+            </button>
+          ))}
+        </aside>
+
+        <main className="admin-main">
+          {viewpoint==='organizer' && children}
+
+          {viewpoint==='platform' && section==='platform-competitions' && (
+            <div>
+              <div className="page-head">
+                <div className="eyebrow">PlatformAdmin · 全站比賽</div>
+                <h1>所有 Organizer 建立的比賽</h1>
+                <p>PlatformAdmin 看得到全站比賽,Organizer 只看得到自己建立的(見 SPEC.md 第 0 節角色分層)。</p>
+              </div>
+              <table className="calc-table">
+                <thead><tr><th>比賽名稱</th><th>Organizer</th><th>狀態</th></tr></thead>
+                <tbody>
+                  {MOCK_ALL_COMPETITIONS_PLATFORM.map(c=>(
+                    <tr key={c.id}><td className="item-label">{c.name}</td><td>{c.organizer}</td><td><span className="badge accent">{c.status==='active'?'進行中':'即將開始'}</span></td></tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {viewpoint==='platform' && section==='platform-reports' && (
+            <div>
+              <div className="page-head">
+                <div className="eyebrow">PlatformAdmin · 檢舉處理</div>
+                <h1>待處理檢舉</h1>
+                <p>檢舉對象是整場比賽,不是個別投稿(個別投稿內容由該比賽自己的 Organizer 審核)。</p>
+              </div>
+              {reports.filter(r=>r.state==='pending').length===0 ? (
+                <EmptyState icon={ICONS.check} title="目前沒有待處理的檢舉" sub="所有檢舉都已處理完畢"/>
+              ) : reports.map(r=>(
+                <div key={r.id} className="glass" style={{padding:16, marginBottom:10, opacity:r.state==='resolved'?0.45:1}}>
+                  <div style={{display:'flex', justifyContent:'space-between', marginBottom:8}}>
+                    <span style={{fontSize:13.5, fontWeight:600}}>{r.competition}</span>
+                    <span className="badge" style={{fontSize:11}}>檢舉人:{r.reporter}</span>
+                  </div>
+                  <div style={{fontSize:12.5, color:'var(--ink-dim)', marginBottom:10}}>{r.reason}</div>
+                  {r.state==='pending'
+                    ? <button className="btn btn-primary" style={{fontSize:11.5, padding:'6px 14px'}} onClick={()=>resolveReport(r.id)}>標記已處理</button>
+                    : <span className="badge ok">已處理</span>}
+                </div>
+              ))}
+            </div>
+          )}
+        </main>
+      </div>
+    </div>
+  );
+}
+
+/* ================= 7. 個人投稿狀態頁（公開頁面） ================= */
+function StatusScreen(){
+  const eliminated = true; // demo：呈現「已淘汰只能投票」的狀態
+  return (
+    <div>
+      <SiteHeader authed={true} active="competitions" />
+      <div className="stage-inner">
+        <div className="page-head">
+          <div className="eyebrow">Screen · 個人投稿狀態</div>
+          <h1>我的投稿 — {MOCK_COMPETITION.name}</h1>
+          <p>依 Submission 狀態機呈現每一輪投稿進度；ParticipantStatus 若為 eliminated，後續輪次只保留投票資格。</p>
+        </div>
+
+        {eliminated && (
+          <div className="judge-banner" style={{color:'var(--bad)', background:'rgba(217,97,79,.08)', borderColor:'rgba(217,97,79,.3)'}}>
+            <Icon d={ICONS.alert} size={15}/> 你已於「第 2 輪 · 複賽」遭淘汰 — 後續輪次僅保留投票資格，無法再投稿
+          </div>
+        )}
+
+        {MOCK_MY_SUBMISSIONS.length === 0 ? (
+          <EmptyState icon={ICONS.inbox} title="你在這場比賽還沒有任何投稿紀錄" sub="報名後前往「投稿」頁提交作品，這裡就會出現每輪的審核進度"/>
+        ) : MOCK_MY_SUBMISSIONS.map((s,i)=>{
+          const meta = SUBMISSION_STATE_META[s.state];
+          return (
+            <div key={i} className="glass status-round-row">
+              <div className="name">{s.round}</div>
+              <div className="hint">{s.locked ? '本輪未開放投稿（已淘汰或輪次未開放）' : '　'}</div>
+              <span className={"state-pill "+meta.cls}>{meta.label}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ================= 8. 審核後台 ================= */
+function ReviewScreen(){
+  const [rows, setRows] = useState(MOCK_REVIEW_QUEUE);
+  const [showEmpty, setShowEmpty] = useState(false);
+  const act = (id, state) => setRows(rs => rs.map(r => r.id===id ? {...r, state} : r));
+
+  return (
+    <AdminShell active="review">
+      <div className="page-head">
+        <div className="eyebrow">Screen · 審核後台</div>
+        <h1>投稿審核清單 — {MOCK_COMPETITION.name}</h1>
+        <p>身份比對結果由系統自動判定；不公開設定需人工開啟作者主頁核對；身份比對不通過時保留「人工放行」入口，對應 Submission 狀態機裡的管理員覆寫分支。</p>
+      </div>
+      <div style={{display:'flex', justifyContent:'flex-end', marginBottom:14}}>
+        <button className="btn btn-ghost" onClick={()=>setShowEmpty(!showEmpty)} style={{fontSize:'11.5px', padding:'6px 12px'}}>
+          {showEmpty ? '顯示範例資料' : '檢視空狀態'}
+        </button>
+      </div>
+
+      {showEmpty ? (
+        <EmptyState icon={ICONS.inbox} title="目前沒有待審核的投稿" sub="投稿者送出投稿並通過身份比對後，會出現在這個清單"/>
+      ) : (
+        <div>
+          <div className="review-row" style={{color:'var(--ink-faint)', fontSize:11, textTransform:'uppercase', letterSpacing:'.06em'}}>
+            <div>投稿</div><div>身份比對</div><div>不公開檢查</div><div style={{textAlign:'right'}}>操作</div>
+          </div>
+          {rows.map(r=>(
+            <div key={r.id} className="glass review-row">
+              <div className="who">
+                {r.track}
+                <div className="sub">{r.nickname} · Suno @{r.handle}</div>
+              </div>
+              <div>
+                {r.identityMatch==='match'
+                  ? <span className="badge ok"><Icon d={ICONS.check} size={11}/> 比對通過</span>
+                  : <span className="badge bad"><Icon d={ICONS.alert} size={11}/> 比對不通過</span>}
+              </div>
+              <div>
+                {r.unlistedOk===true && <span className="badge ok">未列於公開頁</span>}
+                {r.unlistedOk===false && <span className="badge bad">仍列於公開頁</span>}
+                {r.unlistedOk===null && <span className="badge">待人工開啟核對</span>}
+              </div>
+              <div className="review-actions">
+                {r.state==='identity_mismatched' ? (
+                  <>
+                    <button className="btn btn-ghost" onClick={()=>act(r.id,'rejected')}>打回重投</button>
+                    <button className="btn btn-primary" onClick={()=>act(r.id,'pending_review')}>人工放行</button>
+                  </>
+                ) : r.state==='pending_review' ? (
+                  <>
+                    <button className="btn btn-ghost" onClick={()=>act(r.id,'rejected')}>退回</button>
+                    <button className="btn btn-primary" onClick={()=>act(r.id,'approved')}>通過</button>
+                  </>
+                ) : (
+                  <span className={"state-pill "+SUBMISSION_STATE_META[r.state].cls}>{SUBMISSION_STATE_META[r.state].label}</span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </AdminShell>
+  );
+}
+
+/* ================= 9. 賽制建立頁 ================= */
+function RoundFormatCard({ round, onToggleBlock, onToggleOverride, onRemove }){
+  const isLocked = !!round.locked;
+  return (
+    <div className="glass round-card">
+      <div className="rc-head">
+        <span className="name">{round.name}</span>
+        {round.locked==='preliminary' && <span className="badge accent">初賽 · 固定頭</span>}
+        {round.locked==='final' && <span className="badge accent">決賽 · 固定尾</span>}
+        {!isLocked && <button className="icon-btn" title="移除此輪次" onClick={()=>onRemove(round.id)}><Icon d={ICONS.close} size={15}/></button>}
+      </div>
+
+      <div className="block-group">
+        <div className="bg-label">淘汰方式</div>
+        <div className="chip-row">
+          {FORMAT_BLOCKS.elimination.map(b=>(
+            <button key={b.key} className={"chip"+(round.elimination===b.key?' selected':'')} onClick={()=>onToggleBlock(round.id,'elimination',b.key)}>{b.label}</button>
+          ))}
+        </div>
+      </div>
+      <div className="block-group">
+        <div className="bg-label">分組方式</div>
+        <div className="chip-row">
+          {FORMAT_BLOCKS.grouping.map(b=>(
+            <button key={b.key} className={"chip"+(round.grouping===b.key?' selected':'')} onClick={()=>onToggleBlock(round.id,'grouping',b.key)}>{b.label}</button>
+          ))}
+        </div>
+      </div>
+      <div className="block-group">
+        <div className="bg-label">特殊機制（可複選）</div>
+        <div className="chip-row">
+          {FORMAT_BLOCKS.special.map(b=>(
+            <button key={b.key} className={"chip"+(round.special.includes(b.key)?' selected':'')} onClick={()=>onToggleBlock(round.id,'special',b.key)}>{b.label}</button>
+          ))}
+        </div>
+      </div>
+
+      <div className="toggle-row">
+        <button className={"switch"+(round.scoringOverride?' on':'')} onClick={()=>onToggleOverride(round.id)}><i/></button>
+        <span style={{fontSize:12.5}}>此輪使用 ScoringRuleOverride（不勾選則沿用 Competition 預設評分規則）</span>
+      </div>
+      {round.scoringOverride && <ScoreEditor context={`「${round.name}」的覆寫規則`} extraItem={round.special.includes('theme')} />}
+      {isLocked && <div className="hint" style={{marginTop:10}}>{round.locked==='preliminary' ? '初賽與決賽是固定頭尾，不可移除，但賽制積木可自訂。' : '決賽為固定尾，不可移除，但賽制積木可自訂。'}</div>}
+    </div>
+  );
+}
+function ScoreEditor({ context, extraItem=false }){
+  const base = [
+    { key:'vote', label:'投票', kind:'weighted', weight:40 },
+    { key:'video', label:'影片流量', kind:'weighted', weight:25 },
+    { key:'external', label:'外部投票', kind:'weighted', weight:35 },
+  ];
+  const withExtra = extraItem ? [...base.slice(0,2), { key:'keyword', label:'主題關鍵字符合', kind:'weighted', weight:20 }, {...base[2], weight:15}] : base;
+  const [items, setItems] = useState(withExtra);
+  const setWeight = (key, w) => setItems(its => its.map(it => it.key===key ? {...it, weight:Number(w)} : it));
+  const setKind = (key, kind) => setItems(its => its.map(it => it.key===key ? {...it, kind} : it));
+  const removeItem = (key) => setItems(its => its.filter(it => it.key!==key));
+  const weightedItems = items.filter(i=>i.kind==='weighted');
+  const weightedSum = weightedItems.reduce((s,i)=>s+i.weight,0);
+  const sumOk = weightedItems.length===0 || weightedSum === 100;
+  return (
+    <div className="glass" style={{padding:'14px 16px', marginTop:8}}>
+      <div style={{fontSize:11.5, color:'var(--ink-faint)', marginBottom:8}}>{context}</div>
+      {items.length===0 && <EmptyState icon={ICONS.inbox} title="沒有啟用任何計分項目" sub="至少要保留一個項目，比賽才有分數可以排名"/>}
+      {items.map(it=>(
+        <div key={it.key} className="score-editor-row">
+          <span style={{fontSize:12.5}}>{it.label}</span>
+          <select value={it.kind} onChange={e=>setKind(it.key, e.target.value)}>
+            <option value="weighted">加權計分（計入100%）</option>
+            <option value="bonus">額外加分（不封頂）</option>
+          </select>
+          <input type="number" min="0" max="100" value={it.weight} onChange={e=>setWeight(it.key, e.target.value)} disabled={it.kind!=='weighted'} />
+          <span style={{fontSize:11, color:'var(--ink-faint)'}}>%</span>
+          <button className="icon-btn" title="移除此計分項目" onClick={()=>removeItem(it.key)}><Icon d={ICONS.close} size={14}/></button>
+        </div>
+      ))}
+      {weightedItems.length>0 && (
+        <div className={"weight-sum-bar "+(sumOk?'ok':'bad')}>
+          <Icon d={sumOk?ICONS.check:ICONS.alert} size={14}/>
+          加權計分項目權重總和：{weightedSum}%{sumOk ? '（符合規則）' : '（須恰好等於 100% 才能儲存）'}
+        </div>
+      )}
+    </div>
+  );
+}
+function FormatBuilderScreen(){
+  const [rounds, setRounds] = useState(MOCK_COMPETITION.rounds);
+  const [anonymityMode, setAnonymityMode] = useState(MOCK_COMPETITION.anonymityMode);
+  const toggleBlock = (roundId, group, key) => {
+    setRounds(rs => rs.map(r => {
+      if (r.id !== roundId) return r;
+      if (group==='special') {
+        const has = r.special.includes(key);
+        return { ...r, special: has ? r.special.filter(k=>k!==key) : [...r.special, key] };
+      }
+      return { ...r, [group]: key };
+    }));
+  };
+  const toggleOverride = (roundId) => setRounds(rs => rs.map(r => r.id===roundId ? {...r, scoringOverride: !r.scoringOverride} : r));
+  const addRound = () => setRounds(rs => {
+    const middleCount = rs.length - 1; // 不含決賽
+    const newRound = { id:`r-new-${Date.now()}`, name:`第 ${middleCount+1} 輪 · 新輪次`, locked:null, elimination:'single-elim', grouping:'individual', special:[], scoringOverride:false };
+    return [...rs.slice(0,-1), newRound, rs[rs.length-1]]; // 插在決賽之前
+  });
+  const removeRound = (roundId) => setRounds(rs => rs.filter(r => r.id!==roundId));
+
+  return (
+    <AdminShell active="format">
+      <div className="page-head">
+        <div className="eyebrow">Screen · 賽制建立</div>
+        <h1>建立比賽</h1>
+        <p>先設定 Competition 外框，再逐輪設定 FormatBlock 組合；評分規則預設整場沿用同一套，只有需要的輪次才個別覆寫（見 ADR-0001）。</p>
+      </div>
+
+      <div className="comp-frame-field">
+        <div className="field">
+          <label>Competition 名稱</label>
+          <input className="input" defaultValue={MOCK_COMPETITION.name} />
+        </div>
+        <div className="field">
+          <label>匿名揭露模式（AnonymityMode）</label>
+          <select className="input" value={anonymityMode} onChange={e=>setAnonymityMode(e.target.value)}>
+            <option value="until-final">全程匿名，決賽才公開</option>
+            <option value="single-round">單輪匿名，賽後公開</option>
+            <option value="public">全程公開</option>
+          </select>
+        </div>
+      </div>
+
+      <div className="field">
+        <label>Competition 預設 ScoringRule</label>
+        <div className="hint" style={{marginBottom:10}}>套用到所有未個別覆寫的輪次。</div>
+        <ScoreEditor context="Competition 預設規則" />
+      </div>
+
+      <div className="field" style={{marginTop:8}}>
+        <label>輪次（Round）— 第一輪固定初賽、最後一輪固定決賽，中間可新增／自訂</label>
+      </div>
+      {rounds.map(r=>(
+        <RoundFormatCard key={r.id} round={r} onToggleBlock={toggleBlock} onToggleOverride={toggleOverride} onRemove={removeRound} />
+      ))}
+      <button className="btn btn-ghost" style={{marginTop:4}} onClick={addRound}><Icon d={ICONS.plus} size={13}/> 新增中間輪次</button>
+    </AdminShell>
+  );
+}
+
+/* ================= 10. 時程設定頁 ================= */
+function ScheduleScreen(){
+  const [dates, setDates] = useState({
+    promo:  { start:'2026-08-10', end:'2026-08-20' },
+    submit: { start:'2026-08-21', end:'2026-09-03' },
+    vote:   { start:'2026-09-04', end:'2026-09-10' },
+    reveal: { start:'2026-09-11', end:'2026-09-11' },
+    registerDeadline: '2026-09-10', // demo：故意設在投稿期結束（2026-09-03）之後，觸發邊界錯誤
+  });
+  const set = (phase, field, val) => setDates(d => ({...d, [phase]: {...d[phase], [field]:val}}));
+
+  const registerAfterSubmitEnd = dates.registerDeadline > dates.submit.end;
+  const submitAfterVoteStart = dates.submit.end > dates.vote.start;
+
+  const phases = [
+    { key:'promo', label:'宣傳期' },
+    { key:'submit', label:'投稿期' },
+    { key:'vote', label:'投票期' },
+    { key:'reveal', label:'公布期' },
+  ];
+
+  return (
+    <AdminShell active="schedule">
+      <div className="page-head">
+        <div className="eyebrow">Screen · 時程設定</div>
+        <h1>賽事時程 — {MOCK_COMPETITION.name}</h1>
+        <p>宣傳／投稿／投票／公布四階段起訖日期；跨階段邊界規則即時檢查，不合法不能靜默通過。</p>
+      </div>
+
+      <div className="glass" style={{padding:'8px 20px'}}>
+        {phases.map(p=>(
+          <div key={p.key} className="phase-row">
+            <div className="phase-name">{p.label}</div>
+            <div className="date-field"><label>開始</label><input type="date" value={dates[p.key].start} onChange={e=>set(p.key,'start',e.target.value)} /></div>
+            <div className="date-field"><label>結束</label><input type="date" value={dates[p.key].end} onChange={e=>set(p.key,'end',e.target.value)} /></div>
+          </div>
+        ))}
+        <div className="phase-row">
+          <div className="phase-name">報名截止</div>
+          <div className="date-field"><label>最晚報名日</label><input type="date" value={dates.registerDeadline} onChange={e=>setDates(d=>({...d, registerDeadline:e.target.value}))} /></div>
+          <div/>
+        </div>
+        {registerAfterSubmitEnd && (
+          <div className="date-error"><Icon d={ICONS.alert} size={14}/> 報名截止日（{dates.registerDeadline}）晚於投稿期結束（{dates.submit.end}）— 違反第 2 節「存取順序」規則，請調整</div>
+        )}
+        {submitAfterVoteStart && (
+          <div className="date-error"><Icon d={ICONS.alert} size={14}/> 投稿期結束（{dates.submit.end}）晚於投票期開始（{dates.vote.start}）— 兩階段時間重疊，請調整</div>
+        )}
+      </div>
+    </AdminShell>
+  );
+}
+
+/* ================= 11. Discovery（比賽發現頁，取代原本佔位首頁） ================= */
+const MOCK_DISCOVERY_COMPETITIONS = [
+  { id:'c1', name:'深夜擂台 EP.03', organizer:'夜遊者', status:'active', participants:24, submissions:31 },
+  { id:'c2', name:'Lo-fi 對決之夜', organizer:'霓虹貓', status:'active', participants:12, submissions:15 },
+  { id:'c3', name:'新手擂台盃', organizer:'午夜鯨', status:'upcoming', participants:5, submissions:0 },
+  { id:'c4', name:'夏季主題輪 Vol.2', organizer:'鹽湖旅人', status:'ended', participants:41, submissions:58 },
+];
+const DISCOVERY_STATUS_META = {
+  active:   { label:'進行中',   cls:'ok' },
+  upcoming: { label:'即將開始', cls:'accent' },
+  ended:    { label:'已結束',   cls:'' },
+};
+function DiscoveryScreen(){
+  const [filter, setFilter] = useState('all');
+  const filtered = filter==='all' ? MOCK_DISCOVERY_COMPETITIONS : MOCK_DISCOVERY_COMPETITIONS.filter(c=>c.status===filter);
+  const filters = [
+    { key:'all', label:'全部' },
+    { key:'active', label:'進行中' },
+    { key:'upcoming', label:'即將開始' },
+    { key:'ended', label:'已結束' },
+  ];
+  return (
+    <div>
+      <SiteHeader authed={false} />
+      <div className="stage-inner">
+        <div className="page-head">
+          <div className="eyebrow">Screen · Discovery（不需登入）</div>
+          <h1>探索比賽</h1>
+          <p>全平台各個 Organizer 建立的比賽都會出現在這裡；允許公開展示的作品可直接試聽，不需要先登入（見 SPEC.md 第 5 節「公開試聽」）。</p>
+        </div>
+
+        <div className="review-pills" style={{marginBottom:22, gap:8}}>
+          {filters.map(f=>(
+            <button key={f.key} className={"review-pill"+(filter===f.key?' active':'')} onClick={()=>setFilter(f.key)} style={{fontSize:12.5, padding:'7px 14px'}}>{f.label}</button>
+          ))}
+        </div>
+
+        {filtered.length===0 ? (
+          <EmptyState icon={ICONS.inbox} title="沒有符合條件的比賽" sub="試試看調整篩選條件" />
+        ) : (
+          <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(260px, 1fr))', gap:16}}>
+            {filtered.map(c=>{
+              const meta = DISCOVERY_STATUS_META[c.status];
+              return (
+                <div key={c.id} className="glass" style={{padding:18}}>
+                  <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:10}}>
+                    <span className={"badge"+(meta.cls?' '+meta.cls:'')}>{meta.label}</span>
+                  </div>
+                  <div style={{fontSize:15.5, marginBottom:4}}>{c.name}</div>
+                  <div style={{fontSize:12, color:'var(--ink-faint)', marginBottom:12}}>由 {c.organizer} 主辦</div>
+                  <div style={{display:'flex', gap:14, fontSize:11.5, color:'var(--ink-dim)'}}>
+                    <span>{c.participants} 位參賽者</span>
+                    <span>{c.submissions} 件投稿</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ================= App shell ================= */
+const SCREENS = [
+  { key:'discovery', label:'Discovery', comp: DiscoveryScreen },
+  { key:'login', label:'登入', comp: LoginScreen },
+  { key:'register', label:'報名', comp: RegisterScreen },
+  { key:'submit', label:'投稿表單', comp: SubmitScreen },
+  { key:'list', label:'擂台', comp: ListScreen },
+  { key:'vote', label:'投票', comp: VoteScreen },
+  { key:'judge', label:'評審評分', comp: JudgeScreen },
+  { key:'status', label:'個人狀態', comp: StatusScreen },
+  { key:'review', label:'審核後台', comp: ReviewScreen },
+  { key:'format', label:'賽制建立', comp: FormatBuilderScreen },
+  { key:'schedule', label:'時程設定', comp: ScheduleScreen },
+];
+
+function App(){
+  const [active, setActive] = useState('discovery');
+  const Current = SCREENS.find(s=>s.key===active).comp;
+  return (
+    <React.Fragment>
+      <div className="review-strip">
+        <span className="rlabel">Design Checkpoint · 第三批（共 11 / 11）</span>
+        <div className="review-pills">
+          {SCREENS.map(s=>(
+            <button key={s.key} className={"review-pill"+(active===s.key?' active':'')} onClick={()=>setActive(s.key)}>{s.label}</button>
+          ))}
+        </div>
+      </div>
+      <Current/>
+    </React.Fragment>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
