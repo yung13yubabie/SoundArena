@@ -125,7 +125,7 @@ C:\Users\LIN\Documents\github\SoundArena\
 
 ## 下一步(哪個先做,使用者可以自己選)
 
-1. **公開結果/排名頁**:`/judge` 的排名計算現在是真的,但只有 Organizer 自己看得到——SPEC.md 第8節要求「完整計算公式必須公開,參賽者與投票者都能看到分數是怎麼算出來的」,目前只在 `/judge` 頁內部透明,沒有對外的公開排名頁。`/u/[id]` 的「名次」欄位也還卡在「名次功能開發中」佔位,要接這個就得先有公開結果頁可以查。
+1. **公開結果/排名頁跟 `/u/[id]` 名次已經做完**(08-16 深夜第四輪,見文件尾端「公開結果」段落)——`/results` 公開結果頁、`/u/[id]` 的名次都接上真資料了。
 2. **Discord guilds.join 補完**:使用者把 Bot 邀進 SoundArena Discord 伺服器,把伺服器 ID 填進 `.env.local` 跟 Vercel 的 `DISCORD_GUILD_ID`
 3. **`/admin/*` 的角色級權限保護**:proxy.ts 目前只檢查「有沒有登入」,沒檢查「這個人是不是這場比賽的 Organizer」——RLS 是實際擋著的那層,08-16 晚間那輪加了 UI 層的競賽切換器(只列自己的比賽)跟主辦身分設定閘門,但 route 層級的角色檢查還是沒做,見上方已知缺口 2
 4. **Cloudflare R2**:建 bucket、拿金鑰、接上音檔上傳/簽章下載
@@ -271,3 +271,32 @@ C:\Users\LIN\Documents\github\SoundArena\
 過程中瀏覽器擴充套件斷線了 3 次以上——按照既有慣例先暫停 UI 測試,改用 service_role 直接對 `votes` 表做三組 DB 層級驗證(投別人的作品成功 / 投自己的作品被 trigger 擋下 / 同一輪重複投票被 unique constraint 擋下),確認 DB 邏輯本身正確;擴充套件重新連上後才補完整條 UI 流程的驗證。
 
 已 commit(`01abb46`)、push、`vercel deploy --prod` 重新部署上線。
+
+---
+
+## 08-16 深夜第四輪追加:公開結果頁 + `/u/[id]` 名次接上真資料
+
+### 這輪做了什麼
+
+- **`votes`/`submission_scores` 不能直接公開讀**:這兩張表的 RLS 只開放給投票者本人跟該比賽 Organizer(上一輪剛加的),但 SPEC.md 第8節要求「完整計算公式必須公開,參賽者與投票者都能看到分數是怎麼算出來的」——是真的要對外公開,不是只給 Organizer 自己看。直接開放公開 RLS policy 會連 `votes.voter_id`/`voter_ip` 這種個別投票紀錄都一起曝光,不能這樣做。解法是兩個 `SECURITY DEFINER` function:
+  - `get_round_submissions(round_id)`:回傳該輪已通過審核的投稿(title + display_name),**只有在「這一輪的結果現在可以公開」時才回傳資料,否則回傳空集合**(不是報錯,就是查不到東西)——判斷式:該比賽 `is_public = true` 且該輪 `voting_closes_at` 已過。`display_name` 是否顯示真名,依 `anonymity_mode` 決定(見下)。
+  - `get_round_scores(round_id)`:回傳每筆投稿在每個計分項目上的數值——「投票」項目即時 `count(*)` 算票數,其他項目讀 `submission_scores.raw_value`,**只回傳聚合後的數字,不會洩漏是誰投的**。同樣的公開時機判斷。
+  - 兩者都 `grant execute to anon, authenticated`,任何人都能呼叫,不需要登入。
+- **匿名揭露時機**(SPEC.md 第5節三種模式,這輪才真的把時機邏輯寫出來,上一輪 `/vote` 只處理了「投票中要不要顯示身份」這一半):
+  - `fully_public`:一開始就公開
+  - `per_round_anonymous`:**該輪投票一截止就立刻公開該輪身份**(不用等決賽)
+  - `full_anonymous_until_final`:**只有決賽那一輪投票截止後,才把所有輪次的身份一次公開**——用 `round_index = max(round_index)` 判斷是不是決賽
+- **共用邏輯抽出來**:排名計算(正規化 + 加權 + 額外加分)之前在 `JudgeBoard.tsx` 內寫了一份,這輪要在 `/results` 再用一次、眼看又要在 `/u/[id]` 用第三次——抽成 `web/src/lib/ranking.ts`(純函式 `computeRanking`/`rankOf`,`JudgeBoard.tsx` 也改成呼叫這個,不再各自維護一份公式)。抓輪次結果(呼叫兩個 RPC + 查 score_items + 算排名)這一串也抽成 `web/src/lib/roundResults.ts` 的 `getRoundResults()`,`/results` 跟 `/u/[id]` 都用這個。
+- **`/results`**:沒帶 `?round=` 列出所有「投票已截止、比賽公開」的輪次當選單;帶了就顯示該輪逐筆投稿的計分明細表 + 排名 + 「查看計算方式」透明說明(跟 `/judge` 長得幾乎一樣,但這頁是唯讀、不用登入就能看、依上面的揭露規則決定顯示真名還是「匿名作品 #N」)。加進頂層導覽(「結果」)。
+- **`/u/[id]` 的「名次」佔位換成真的**:新增 `get_registration_result_rounds(registration_id)` function,回傳這筆公開報名紀錄「有已公開結果的輪次」清單(含 submission_id)。頁面對每筆公開的參賽紀錄,抓它「打到最後的那一輪」(`round_index` 最大者),呼叫 `getRoundResults()` 算出名次,顯示「OO輪 第 N 名(共 M 組) →」並連到 `/results?round=X`;還沒有可公開結果的就顯示「結果尚未公布」。同時補上：有標記淘汰的參賽紀錄旁邊會顯示「已淘汰」小字。
+
+### 端到端實測過
+
+用上一輪已經在跑的假第二選手資料(見上一節):把「初賽」的 `voting_closes_at` 手動改到過去(讓結果變成「可公開」狀態,原本設的是未來時間,這輪為了測試才往前挪,兩筆分數/一票的測試資料都還是上一輪真實留下的)。用 anon key 直接 curl 兩個新 function,**投票還沒截止時回傳空陣列**,改完時間後**回傳正確的聚合資料**(1票、56 外部投票、正確的 display_name),確認「沒到公開時機就是真的查不到,不是前端擋而已」。瀏覽器打開 `/results?round=<初賽>`:排名、加權小計(75.0 / 0.0)跟 `/judge` 算出來的完全一致(因為現在共用同一份 `computeRanking`)。打開 `/u/[id]`:參賽紀錄正確顯示「初賽 第 2 名(共 2 組) →」,點下去連到剛剛驗證過的結果頁。
+
+已 commit(`59c0e4c`)、push、`vercel deploy --prod` 重新部署上線。
+
+### 已知缺口(這輪新產生)
+
+- `/results` 沒有處理「一輪淘汰狀態」的顯示(只有分數排名,沒有標「已淘汰/晉級」)——刻意先不加,因為淘汰狀態目前是 Organizer 在 `/judge` 手動標記的,還沒有一個「這輪淘汰名單正式公告」的動作,貿然在結果頁顯示淘汰狀態感覺像是「官方宣布」但實際上可能還在人工確認中(呼應 SPEC.md 第6節「淘汰結果發送前需經人工審核確認」)。
+- 「初賽」的 `voting_closes_at` 目前被我改到過去(這輪測試用),如果之後要繼續拿「深夜擂台 EP.04」測完整的報名/投稿/投票流程,記得這一輪的投票視窗已經關了,要重新開才能再測投票。
