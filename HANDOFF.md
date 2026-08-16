@@ -9,7 +9,7 @@
 
 SoundArena 現在有**自己獨立的 git repo**(`SoundArena/.git`,跟上層 `C:\Users\LIN\Documents\github` 那個沒有任何關係——那個上層 repo 是空的、zero commits,而且底下混了 `SUNOprompt`/`backend`/`lottery` 幾個不相關的專案資料夾,SoundArena 不用它)。
 
-第一個 commit(`f604235`)已建立,涵蓋 08-09 ~ 08-16 累積的所有工作。**沒有設定遠端(GitHub)**,目前只有本機版本歷史。
+第一個 commit(`f604235`)已建立,涵蓋 08-09 ~ 08-16 累積的所有工作。**已設定遠端**:`https://github.com/yung13yubabie/SoundArena`(public),README.md 有專案說明 + 4 張真實畫面截圖。
 
 踩過的坑,別再犯:`web/` 之前有它自己的巢狀 `.git`(`create-next-app` 自動產生,只有一個沒有價值的初始 commit),導致 `git add` 把整個 `web/` 當成內嵌 repo(gitlink)處理、內容完全沒被追蹤到。已經刪掉那個巢狀 `.git`,`web/` 現在是 SoundArena repo 底下的普通資料夾。**如果之後又看到 `git add` 跳出「adding embedded git repository」的警告,表示某個子資料夾又長出了自己的 `.git`,要先處理掉才能繼續。**
 
@@ -76,6 +76,15 @@ C:\Users\LIN\Documents\github\SoundArena\
   - Discord 的 App 名稱是在 Discord Developer Portal 自己取的,跟上面那條完全無關,想改隨時去 Portal 改,不用送審。
   - Google/Discord 的 Client ID/Secret 只存在 Supabase 的 provider 設定裡(`supabase/config.toml` 的 `[auth.external.*]`,secret 用 `env()` 佔位符,不進版控),**不需要**也沒有存進 `web/.env.local`——前端從頭到尾不需要這兩組值,是 Supabase 自己處理 OAuth。
 - **Cloudflare R2**:已決定用它存音檔(`audio_object_key` 欄位存物件路徑,storage-agnostic,不需要因為選 R2 回頭改 schema),但 bucket 還沒建、金鑰還沒拿。
+
+### Vercel 部署(08-16 這輪設好的,已上線)
+
+- Vercel CLI 已裝(`npm install -g vercel`,跟 Supabase CLI 不一樣,這個沒有 Windows npm 棄用問題),已登入、已 `vercel link`。
+- Project:`galaxyus-projects/web`(team `galaxyus-projects`,project 名稱是 `web`,沿用資料夾名稱,沒特別改)。
+- **正式網址(穩定,每次 `vercel deploy --prod` 都指向這個)**:`https://web-mocha-xi-12.vercel.app` —— 已用真實帳號實測整條登入鏈,跟本機一樣通。
+- 環境變數(`NEXT_PUBLIC_SUPABASE_URL`、`NEXT_PUBLIC_SUPABASE_ANON_KEY`、`SUPABASE_SERVICE_ROLE_KEY`、`DISCORD_BOT_TOKEN`)已用 `vercel env add --value ... --yes` 設進 Production 環境。**`DISCORD_GUILD_ID` 還沒設**(本地也還沒填,見上)。
+- Supabase 的 `additional_redirect_urls` 已加上 `https://web-mocha-xi-12.vercel.app/**` 跟 `https://web-*-galaxyus-projects.vercel.app/**`(涵蓋這個 team/project 底下所有 preview deploy 網址,沒有開放到任意 `*.vercel.app`,範圍有收斂)。
+- **要重新部署**:`cd web && vercel deploy --prod`。**改了環境變數要重新部署才會生效**(Vercel 是 build-time 注入)。
 
 ### Next.js 真實骨架(`web/`,08-16 這輪把全部 11 個畫面都搬完了)
 
