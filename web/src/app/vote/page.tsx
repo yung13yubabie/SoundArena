@@ -1,15 +1,130 @@
-"use client";
-
-import { useState } from "react";
+import { redirect } from "next/navigation";
+import Link from "next/link";
+import { createClient } from "@/lib/supabase/server";
 import { SiteHeader } from "@/components/SiteHeader";
-import { Icon } from "@/lib/icons";
 import { EmptyState } from "@/components/EmptyState";
-import { PlayerBar } from "@/components/PlayerBar";
+import { VoteList, type VoteSubmission } from "./VoteList";
 
-export default function VotePage() {
-  const [showEmpty, setShowEmpty] = useState(false);
-  const [votedId, setVotedId] = useState<number | null>(null);
-  const [playingId, setPlayingId] = useState<number | null>(null);
+interface RoundPickerRow {
+  id: string;
+  name: string;
+  competition_id: string;
+  competitions: { name: string } | { name: string }[] | null;
+}
+
+interface SubmissionRow {
+  id: string;
+  title: string | null;
+  registration_id: string;
+  registrations: { user_id: string; display_name: string } | { user_id: string; display_name: string }[] | null;
+}
+
+function one<T>(value: T | T[] | null): T | null {
+  return Array.isArray(value) ? (value[0] ?? null) : value;
+}
+
+function shuffle<T>(items: T[]): T[] {
+  const arr = [...items];
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+export default async function VotePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ round?: string }>;
+}) {
+  const { round: roundId } = await searchParams;
+  const supabase = await createClient();
+  const { data: claims } = await supabase.auth.getClaims();
+  const userId = claims?.claims?.sub as string | undefined;
+  if (!userId) redirect("/login");
+
+  const nowIso = new Date().toISOString();
+
+  if (!roundId) {
+    const { data: rounds } = await supabase
+      .from("rounds")
+      .select("id, name, competition_id, competitions!inner(name, is_public)")
+      .eq("competitions.is_public", true)
+      .lte("voting_opens_at", nowIso)
+      .gt("voting_closes_at", nowIso)
+      .order("voting_closes_at");
+
+    const openRounds = (rounds ?? []) as unknown as RoundPickerRow[];
+
+    return (
+      <div>
+        <SiteHeader authed active="vote" />
+        <div className="mx-auto max-w-[1180px] px-11 pt-10 pb-24">
+          <div className="mb-7">
+            <div className="mb-2 text-xs uppercase tracking-widest text-accent">Screen · 投票</div>
+            <h1 className="font-display text-[30px]">選擇要投票的場次</h1>
+            <p className="mt-1.5 max-w-[680px] text-sm leading-relaxed text-ink-dim">
+              以下是目前開放投票中的輪次。
+            </p>
+          </div>
+          {openRounds.length === 0 ? (
+            <EmptyState icon="inbox" title="目前沒有開放投票的輪次" sub="等主辦方開放投票期後再回來看看" />
+          ) : (
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-4">
+              {openRounds.map((r) => (
+                <Link key={r.id} href={`/vote?round=${r.id}`} className="glass block p-4.5 hover:border-accent/30">
+                  <div className="mb-1 text-[15px]">{r.name}</div>
+                  <div className="text-[12px] text-ink-faint">{one(r.competitions)?.name ?? "未命名比賽"}</div>
+                </Link>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  const { data: round } = await supabase
+    .from("rounds")
+    .select("id, name, voting_opens_at, voting_closes_at, competitions(id, name, anonymity_mode, is_public)")
+    .eq("id", roundId)
+    .maybeSingle();
+
+  if (!round) redirect("/vote");
+  const competition = one(round.competitions);
+  if (!competition?.is_public) redirect("/vote");
+
+  const votingOpen =
+    !!round.voting_opens_at &&
+    !!round.voting_closes_at &&
+    round.voting_opens_at <= nowIso &&
+    nowIso < round.voting_closes_at;
+
+  const { data: submissions } = await supabase
+    .from("submissions")
+    .select("id, title, registration_id, registrations(user_id, display_name)")
+    .eq("round_id", roundId)
+    .eq("status", "approved");
+
+  const { data: myVote } = await supabase
+    .from("votes")
+    .select("submission_id")
+    .eq("round_id", roundId)
+    .eq("voter_id", userId)
+    .maybeSingle();
+
+  const revealed = competition.anonymity_mode === "fully_public";
+
+  const items: VoteSubmission[] = ((submissions ?? []) as unknown as SubmissionRow[]).map((s) => {
+    const reg = one(s.registrations);
+    return {
+      id: s.id,
+      title: revealed ? (s.title ?? "未命名作品") : "— 標題於匿名階段不顯示 —",
+      isOwn: reg?.user_id === userId,
+    };
+  });
+
+  const shuffled = revealed ? items : shuffle(items);
 
   return (
     <div>
@@ -17,88 +132,21 @@ export default function VotePage() {
       <div className="mx-auto max-w-[1180px] px-11 pt-10 pb-24">
         <div className="mb-7">
           <div className="mb-2 text-xs uppercase tracking-widest text-accent">Screen · 投票</div>
-          <h1 className="font-display text-[30px]">本輪投票</h1>
+          <h1 className="font-display text-[30px]">
+            {round.name} — {competition.name}
+          </h1>
           <p className="mt-1.5 max-w-[680px] text-sm leading-relaxed text-ink-dim">
-            本輪投票匿名進行，看不到作者是誰。
+            {revealed ? "本輪投票公開進行,看得到作者是誰。" : "本輪投票匿名進行,看不到作者是誰,投票截止後依比賽設定決定何時公開。"}
           </p>
         </div>
 
-        <div className="mb-5 flex items-center justify-between">
-          <div className="flex items-center gap-2 rounded-[9px] border border-accent/25 bg-accent/8 px-3 py-2 text-[11.5px] text-accent">
-            <Icon name="eyeOff" size={14} />
-            投票截止後會公開作者身份
-          </div>
-          <button
-            onClick={() => setShowEmpty(!showEmpty)}
-            className="rounded-[10px] border border-panel-border bg-white/[0.04] px-3 py-1.5 text-[11.5px] font-semibold text-ink"
-          >
-            {showEmpty ? "顯示範例資料" : "檢視空狀態"}
-          </button>
-        </div>
-
-        {showEmpty ? (
-          <EmptyState icon="inbox" title="目前沒有可投票的作品" sub="本輪投稿審核尚未完成，通過審核的作品會自動出現在這裡" />
+        {!votingOpen ? (
+          <EmptyState icon="inbox" title="這一輪目前沒有開放投票" sub="投票期還沒開始,或已經截止" />
+        ) : items.length === 0 ? (
+          <EmptyState icon="inbox" title="目前沒有可投票的作品" sub="本輪投稿審核尚未完成,通過審核的作品會自動出現在這裡" />
         ) : (
-          <div className="grid grid-cols-2 gap-4">
-            {[1, 2, 3, 4].map((n) => (
-              <div
-                key={n}
-                className="glass p-4.5"
-                style={playingId === n ? { borderColor: "rgba(255,106,61,.4)" } : undefined}
-              >
-                <div className="mb-2.5 text-[11px] text-ink-faint">投稿 #{String(n).padStart(2, "0")}</div>
-                <div className="mb-3 aspect-video rounded-[9px] border border-panel-border bg-gradient-to-br from-[#2a1712] to-[#1a0f0c]" />
-                <div className="mb-3.5 text-[13.5px] text-ink-dim italic">— 標題於匿名階段不顯示 —</div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setPlayingId(n)}
-                    className="flex items-center gap-1.5 rounded-[10px] border border-panel-border bg-white/[0.04] px-3.5 py-2.25 text-[13.5px] font-semibold text-ink"
-                  >
-                    {playingId === n ? (
-                      <span className="now-playing-eq">
-                        <i />
-                        <i />
-                        <i />
-                      </span>
-                    ) : (
-                      <Icon name="play" size={13} />
-                    )}
-                    播放
-                  </button>
-                  {n === 2 ? (
-                    <button
-                      disabled
-                      className="flex-1 justify-center rounded-[10px] border border-panel-border bg-white/[0.04] px-3.5 py-2.25 text-[13.5px] font-semibold text-ink opacity-45"
-                    >
-                      這是你的作品
-                    </button>
-                  ) : votedId === n ? (
-                    <button
-                      disabled
-                      className="flex flex-1 items-center justify-center gap-1.5 rounded-[10px] border border-panel-border bg-white/[0.04] px-3.5 py-2.25 text-[13.5px] font-semibold text-ok opacity-45"
-                    >
-                      <Icon name="check" size={13} /> 已投這首
-                    </button>
-                  ) : (
-                    <button
-                      disabled={votedId !== null}
-                      onClick={() => setVotedId(n)}
-                      className="flex flex-1 items-center justify-center gap-1.5 rounded-[10px] bg-gradient-to-r from-[#ff9457] via-accent to-accent-2 px-3.5 py-2.25 text-[13.5px] font-semibold text-[#1a0e08] disabled:opacity-45"
-                    >
-                      <Icon name="check" size={13} /> 投這首
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
+          <VoteList roundId={roundId} submissions={shuffled} initialVotedId={myVote?.submission_id ?? null} />
         )}
-        {votedId && (
-          <div className="mt-5 flex w-fit items-center gap-2.5 rounded-[10px] border border-ok/30 bg-ok/10 p-3.5 text-[12.5px] text-ok">
-            <Icon name="check" /> 已完成本輪投票，感謝參與
-          </div>
-        )}
-        <PlayerBar />
       </div>
     </div>
   );

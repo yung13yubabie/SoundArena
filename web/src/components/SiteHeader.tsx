@@ -4,19 +4,18 @@ import { LogoutButton } from "@/components/LogoutButton";
 
 interface SiteHeaderProps {
   authed?: boolean;
-  active?: "events" | "competitions" | "vote" | "submit" | "status" | "judge" | "admin";
+  active?: "events" | "competitions" | "vote" | "submit" | "status" | "admin";
   roleLabel?: string;
 }
 
-// 目前是「全部顯示」的扁平導覽——還沒有真的 Organizer/Judge/PlatformAdmin 角色資料,
-// 等角色能從真實登入狀態判斷,再把「評審評分」「管理後台」收進角色專屬的入口。
+// 評審評分已收進「管理後台」(AdminShell)底下,不是獨立的頂層導覽項——
+// SPEC.md 第5節:評分角色是該場比賽 Organizer 底下的權限分工,不是全站角色。
 const NAV_ITEMS: Array<{ key: SiteHeaderProps["active"]; label: string; href: string }> = [
   { key: "events", label: "活動", href: "/" },
   { key: "competitions", label: "比賽", href: "/competitions" },
   { key: "vote", label: "投票", href: "/vote" },
   { key: "submit", label: "上傳作品", href: "/submit" },
   { key: "status", label: "我的狀態", href: "/status" },
-  { key: "judge", label: "評審評分", href: "/judge" },
   { key: "admin", label: "管理後台", href: "/admin/review" },
 ];
 

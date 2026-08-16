@@ -6,7 +6,7 @@ import { NextResponse, type NextRequest } from "next/server";
 // it does NOT yet check Organizer/PlatformAdmin/Judge ownership, since those
 // roles aren't derivable from real data until competitions have real
 // participants. RLS is still the actual authorization boundary underneath.
-const AUTH_REQUIRED_PATHS = ["/register", "/admin", "/judge", "/status", "/feedback"];
+const AUTH_REQUIRED_PATHS = ["/register", "/admin", "/judge", "/status", "/feedback", "/vote"];
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
