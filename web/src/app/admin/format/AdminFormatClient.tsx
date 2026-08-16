@@ -105,7 +105,7 @@ function ScoreEditor({
           <select
             value={it.kind}
             onChange={(e) => setKind(it.id, e.target.value as ScoreItemData["kind"])}
-            className="w-full rounded-lg border border-panel-border bg-black/25 px-2.25 py-1.75 text-[12.5px] text-ink"
+            className="w-full rounded-lg border border-panel-border bg-black/25 px-2.25 py-1.75 text-[12.5px] text-ink [color-scheme:dark]"
           >
             <option value="weighted">加權計分（計入100%）</option>
             <option value="bonus">額外加分（不封頂）</option>
@@ -310,7 +310,7 @@ function CompetitionMetaForm({ competition }: { competition: CompetitionData }) 
             setAnonymityMode(e.target.value);
             setSaved(false);
           }}
-          className="w-full appearance-none rounded-[10px] border border-panel-border bg-black/25 px-3.5 py-2.5 text-[13.5px] text-ink outline-none focus:border-accent/50"
+          className="w-full appearance-none rounded-[10px] border border-panel-border bg-black/25 px-3.5 py-2.5 text-[13.5px] text-ink outline-none focus:border-accent/50 [color-scheme:dark]"
         >
           <option value="full_anonymous_until_final">全程匿名，決賽才公開</option>
           <option value="per_round_anonymous">單輪匿名，賽後公開</option>

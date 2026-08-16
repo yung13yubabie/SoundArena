@@ -99,7 +99,7 @@ export default function SubmitPage() {
               <label className="mb-1.5 block text-[12.5px] font-semibold text-ink-dim">所屬賽制 / 比賽場次</label>
               <select
                 defaultValue="r2"
-                className="w-full appearance-none rounded-[10px] border border-panel-border bg-black/25 px-3.5 py-2.5 text-[13.5px] text-ink outline-none focus:border-accent/50"
+                className="w-full appearance-none rounded-[10px] border border-panel-border bg-black/25 px-3.5 py-2.5 text-[13.5px] text-ink outline-none focus:border-accent/50 [color-scheme:dark]"
               >
                 <option value="r1">深夜擂台 EP.03 · 第 1 輪 海選（已截止）</option>
                 <option value="r2">深夜擂台 EP.03 · 第 2 輪 複賽（投稿開放中）</option>

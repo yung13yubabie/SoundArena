@@ -44,7 +44,7 @@ export function CreateCompetitionForm() {
           <select
             name="anonymity_mode"
             defaultValue="per_round_anonymous"
-            className="w-full appearance-none rounded-[10px] border border-panel-border bg-black/25 px-3.5 py-2.5 text-[13.5px] text-ink outline-none focus:border-accent/50"
+            className="w-full appearance-none rounded-[10px] border border-panel-border bg-black/25 px-3.5 py-2.5 text-[13.5px] text-ink outline-none focus:border-accent/50 [color-scheme:dark]"
           >
             <option value="full_anonymous_until_final">全程匿名，決賽才公開</option>
             <option value="per_round_anonymous">單輪匿名，賽後公開</option>
