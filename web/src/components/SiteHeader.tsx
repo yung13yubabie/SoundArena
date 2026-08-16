@@ -51,6 +51,14 @@ export function SiteHeader({ authed = true, active, roleLabel }: SiteHeaderProps
       )}
 
       <div className="flex items-center gap-3">
+        <Link href="/updates" className="text-[12.5px] text-ink-faint transition-colors hover:text-ink">
+          更新記錄
+        </Link>
+        {authed && (
+          <Link href="/feedback" className="text-[12.5px] text-ink-faint transition-colors hover:text-ink">
+            意見回饋
+          </Link>
+        )}
         {roleLabel && (
           <span className="rounded-full border border-warn/30 bg-warn/10 px-2.5 py-1 text-[11px] text-warn">
             {roleLabel}
