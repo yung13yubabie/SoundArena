@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { SiteHeader } from "@/components/SiteHeader";
@@ -5,11 +6,27 @@ import { EmptyState } from "@/components/EmptyState";
 import { Avatar } from "@/components/Avatar";
 import { Icon } from "@/lib/icons";
 import { youtubeEmbedUrl } from "@/lib/youtube";
+import { getRoundResults, rankOf } from "@/lib/roundResults";
 
 interface RegistrationRow {
   id: string;
   status: "active" | "eliminated";
+  competition_id: string;
   competitions: { name: string; is_public: boolean } | { name: string; is_public: boolean }[] | null;
+}
+
+interface ResultRoundRow {
+  round_id: string;
+  round_name: string;
+  round_index: number;
+  submission_id: string;
+}
+
+interface Placement {
+  roundId: string;
+  roundName: string;
+  rank: number;
+  total: number;
 }
 
 interface SubmissionRow {
@@ -47,7 +64,7 @@ export default async function PublicProfilePage({ params }: { params: Promise<{ 
       supabase.from("competitions").select("id, name").eq("organizer_id", id).eq("is_public", true).order("created_at", { ascending: false }),
       supabase
         .from("registrations")
-        .select("id, status, competitions(name, is_public)")
+        .select("id, status, competition_id, competitions(name, is_public)")
         .eq("user_id", id)
         .eq("is_public", true),
       supabase
@@ -61,6 +78,26 @@ export default async function PublicProfilePage({ params }: { params: Promise<{ 
   const embedUrl = profile.featured_track_url ? youtubeEmbedUrl(profile.featured_track_url) : null;
   const regs = (registrations ?? []) as unknown as RegistrationRow[];
   const subs = (submissions ?? []) as unknown as SubmissionRow[];
+
+  const placementByReg = new Map<string, Placement | null>();
+  await Promise.all(
+    regs.map(async (reg) => {
+      const { data: resultRounds } = await supabase.rpc("get_registration_result_rounds", { p_registration_id: reg.id });
+      const rows = (resultRounds ?? []) as ResultRoundRow[];
+      if (rows.length === 0) {
+        placementByReg.set(reg.id, null);
+        return;
+      }
+      const latest = rows.reduce((a, b) => (b.round_index > a.round_index ? b : a));
+      const { submissions: roundSubs, ranking } = await getRoundResults(supabase, latest.round_id, reg.competition_id);
+      placementByReg.set(reg.id, {
+        roundId: latest.round_id,
+        roundName: latest.round_name,
+        rank: rankOf(latest.submission_id, ranking),
+        total: roundSubs.length,
+      });
+    }),
+  );
 
   return (
     <div>
@@ -117,10 +154,20 @@ export default async function PublicProfilePage({ params }: { params: Promise<{ 
           ) : (
             regs.map((r) => {
               const comp = one(r.competitions);
+              const placement = placementByReg.get(r.id);
               return (
                 <div key={r.id} className="flex items-center justify-between border-b border-panel-border py-2 text-[13px] last:border-b-0">
-                  <span>{comp?.name ?? "（比賽未公開）"}</span>
-                  <span className="text-[11px] text-ink-faint">名次功能開發中</span>
+                  <span>
+                    {comp?.name ?? "（比賽未公開）"}
+                    {r.status === "eliminated" && <span className="ml-2 text-[11px] text-bad">已淘汰</span>}
+                  </span>
+                  {placement ? (
+                    <Link href={`/results?round=${placement.roundId}`} className="text-[11px] text-accent hover:underline">
+                      {placement.roundName} 第 {placement.rank} 名(共 {placement.total} 組) →
+                    </Link>
+                  ) : (
+                    <span className="text-[11px] text-ink-faint">結果尚未公布</span>
+                  )}
                 </div>
               );
             })

@@ -4,7 +4,7 @@ import { LogoutButton } from "@/components/LogoutButton";
 
 interface SiteHeaderProps {
   authed?: boolean;
-  active?: "events" | "competitions" | "vote" | "submit" | "status" | "admin";
+  active?: "events" | "competitions" | "vote" | "results" | "submit" | "status" | "admin";
   roleLabel?: string;
 }
 
@@ -14,6 +14,7 @@ const NAV_ITEMS: Array<{ key: SiteHeaderProps["active"]; label: string; href: st
   { key: "events", label: "活動", href: "/" },
   { key: "competitions", label: "比賽", href: "/competitions" },
   { key: "vote", label: "投票", href: "/vote" },
+  { key: "results", label: "結果", href: "/results" },
   { key: "submit", label: "上傳作品", href: "/submit" },
   { key: "status", label: "我的狀態", href: "/status" },
   { key: "admin", label: "管理後台", href: "/admin/review" },

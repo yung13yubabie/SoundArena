@@ -3,6 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { Icon } from "@/lib/icons";
 import { PlayerBar } from "@/components/PlayerBar";
+import { computeRanking } from "@/lib/ranking";
 import { saveScore, setEliminated } from "./actions";
 
 export interface JudgeScoreItem {
@@ -21,31 +22,6 @@ export interface JudgeSubmission {
   values: Record<string, number>;
 }
 
-function computeTotals(items: JudgeScoreItem[], subs: JudgeSubmission[]) {
-  const weighted = items.filter((i) => i.kind === "weighted");
-  const bonus = items.filter((i) => i.kind === "bonus");
-
-  const maxByItem = new Map<string, number>();
-  for (const item of weighted) {
-    const max = Math.max(0, ...subs.map((s) => s.values[item.id] ?? 0));
-    maxByItem.set(item.id, max);
-  }
-
-  return subs.map((s) => {
-    let weightedSubtotal = 0;
-    for (const item of weighted) {
-      const max = maxByItem.get(item.id) ?? 0;
-      const normalized = max > 0 ? ((s.values[item.id] ?? 0) / max) * 100 : 0;
-      weightedSubtotal += normalized * ((item.weightPercent ?? 0) / 100);
-    }
-    let bonusTotal = 0;
-    for (const item of bonus) {
-      bonusTotal += s.values[item.id] ?? 0;
-    }
-    return { id: s.id, weightedSubtotal, bonusTotal, total: weightedSubtotal + bonusTotal };
-  });
-}
-
 export function JudgeBoard({
   roundId,
   scoreItems,
@@ -61,7 +37,7 @@ export function JudgeBoard({
   const [isPending, startTransition] = useTransition();
 
   const weightSum = scoreItems.filter((i) => i.kind === "weighted").reduce((s, i) => s + (i.weightPercent ?? 0), 0);
-  const totals = useMemo(() => computeTotals(scoreItems, subs), [scoreItems, subs]);
+  const totals = useMemo(() => computeRanking(scoreItems, subs), [scoreItems, subs]);
   const totalById = new Map(totals.map((t) => [t.id, t]));
   const ranked = [...subs].sort((a, b) => (totalById.get(b.id)?.total ?? 0) - (totalById.get(a.id)?.total ?? 0));
 
