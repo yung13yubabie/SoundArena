@@ -1,9 +1,12 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-// Pages that SPEC.md 第2節 requires to be behind login (登入 → 報名 → 投稿).
-// Everything else stays browsable while logged out (Discovery/公開比賽資訊).
-const AUTH_REQUIRED_PATHS = ["/register"];
+// Pages that SPEC.md 第2節 requires to be behind login (登入 → 報名 → 投稿),
+// plus role-specific screens (admin/judge). This only checks "is logged in" —
+// it does NOT yet check Organizer/PlatformAdmin/Judge ownership, since those
+// roles aren't derivable from real data until competitions have real
+// participants. RLS is still the actual authorization boundary underneath.
+const AUTH_REQUIRED_PATHS = ["/register", "/admin", "/judge", "/status", "/feedback"];
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });

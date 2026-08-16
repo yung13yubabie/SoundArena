@@ -2,25 +2,6 @@
 // (審核後台／賽制建立／時程設定／個人狀態) that were ported from design/prototype.html.
 // Real data comes later once Competition/Round/Submission are backed by Supabase.
 
-export const FORMAT_BLOCKS = {
-  elimination: [
-    { key: "single-elim", label: "單敗淘汰" },
-    { key: "double-elim", label: "雙敗淘汰（敗部復活）" },
-    { key: "round-robin", label: "循環賽" },
-    { key: "monthly", label: "月度／週期累積制" },
-  ],
-  grouping: [
-    { key: "individual", label: "個人賽" },
-    { key: "team-3v3", label: "隊伍賽（3 對 3）" },
-    { key: "draw", label: "抽籤分組" },
-  ],
-  special: [
-    { key: "wildcard", label: "敗部復活戰" },
-    { key: "theme", label: "限定主題輪" },
-    { key: "mentor", label: "業界導師制" },
-  ],
-} as const;
-
 export const SUBMISSION_STATE_META = {
   draft: { label: "草稿", cls: "draft" },
   identity_checking: { label: "身份比對中", cls: "checking" },
