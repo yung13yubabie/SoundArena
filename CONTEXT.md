@@ -5,7 +5,7 @@
 ## Language
 
 **Competition(賽事 / 比賽)**:
-由一位 Organizer 建立的一場完整比賽外框,是一串有序 Round 的容器,擁有名稱、預設 ScoringRule、匿名揭露模式(AnonymityMode)、整體時程、公開狀態(是否出現在 Discovery 頁)。第一個 Round 固定是「初賽」、最後一個固定是「決賽」,中間的 Round 數量與內容由 Organizer 自訂。SoundArena 是開放多租戶平台(見下方 ADR-0002):任何登入使用者都能自由建立 Competition 並成為其 Organizer,不需要平台審核。
+由一位 Organizer 建立的一場完整比賽外框,是一串有序 Round 的容器,擁有名稱、預設 ScoringRule、整體時程、公開狀態(是否出現在 Discovery 頁)。第一個 Round 固定是「初賽」、最後一個固定是「決賽」,中間的 Round 數量與內容由 Organizer 自訂。SoundArena 是開放多租戶平台(見下方 ADR-0002):任何登入使用者都能自由建立 Competition 並成為其 Organizer,不需要平台審核。匿名揭露不再是 Competition 層級的屬性,見 Round / AnonymityMode(ADR-0006)。
 _Avoid_: 賽制(這個詞專指 FormatBlock 組合,不是比賽本身;混用會搞不清楚「建立一場賽事」跟「設定一輪賽制」是兩件事)
 
 **Organizer(主辦者)**:
@@ -17,11 +17,11 @@ _Avoid_: 管理員(不夠精確,容易跟 PlatformAdmin 搞混,兩者權限範�
 _Avoid_: 副主辦、管理員(這兩個詞暗示對等權限,容易誤導成方案 B「完全對等」,已在 ADR-0003 否決)
 
 **Comment(留言)**:
-任一登入使用者對某個 Submission 留下的文字回饋。不能對自己的作品留言(呼應 Vote 的「不能投自己」規則)。只有在該 Submission 所屬 Round 的身份已依 AnonymityMode 揭露後才開放留言,見 CommentEndorsement。
+任一登入使用者對某個 Submission 留下的文字回饋,只要該 Submission 所屬 Competition 是公開的就能讀、能寫,不受該 Round 是否匿名影響(見 ADR-0005)。不能對自己的作品留言(呼應 Vote 的「不能投自己」規則)。延後揭露的是「這則留言是誰寫的」,不是留言本身能不能看見——見 CommentEndorsement。
 _待確認_:留言本身要不要有審核/檢舉機制(例如惡意留言)——這輪沒有展開,先當作跟 Submission 審核無關的獨立功能。
 
 **CommentEndorsement(留言認可度)**:
-Submission 的原作者對一則 Comment 給予的 0–100% 認可度(預設 0%,未認可),只有原作者本人能設定,Organizer 不能代為認可。留言者當輪若同時是本輪的 Participant 且有通過審核的 Submission,會依認可度取得加分,計入該輪的 WeightedScoreItem(見 ADR-0004,不是不設上限的 BonusScoreItem)。留言者若當輪沒有投稿,留言/認可仍可進行,但沒有分數可加。
+Submission 的原作者對一則 Comment 給予的 0–100% 認可度(預設 0%,未認可),只有原作者本人能設定,Organizer 不能代為認可。原作審核要不要認可時,**看不到留言者是誰**(除非該輪身份已揭露,或留言者就是原作自己)——刻意跟 JudgeBoard 對評審隱藏身份同一套精神,避免認可決定被人情/面子影響。留言者當輪若同時是本輪的 Participant 且有通過審核的 Submission,會依認可度取得加分,計入該輪的 WeightedScoreItem(見 ADR-0004,不是不設上限的 BonusScoreItem)。留言者若當輪沒有投稿,留言/認可仍可進行,但沒有分數可加。
 _Avoid_: 按讚、愛心(這兩個詞暗示二元的是非,實際上是連續的 0–100% 槓桿,只是 UI 上可能提供「一鍵設 100%」的捷徑)
 
 **PlatformAdmin(平台管理員)**:
@@ -31,7 +31,7 @@ _Avoid_: 按讚、愛心(這兩個詞暗示二元的是非,實際上是連續的
 任何使用者對某場 Competition 提出的濫用/違規回報,進入 PlatformAdmin 的處理清單。檢舉的對象是 Competition 整體,不是個別 Submission(個別作品內容爭議由該 Competition 自己的 Organizer 在審核流程處理,見 Submission)。
 
 **Round(輪次)**:
-Competition 裡一個有序的階段(如「第1輪·海選」「第2輪·複賽」「決賽」)。FormatBlock 組合掛在 Round 上,不是掛在 Competition 上——同一場 Competition 底下,不同 Round 可以是完全不同的賽制組合(例如第1輪循環賽、第2輪3對3隊伍賽、決賽單挑對戰)。ScoringRule 預設繼承 Competition 的設定,但可以在 Round 層級被 ScoringRuleOverride 取代。
+Competition 裡一個有序的階段(如「第1輪·海選」「第2輪·複賽」「決賽」)。FormatBlock 組合掛在 Round 上,不是掛在 Competition 上——同一場 Competition 底下,不同 Round 可以是完全不同的賽制組合(例如第1輪循環賽、第2輪3對3隊伍賽、決賽單挑對戰)。ScoringRule 預設繼承 Competition 的設定,但可以在 Round 層級被 ScoringRuleOverride 取代。是否匿名(AnonymityMode)也是 Round 自己的屬性,不是繼承 Competition。
 _Avoid_: 場次(跟 Round 同義但不夠精確,容易跟 Competition 搞混)
 
 **FormatBlock(賽制積木)**:
@@ -74,8 +74,8 @@ Participant 在某個 Competition 底下的存活狀態(active / eliminated)。�
 「身份比對」是自動比對 sharer_handle;「人工審核」除了看身份比對結果,還包含「不公開設定」檢查等內容審核項目——這是兩個不同性質的關卡,合在同一個 Submission 狀態機裡走,但檢查者跟檢查內容不一樣。審核者是該 Submission 所屬 Competition 的 Organizer,不是 PlatformAdmin。
 
 **AnonymityMode(匿名揭露模式)**:
-Competition 層級的單一設定,三選一:全程匿名(決賽才公開)、單輪匿名(每輪投票結束即公開該輪)、全程公開。模式本身是 Competition 屬性,但實際「公開」動作是逐 Round 發生的(單輪匿名模式下,每個 Round 各自在投票截止時觸發公開)。
-_Avoid_: 匿名規則(不夠精確,實際上是揭露「時機」的選擇,不是有沒有匿名這個二元問題)
+Round 層級的布林設定(是/否匿名),不再是 Competition 層級的三選一(舊設計已被 ADR-0006 推翻)。標記匿名的 Round,投稿者身份在該輪投票截止前一律隱藏,投票一截止就公開該輪身份;沒標記匿名的 Round 從一開始就公開。Competition 建立/設定頁提供一個「全部套用」的批次動作,一次把所有 Round 設成同一個值,設定完仍可針對個別 Round 再調整——但那是 UI 層的便利功能,不是獨立的資料層概念。
+_Avoid_: 匿名規則(不夠精確,實際上是揭露「時機」的選擇,不是有沒有匿名這個二元問題);全程匿名/單輪匿名/全程公開(舊三選一模式的用詞,新模型底下不再適用,只保留「這輪匿名與否」)
 
 **SchedulePhase(時程階段)**:
 Competition 的高層階段骨架:宣傳 → 投稿 → 投票 → 公布,通常對應到 Round 的起訖日期。跨階段有邊界規則:報名開放時間不可晚於投稿期結束(見 Registration)。

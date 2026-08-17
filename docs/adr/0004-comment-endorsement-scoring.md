@@ -1,5 +1,7 @@
 # 留言認可加分:新增 CommentEndorsement 計分項目
 
+> **Consequences 第三點(留言/認可綁身份揭露時機)已被 [ADR-0005](./0005-comment-visible-identity-hidden-until-reveal.md) 修正**——留言內容跟認可度改成隨時可見,延後揭露的只有留言者身份。其餘決定(加分算在留言者自己的投稿、WeightedScoreItem、建議權重 ≤5%)不受影響。
+
 新增一種計分項目:任何登入使用者可以對 Submission 留言,該 Submission 的原作者可以給予該則留言 0–100% 的「認可度」(預設 0%,未認可)。留言者當輪若自己也有一筆通過審核的投稿,會依認可度取得加分,計入該輪 WeightedScoreItem 的正規化與 100% 權重分配(不是不設上限的 BonusScoreItem)——這是刻意選擇,因為使用者明確表示「權重不要拉太多,失去競賽意義」,這句話本身就是在講 weight_percent,不是額外加成。目的是鼓勵高品質的同儕回饋,同時把對排名的實際影響力鎖在小範圍內,避免留言互吹取代真實的作品評比。
 
 ## Considered Options
