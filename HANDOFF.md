@@ -132,9 +132,7 @@ C:\Users\LIN\Documents\github\SoundArena\
 5. **通知系統**:schema 還沒建,但訂閱範圍的鐵律已經定案並寫進 SPEC.md 第 6 節——**報名才會訂閱,單純建立/主辦比賽不會訂閱,訂閱可取消**,實作時直接照這條規則設計 schema,不用重新討論範圍。
 6. **LINE 登入**:使用者能申請的時候回來補
 7. **獨立評審邀請機制**:目前「評審評分」= Organizer 本人,沒有邀請第三方評審(如業界導師)的功能,SPEC.md 第5節/第7節都提到這個角色但沒有對應的 schema(`judges`/`judge_assignments` 之類的表)——需要時再設計,範圍還沒訂。
-8. **以下兩項使用者提過、明確要做但還沒排進去的功能,下次要問使用者要先做哪個**(主辦者履歷頁已在 08-16 晚間那輪做完,見文件尾端):
-   - **FormatBlock 的 `config` 具體設定 UI**:選中賽制積木後目前只是勾選,`format_blocks`/`round_format_blocks` 已有 `config` jsonb 欄位但沒有對應的設定畫面(例如主題輪要填關鍵字/曲風)——範圍還沒訂。
-   - **邀請連結整合模板訊息**:主辦分享比賽連結時,希望能帶出整合賽制/投票資訊的訊息模板,並支援 `{變數}` 填入——範圍還沒訂(模板存哪裡、哪些變數、UI 長怎樣都待設計)。
+8. **邀請連結整合模板訊息**:唯一還沒排進去的使用者原始需求——主辦分享比賽連結時,希望能帶出整合賽制/投票資訊的訊息模板,並支援 `{變數}` 填入——範圍還沒訂(模板存哪裡、哪些變數、UI 長怎樣都待設計)。FormatBlock 的 `config` 具體設定 UI 已在 08-16 深夜第五輪做完(限定主題輪的關鍵字/曲風),見文件尾端。
 
 ---
 
@@ -300,3 +298,25 @@ C:\Users\LIN\Documents\github\SoundArena\
 
 - `/results` 沒有處理「一輪淘汰狀態」的顯示(只有分數排名,沒有標「已淘汰/晉級」)——刻意先不加,因為淘汰狀態目前是 Organizer 在 `/judge` 手動標記的,還沒有一個「這輪淘汰名單正式公告」的動作,貿然在結果頁顯示淘汰狀態感覺像是「官方宣布」但實際上可能還在人工確認中(呼應 SPEC.md 第6節「淘汰結果發送前需經人工審核確認」)。
 - 「初賽」的 `voting_closes_at` 目前被我改到過去(這輪測試用),如果之後要繼續拿「深夜擂台 EP.04」測完整的報名/投稿/投票流程,記得這一輪的投票視窗已經關了,要重新開才能再測投票。
+
+---
+
+## 08-16 深夜第五輪追加:FormatBlock config UI(限定主題輪)
+
+使用者把「FormatBlock config UI」跟「邀請連結模板訊息」這兩個排隊功能的優先序交給我判斷,選了前者——理由是「限定主題輪」這個賽制積木在 `/admin/format` 已經可以勾選,但 `round_format_blocks.config` 完全沒有對應畫面,等於是一個看起來存在、實際上是空殼的功能(勾了也沒地方填主題是什麼)。邀請連結模板是全新加值功能,範圍也還沒訂清楚,相較之下這個是「補完已經半成品的東西」,優先度更高也更好收斂。
+
+### 這輪做了什麼
+
+- **`saveFormatBlockConfig(roundId, blockKey, config)`**(`admin/format/actions.ts`):UPDATE `round_format_blocks.config`,沿用既有「round_format_blocks writable by organizer」RLS,沒有另外加 policy。
+- **`ThemedRoundConfigPanel`**(`AdminFormatClient.tsx`):選中「限定主題輪」積木後,底下展開一個設定區塊——選「關鍵字/詞句限定」或「曲風限定」(SPEC.md 第7節定義的兩種主題類型),填實際內容,儲存。選曲風時額外顯示一行提醒:「曲風合規檢查目前走人工審核判斷,還沒有自動比對」(SPEC.md 第7節原話,誠實告知這塊沒有自動化,不是裝作有）。
+- **`/submit` 投稿頁同步顯示主題**:原本這個主題只有 Organizer 在後台看得到,對參賽者完全不可見——一個「限定主題」規則,參賽者看不到主題是什麼,規則等於沒用。這輪讓 `/submit` 的賽制/場次選單旁邊,依所選輪次即時顯示「本輪限定主題(關鍵字/曲風):XXX」,資料來源是同一個 `round_format_blocks.config`,不是另外複製一份。
+
+### 端到端實測過
+
+在 `/admin/format` 對兩個不同輪次分別測了「關鍵字限定」跟「曲風限定」兩種模式:輸入「離別」(關鍵字)、「City Pop」(曲風),各自點儲存後畫面顯示「已儲存」,**用 service_role 查 `round_format_blocks.config` 確認兩筆都正確寫入**(`{"theme_type":"keyword","theme_value":"離別"}` / `{"theme_type":"genre","theme_value":"City Pop"}`)。切到 `/submit` 頁,選到「曲風」那個輪次時,正確顯示「本輪限定主題(曲風)：City Pop」的提示框。
+
+已 commit(`40fd4c1`)、push、`vercel deploy --prod` 重新部署上線(第一次部署遇到 Vercel CLI 短暫回報「Not authorized」,重試一次就正常過了,不是程式碼問題)。
+
+### 已知缺口(這輪刻意沒做)
+
+- 其他 special 積木(業界導師制、敗部復活戰)跟部分 grouping 積木(隊伍賽的隊伍人數/計分方式、抽籤分組的組數)理論上也可能需要 config,但 SPEC.md 沒有具體寫出這些積木需要什麼欄位——這輪只做了 SPEC 明確定義的「限定主題輪」,沒有替其他積木發明 config 欄位形狀,避免猜錯結構之後要重改。
