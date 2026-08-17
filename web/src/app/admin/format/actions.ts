@@ -157,6 +157,31 @@ export async function toggleFormatBlock(
   return { success: true };
 }
 
+export async function saveFormatBlockConfig(
+  roundId: string,
+  blockKey: string,
+  config: Record<string, unknown>,
+): Promise<ActionResult> {
+  const supabase = await createClient();
+
+  const { data: block, error: blockError } = await supabase
+    .from("format_blocks")
+    .select("id")
+    .eq("key", blockKey)
+    .single();
+  if (blockError || !block) return { error: blockError?.message ?? "找不到這個賽制積木" };
+
+  const { error } = await supabase
+    .from("round_format_blocks")
+    .update({ config })
+    .eq("round_id", roundId)
+    .eq("format_block_id", block.id);
+  if (error) return { error: error.message };
+
+  revalidatePath("/admin/format");
+  return { success: true };
+}
+
 export async function addRound(competitionId: string): Promise<ActionResult> {
   const supabase = await createClient();
   const { data: rounds } = await supabase

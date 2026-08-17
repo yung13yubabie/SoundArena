@@ -10,6 +10,7 @@ export interface RoundOption {
   registrationId: string;
   sunoHandle: string;
   label: string;
+  theme: { type: string; value: string } | null;
 }
 
 // Mock 解析結果——依貼上的連結內容分支，不是無論輸入什麼都同一個結果。
@@ -145,6 +146,12 @@ export function SubmitForm({ options }: { options: RoundOption[] }) {
               <div className="mt-1.5 text-[11.5px] leading-relaxed text-ink-faint">
                 審核通過後，系統會自動把這首作品加入所選賽制對應輪次的歌曲清單，不需要另外操作。
               </div>
+              {selected.theme && (
+                <div className="mt-2.5 flex items-center gap-2 rounded-[10px] border border-accent/25 bg-accent/8 px-3.5 py-2.5 text-[12.5px] text-accent">
+                  <Icon name="star" size={14} />
+                  本輪限定主題（{selected.theme.type}）：{selected.theme.value}
+                </div>
+              )}
             </div>
 
             <div className="mb-5">

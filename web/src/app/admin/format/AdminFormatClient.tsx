@@ -8,6 +8,7 @@ import { Icon } from "@/lib/icons";
 import {
   updateCompetitionMeta,
   toggleFormatBlock,
+  saveFormatBlockConfig,
   addRound,
   removeRound,
   toggleScoringOverride,
@@ -21,6 +22,11 @@ export interface ScoreItemData {
   weightPercent: number | null;
 }
 
+export interface ThemeConfig {
+  themeType: "keyword" | "genre";
+  themeValue: string;
+}
+
 export interface RoundData {
   id: string;
   name: string;
@@ -28,6 +34,7 @@ export interface RoundData {
   elimination: string | null;
   grouping: string | null;
   special: string[];
+  themeConfig: ThemeConfig | null;
   scoringRule: { id: string; items: ScoreItemData[] } | null;
 }
 
@@ -147,6 +154,77 @@ function ScoreEditor({
   );
 }
 
+function ThemedRoundConfigPanel({ roundId, initial }: { roundId: string; initial: ThemeConfig | null }) {
+  const [themeType, setThemeType] = useState<ThemeConfig["themeType"]>(initial?.themeType ?? "keyword");
+  const [themeValue, setThemeValue] = useState(initial?.themeValue ?? "");
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  async function handleSave() {
+    setSaving(true);
+    await saveFormatBlockConfig(roundId, "themed_round", { theme_type: themeType, theme_value: themeValue.trim() });
+    setSaving(false);
+    setSaved(true);
+  }
+
+  return (
+    <div className="glass mt-2 mb-3.5 px-4 py-3.5">
+      <div className="mb-2.5 text-[11.5px] text-ink-faint">限定主題輪設定——比賽規則會公開顯示這個主題(SPEC.md 第7節)</div>
+      <div className="mb-2.5 flex gap-1.75">
+        <button
+          onClick={() => {
+            setThemeType("keyword");
+            setSaved(false);
+          }}
+          className={`rounded-full border px-3 py-1.25 text-[12px] ${
+            themeType === "keyword"
+              ? "border-accent/40 bg-accent/16 text-ink"
+              : "border-panel-border bg-white/[0.03] text-ink-dim"
+          }`}
+        >
+          關鍵字/詞句限定
+        </button>
+        <button
+          onClick={() => {
+            setThemeType("genre");
+            setSaved(false);
+          }}
+          className={`rounded-full border px-3 py-1.25 text-[12px] ${
+            themeType === "genre"
+              ? "border-accent/40 bg-accent/16 text-ink"
+              : "border-panel-border bg-white/[0.03] text-ink-dim"
+          }`}
+        >
+          曲風限定
+        </button>
+      </div>
+      <div className="flex items-center gap-2">
+        <input
+          value={themeValue}
+          onChange={(e) => {
+            setThemeValue(e.target.value);
+            setSaved(false);
+          }}
+          placeholder={themeType === "keyword" ? "例如：夏天、離別" : "例如：City Pop、Lo-fi"}
+          className="flex-1 rounded-[10px] border border-panel-border bg-black/25 px-3.5 py-2 text-[13px] text-ink outline-none focus:border-accent/50"
+        />
+        <button
+          onClick={handleSave}
+          disabled={saving || !themeValue.trim()}
+          className="rounded-[10px] bg-gradient-to-r from-[#ff9457] via-accent to-accent-2 px-3.5 py-2 text-[12.5px] font-semibold text-[#1a0e08] disabled:opacity-45"
+        >
+          {saving ? "儲存中…" : saved ? "已儲存" : "儲存"}
+        </button>
+      </div>
+      {themeType === "genre" && (
+        <div className="mt-2 text-[11px] leading-relaxed text-ink-faint">
+          曲風合規檢查目前走人工審核判斷,還沒有自動比對(SPEC.md 第7節——自動化資料來源待驗證)。
+        </div>
+      )}
+    </div>
+  );
+}
+
 function RoundFormatCard({
   round,
   competitionId,
@@ -253,6 +331,8 @@ function RoundFormatCard({
           ))}
         </div>
       </div>
+
+      {round.special.includes("themed_round") && <ThemedRoundConfigPanel roundId={round.id} initial={round.themeConfig} />}
 
       <div className="mt-3.5 flex items-center gap-2.5 border-t border-panel-border pt-2.5">
         <Switch on={!!round.scoringRule} onClick={toggleOverride} />

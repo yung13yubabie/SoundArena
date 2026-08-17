@@ -25,6 +25,7 @@ interface ScoringRuleRow {
 
 interface FormatBlockRow {
   round_id: string;
+  config: Record<string, unknown>;
   format_blocks: { key: string; category: "elimination" | "grouping" | "special" } | null;
 }
 
@@ -74,7 +75,7 @@ export default async function AdminFormatPage({
 
   const [{ data: blockRows }, { data: scoringRuleRows }, { data: catalogRows }] = await Promise.all([
     roundIds.length
-      ? supabase.from("round_format_blocks").select("round_id, format_blocks(key, category)").in("round_id", roundIds)
+      ? supabase.from("round_format_blocks").select("round_id, config, format_blocks(key, category)").in("round_id", roundIds)
       : Promise.resolve({ data: [] as FormatBlockRow[] }),
     supabase
       .from("scoring_rules")
@@ -100,7 +101,11 @@ export default async function AdminFormatPage({
     const roundBlocks = blocks.filter((b) => b.round_id === r.id && b.format_blocks);
     const elimination = roundBlocks.find((b) => b.format_blocks!.category === "elimination")?.format_blocks!.key ?? null;
     const grouping = roundBlocks.find((b) => b.format_blocks!.category === "grouping")?.format_blocks!.key ?? null;
-    const special = roundBlocks.filter((b) => b.format_blocks!.category === "special").map((b) => b.format_blocks!.key);
+    const specialBlocks = roundBlocks.filter((b) => b.format_blocks!.category === "special");
+    const special = specialBlocks.map((b) => b.format_blocks!.key);
+    const themedRoundConfig = specialBlocks.find((b) => b.format_blocks!.key === "themed_round")?.config as
+      | { theme_type?: "keyword" | "genre"; theme_value?: string }
+      | undefined;
     const overrideRule = scoringRules.find((sr) => sr.round_id === r.id) ?? null;
 
     return {
@@ -110,6 +115,9 @@ export default async function AdminFormatPage({
       elimination,
       grouping,
       special,
+      themeConfig: themedRoundConfig?.theme_value
+        ? { themeType: themedRoundConfig.theme_type ?? "keyword", themeValue: themedRoundConfig.theme_value }
+        : null,
       scoringRule: overrideRule ? { id: overrideRule.id, items: toScoreItems(overrideRule.score_items ?? []) } : null,
     };
   });

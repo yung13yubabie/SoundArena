@@ -49,6 +49,21 @@ export default async function SubmitPage() {
         )
     : { data: [] };
 
+  const roundIds = (rounds ?? []).map((r) => r.id);
+  const { data: themedBlocks } = roundIds.length
+    ? await supabase
+        .from("round_format_blocks")
+        .select("round_id, config, format_blocks!inner(key)")
+        .in("round_id", roundIds)
+        .eq("format_blocks.key", "themed_round")
+    : { data: [] as { round_id: string; config: { theme_type?: "keyword" | "genre"; theme_value?: string } }[] };
+
+  const themeByRound = new Map(
+    (themedBlocks ?? [])
+      .filter((b) => !!b.config?.theme_value)
+      .map((b) => [b.round_id, b.config as { theme_type?: "keyword" | "genre"; theme_value?: string }]),
+  );
+
   const submitted = new Set((existingSubmissions ?? []).map((s) => `${s.round_id}:${s.registration_id}`));
 
   const options: RoundOption[] = [];
@@ -56,11 +71,15 @@ export default async function SubmitPage() {
     for (const round of rounds ?? []) {
       if (round.competition_id !== reg.competition_id) continue;
       if (submitted.has(`${round.id}:${reg.id}`)) continue;
+      const theme = themeByRound.get(round.id);
       options.push({
         roundId: round.id,
         registrationId: reg.id,
         sunoHandle: reg.suno_handle,
         label: `${competitionName(reg.competitions)} · ${round.name}`,
+        theme: theme
+          ? { type: theme.theme_type === "genre" ? "曲風" : "關鍵字/詞句", value: theme.theme_value! }
+          : null,
       });
     }
   }
