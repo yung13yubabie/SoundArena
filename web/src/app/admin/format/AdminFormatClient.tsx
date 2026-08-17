@@ -13,6 +13,8 @@ import {
   removeRound,
   toggleScoringOverride,
   saveScoreItems,
+  setRoundAnonymity,
+  setAllRoundsAnonymity,
 } from "./actions";
 
 export interface ScoreItemData {
@@ -34,6 +36,7 @@ export interface RoundData {
   elimination: string | null;
   grouping: string | null;
   special: string[];
+  isAnonymous: boolean;
   themeConfig: ThemeConfig | null;
   scoringRule: { id: string; items: ScoreItemData[] } | null;
 }
@@ -41,7 +44,6 @@ export interface RoundData {
 export interface CompetitionData {
   id: string;
   name: string;
-  anonymityMode: string;
 }
 
 export interface FormatBlockCatalog {
@@ -247,11 +249,20 @@ function RoundFormatCard({
       toggleScoringOverride(round.id, competitionId, !round.scoringRule);
     });
   };
+  const toggleAnonymous = () => {
+    startTransition(() => {
+      setRoundAnonymity(round.id, !round.isAnonymous);
+    });
+  };
 
   return (
     <div className="glass mb-4 p-5">
       <div className="mb-4 flex items-center gap-2.5">
         <span className="flex-1 text-[15px] font-semibold">{round.name}</span>
+        <div className="flex items-center gap-1.75">
+          <Switch on={round.isAnonymous} onClick={toggleAnonymous} />
+          <span className="text-[11.5px] text-ink-dim">{round.isAnonymous ? "本輪匿名" : "本輪公開"}</span>
+        </div>
         {round.locked === "preliminary" && (
           <span className="rounded-full border border-accent/35 bg-accent/8 px-2.25 py-0.75 text-[11px] text-accent">初賽 · 固定頭</span>
         )}
@@ -358,53 +369,71 @@ function RoundFormatCard({
 
 function CompetitionMetaForm({ competition }: { competition: CompetitionData }) {
   const [name, setName] = useState(competition.name);
-  const [anonymityMode, setAnonymityMode] = useState(competition.anonymityMode);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [isPending, startTransition] = useTransition();
 
   async function handleSave() {
     setSaving(true);
-    await updateCompetitionMeta(competition.id, name, anonymityMode);
+    await updateCompetitionMeta(competition.id, name);
     setSaving(false);
     setSaved(true);
   }
 
   return (
-    <div className="mb-7 grid grid-cols-[1fr_280px] gap-5">
-      <div>
+    <div className="mb-7">
+      <div className="mb-5">
         <label className="mb-1.5 block text-[12.5px] font-semibold text-ink-dim">Competition 名稱</label>
-        <input
-          value={name}
-          onChange={(e) => {
-            setName(e.target.value);
-            setSaved(false);
-          }}
-          className="w-full rounded-[10px] border border-panel-border bg-black/25 px-3.5 py-2.5 text-[13.5px] text-ink outline-none focus:border-accent/50"
-        />
+        <div className="flex gap-2.5">
+          <input
+            value={name}
+            onChange={(e) => {
+              setName(e.target.value);
+              setSaved(false);
+            }}
+            className="w-full max-w-[420px] rounded-[10px] border border-panel-border bg-black/25 px-3.5 py-2.5 text-[13.5px] text-ink outline-none focus:border-accent/50"
+          />
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="rounded-[10px] border border-panel-border bg-white/[0.04] px-3.5 py-1.5 text-[12px] font-semibold text-ink disabled:opacity-45"
+          >
+            {saving ? "儲存中…" : saved ? "已儲存" : "儲存"}
+          </button>
+        </div>
       </div>
+
       <div>
-        <label className="mb-1.5 block text-[12.5px] font-semibold text-ink-dim">匿名揭露模式（AnonymityMode）</label>
-        <select
-          value={anonymityMode}
-          onChange={(e) => {
-            setAnonymityMode(e.target.value);
-            setSaved(false);
-          }}
-          className="w-full appearance-none rounded-[10px] border border-panel-border bg-black/25 px-3.5 py-2.5 text-[13.5px] text-ink outline-none focus:border-accent/50 [color-scheme:dark]"
-        >
-          <option value="full_anonymous_until_final">全程匿名，決賽才公開</option>
-          <option value="per_round_anonymous">單輪匿名，賽後公開</option>
-          <option value="fully_public">全程公開</option>
-        </select>
-      </div>
-      <div className="col-span-full">
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="rounded-[10px] border border-panel-border bg-white/[0.04] px-3.5 py-1.5 text-[12px] font-semibold text-ink disabled:opacity-45"
-        >
-          {saving ? "儲存中…" : saved ? "已儲存" : "儲存基本資料"}
-        </button>
+        <label className="mb-1.5 block text-[12.5px] font-semibold text-ink-dim">
+          匿名揭露(AnonymityMode)— 逐輪設定,以下是套用到全部輪次的快捷
+        </label>
+        <div className="flex gap-1.75">
+          <button
+            disabled={isPending}
+            onClick={() =>
+              startTransition(() => {
+                setAllRoundsAnonymity(competition.id, true);
+              })
+            }
+            className="rounded-[10px] border border-panel-border bg-white/[0.04] px-3.5 py-1.5 text-[12px] font-semibold text-ink disabled:opacity-45"
+          >
+            全部設為匿名
+          </button>
+          <button
+            disabled={isPending}
+            onClick={() =>
+              startTransition(() => {
+                setAllRoundsAnonymity(competition.id, false);
+              })
+            }
+            className="rounded-[10px] border border-panel-border bg-white/[0.04] px-3.5 py-1.5 text-[12px] font-semibold text-ink disabled:opacity-45"
+          >
+            全部設為公開
+          </button>
+        </div>
+        <div className="mt-1.5 text-[11.5px] leading-relaxed text-ink-faint">
+          匿名的輪次投票截止後才公開作者身份;公開的輪次從一開始就看得到是誰投稿。每輪下方可個別覆寫。
+        </div>
       </div>
     </div>
   );

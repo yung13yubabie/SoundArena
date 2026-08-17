@@ -51,7 +51,7 @@ export default async function AdminFormatPage({
 
   const { data: myCompetitions } = await supabase
     .from("competitions")
-    .select("id, name, anonymity_mode")
+    .select("id, name")
     .eq("organizer_id", userId)
     .order("created_at", { ascending: false });
 
@@ -67,7 +67,7 @@ export default async function AdminFormatPage({
 
   const { data: rounds } = await supabase
     .from("rounds")
-    .select("id, round_index, name")
+    .select("id, round_index, name, is_anonymous")
     .eq("competition_id", competition.id)
     .order("round_index");
 
@@ -115,6 +115,7 @@ export default async function AdminFormatPage({
       elimination,
       grouping,
       special,
+      isAnonymous: r.is_anonymous,
       themeConfig: themedRoundConfig?.theme_value
         ? { themeType: themedRoundConfig.theme_type ?? "keyword", themeValue: themedRoundConfig.theme_value }
         : null,
@@ -125,7 +126,6 @@ export default async function AdminFormatPage({
   const competitionData: CompetitionData = {
     id: competition.id,
     name: competition.name,
-    anonymityMode: competition.anonymity_mode,
   };
 
   const defaultItems: ScoreItemData[] = defaultRule ? toScoreItems(defaultRule.score_items ?? []) : [];

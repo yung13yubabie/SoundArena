@@ -39,18 +39,10 @@ export function CreateCompetitionForm() {
             className="w-full rounded-[10px] border border-panel-border bg-black/25 px-3.5 py-2.5 text-[13.5px] text-ink outline-none focus:border-accent/50"
           />
         </div>
-        <div className="mb-5">
-          <label className="mb-1.5 block text-[12.5px] font-semibold text-ink-dim">匿名揭露模式</label>
-          <select
-            name="anonymity_mode"
-            defaultValue="per_round_anonymous"
-            className="w-full appearance-none rounded-[10px] border border-panel-border bg-black/25 px-3.5 py-2.5 text-[13.5px] text-ink outline-none focus:border-accent/50 [color-scheme:dark]"
-          >
-            <option value="full_anonymous_until_final">全程匿名，決賽才公開</option>
-            <option value="per_round_anonymous">單輪匿名，賽後公開</option>
-            <option value="fully_public">全程公開</option>
-          </select>
-        </div>
+        <label className="mb-5 flex items-center gap-2 text-[12.5px] text-ink-dim">
+          <input type="checkbox" name="default_anonymous" defaultChecked className="[color-scheme:dark]" />
+          初賽、決賽預設匿名(投票截止後公開作者身份;之後可在賽制頁逐輪調整)
+        </label>
 
         {error && (
           <p className="mb-4 rounded-[10px] border border-bad/30 bg-bad/10 p-2.5 text-[12px] text-bad">{error}</p>

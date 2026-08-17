@@ -54,7 +54,7 @@ export async function createCompetition(formData: FormData): Promise<ActionResul
   if (!user) return { error: "請先登入" };
 
   const name = String(formData.get("name") ?? "").trim();
-  const anonymityMode = String(formData.get("anonymity_mode") ?? "per_round_anonymous");
+  const defaultAnonymous = formData.get("default_anonymous") !== "off";
   if (!name) return { error: "請填寫比賽名稱" };
 
   const { data: competition, error: competitionError } = await supabase
@@ -63,7 +63,6 @@ export async function createCompetition(formData: FormData): Promise<ActionResul
       organizer_id: user.id,
       name,
       slug: slugify(name),
-      anonymity_mode: anonymityMode,
       is_public: true,
     })
     .select("id")
@@ -71,8 +70,8 @@ export async function createCompetition(formData: FormData): Promise<ActionResul
   if (competitionError || !competition) return { error: competitionError?.message ?? "建立比賽失敗" };
 
   const { error: roundsError } = await supabase.from("rounds").insert([
-    { competition_id: competition.id, round_index: 1, name: "初賽" },
-    { competition_id: competition.id, round_index: 2, name: "決賽" },
+    { competition_id: competition.id, round_index: 1, name: "初賽", is_anonymous: defaultAnonymous },
+    { competition_id: competition.id, round_index: 2, name: "決賽", is_anonymous: defaultAnonymous },
   ]);
   if (roundsError) return { error: roundsError.message };
 
@@ -90,16 +89,28 @@ export async function createCompetition(formData: FormData): Promise<ActionResul
   return { success: true };
 }
 
-export async function updateCompetitionMeta(
-  competitionId: string,
-  name: string,
-  anonymityMode: string,
-): Promise<ActionResult> {
+export async function updateCompetitionMeta(competitionId: string, name: string): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { error } = await supabase.from("competitions").update({ name }).eq("id", competitionId);
+  if (error) return { error: error.message };
+  revalidatePath("/admin/format");
+  return { success: true };
+}
+
+export async function setRoundAnonymity(roundId: string, isAnonymous: boolean): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { error } = await supabase.from("rounds").update({ is_anonymous: isAnonymous }).eq("id", roundId);
+  if (error) return { error: error.message };
+  revalidatePath("/admin/format");
+  return { success: true };
+}
+
+export async function setAllRoundsAnonymity(competitionId: string, isAnonymous: boolean): Promise<ActionResult> {
   const supabase = await createClient();
   const { error } = await supabase
-    .from("competitions")
-    .update({ name, anonymity_mode: anonymityMode })
-    .eq("id", competitionId);
+    .from("rounds")
+    .update({ is_anonymous: isAnonymous })
+    .eq("competition_id", competitionId);
   if (error) return { error: error.message };
   revalidatePath("/admin/format");
   return { success: true };
