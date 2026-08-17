@@ -125,7 +125,7 @@ C:\Users\LIN\Documents\github\SoundArena\
 
 ## 下一步(哪個先做,使用者可以自己選)
 
-1. **Collaborator + Comment/CommentEndorsement + 逐輪匿名的 UI 還沒做**(08-17 這輪 schema/RLS 全部做完,見文件尾端「08-17」兩個段落,含 ADR-0003/0004/0005/0006)——資料庫層已經能正確擋權限、正確隱藏留言者身份,但沒有任何畫面:邀請協作者、勾選權限、留言輸入框、原作認可、「全部套用+個別調整」的逐輪匿名切換全部還沒有。「我的比賽」清單目前的查詢也還是只抓 `organizer_id = 我`,不會抓「我只是協作者」的比賽,需要另外改查詢邏輯。`CreateCompetitionForm`/`CompetitionMetaForm` 的匿名三選一下拉選單也要在同一輪拔掉,換成新的逐輪切換。這是下一個最自然的動工項目,概念定案已經做完,直接進 UI 就好,不用再討論範圍。
+1. **逐輪匿名切換 UI 已經做完**(08-17 第三輪,見文件尾端)——`CreateCompetitionForm`/`CompetitionMetaForm` 的舊三選一下拉選單已經拔掉,`/admin/format` 現在是「全部套用」批次按鈕 + 每輪自己的 Switch。**Collaborator + Comment/CommentEndorsement 的 UI 還沒做**——邀請協作者、勾選權限、留言輸入框、原作認可的介面全部還沒有。「我的比賽」清單目前的查詢也還是只抓 `organizer_id = 我`,不會抓「我只是協作者」的比賽,需要另外改查詢邏輯。這是下一個最自然的動工項目,概念定案已經做完,直接進 UI 就好,不用再討論範圍。
 2. **公開結果/排名頁跟 `/u/[id]` 名次已經做完**(08-16 深夜第四輪,見文件尾端「公開結果」段落)——`/results` 公開結果頁、`/u/[id]` 的名次都接上真資料了。
 3. **Discord guilds.join 補完**:使用者把 Bot 邀進 SoundArena Discord 伺服器,把伺服器 ID 填進 `.env.local` 跟 Vercel 的 `DISCORD_GUILD_ID`
 4. **`/admin/*` 的角色級權限保護**:proxy.ts 目前只檢查「有沒有登入」,沒檢查「這個人是不是這場比賽的 Organizer 或 Collaborator」——RLS 是實際擋著的那層,但 route 層級的檢查還是沒做,見上方已知缺口 2
@@ -404,3 +404,31 @@ C:\Users\LIN\Documents\github\SoundArena\
 ### 已知的小瑕疵(不影響功能,值得記一下)
 
 - `get_submission_comments` 給完全匿名訪客(anon key、沒登入)的 `is_own_comment` 欄位回傳 `null` 不是 `false`(因為 SQL 的 `commenter_id = auth.uid()`,`auth.uid()` 是 null 時比較結果就是 null)——UI 端把 null 當 false 處理就好,功能上沒問題,只是型別上不夠乾淨,之後有空再包一層 `coalesce(...,false)`。
+
+---
+
+## 08-17 第三輪:逐輪匿名切換 UI(ADR-0006 收尾)
+
+使用者說「接重要的」,這輪判斷「逐輪匿名切換」最急迫,理由:上一輪已經讓 `rounds.is_anonymous` 真的驅動揭露邏輯,但畫面上還留著舊的「匿名揭露模式」三選一下拉選單——那個選單完全是裝飾品,選了不會有任何效果,對正在用真實產品的主辦來說是會誤導人的假控制項,優先度高於還沒開始的 Collaborator/Comment 新功能。
+
+### 這輪做了什麼
+
+- **`CreateCompetitionForm`**:拔掉三選一下拉選單,換成一個「初賽、決賽預設匿名」checkbox(預設勾選),建立比賽時直接設定自動生成的初賽/決賽兩輪的 `is_anonymous`。
+- **`CompetitionMetaForm`**:拔掉 `anonymityMode` 的 state/select,`updateCompetitionMeta` action 不再接收也不再寫入 `anonymity_mode` 欄位。同一個位置換成「全部套用」批次按鈕(全部設為匿名 / 全部設為公開),呼叫新的 `setAllRoundsAnonymity(competitionId, isAnonymous)`。
+- **`RoundFormatCard`**:每輪標題列新增一個 Switch(「本輪匿名」/「本輪公開」),呼叫新的 `setRoundAnonymity(roundId, isAnonymous)`,可個別覆寫批次設定的結果。
+- `competitions.anonymity_mode` 欄位維持不寫入(vestigial 狀態正式生效,不再有任何程式碼路徑碰它)。
+
+### 這輪的測試方式跟上兩輪不一樣——瀏覽器 session 過期,Google 重新登入被擴充套件擋下
+
+原本要跟前幾輪一樣直接在瀏覽器裡點過一次,但這次瀏覽器分頁的 session 已經過期,點「使用 Google 繼續」後跳轉到 `accounts.google.com` 的帳號選擇畫面,擴充套件回報「Permission denied for this action on this domain」——這是**瀏覽器自動化工具對 Google 登入網域的既有安全邊界**,不是這輪程式碼的問題,也沒有強行繞過(不應該繞過)。
+
+改用上兩輪已經在用的真實 session token(組織者帳號 `linpcw@gmail.com` 之前設過的臨時密碼換來的 `access_token`,還沒過期)直接對 REST API 做**跟 Server Action 完全相同的 RLS 路徑**驗證:
+1. `setAllRoundsAnonymity` 等效操作(整場比賽三輪一次設為公開)→ 成功,三輪都改了
+2. **關鍵驗證**:決賽的 `voting_closes_at` 還是 `null`(投票根本還沒截止),但因為 `is_anonymous` 改成 `false`,`get_submission_comments` 立刻顯示留言者真名——證明新邏輯是「不匿名就一開始公開」,不再看投票有沒有截止,跟 ADR-0006 的設計一致
+3. `setRoundAnonymity` 等效操作(單獨把初賽改回匿名)→ 成功,確認可以在批次設定之上個別覆寫
+4. `updateCompetitionMeta` 等效操作(只改名稱,payload 完全不帶 anonymity_mode)→ 成功,查回來的 row 確認 `anonymity_mode` 欄位維持原值沒被動過
+5. 測完把三輪的 `is_anonymous` 全部設回 `true`,回到測試前的預設狀態
+
+已 commit(`64424b2`)、push、`vercel deploy --prod` 上線。
+
+**這輪只驗證了資料層(Server Action 實際會呼叫的 RLS 路徑),沒有真的在瀏覽器點過新的 Switch/checkbox UI**——元件本身沿用這個檔案裡已經驗證過很多次的 `<Switch>` 元件同一套寫法(跟 `toggleScoringOverride` 的 Switch 一模一樣的 pattern),風險低,但畢竟不是「已經在瀏覽器實測」等級的驗證。**下次接手時,先確認瀏覽器分頁的登入狀態,需要的話請使用者手動用 Google 重新登入一次**(擴充套件的網域限制擋住了自動化重新登入),再補一次真正的視覺點擊驗證。
