@@ -432,3 +432,7 @@ C:\Users\LIN\Documents\github\SoundArena\
 已 commit(`64424b2`)、push、`vercel deploy --prod` 上線。
 
 **這輪只驗證了資料層(Server Action 實際會呼叫的 RLS 路徑),沒有真的在瀏覽器點過新的 Switch/checkbox UI**——元件本身沿用這個檔案裡已經驗證過很多次的 `<Switch>` 元件同一套寫法(跟 `toggleScoringOverride` 的 Switch 一模一樣的 pattern),風險低,但畢竟不是「已經在瀏覽器實測」等級的驗證。**下次接手時,先確認瀏覽器分頁的登入狀態,需要的話請使用者手動用 Google 重新登入一次**(擴充套件的網域限制擋住了自動化重新登入),再補一次真正的視覺點擊驗證。
+
+### 補充(同一天,使用者重新登入後):視覺驗證補完
+
+使用者手動重新登入後,回到 `/admin/format` 實際點過一輪:「全部設為公開」正確把「初賽」「第 2 輪」都切成公開(Switch 變灰、文字變「本輪公開」);點單一輪次的 Switch 把「第 2 輪」個別改回匿名,不影響其他輪次——批次跟個別覆寫都跟畫面顯示對得上,並且用 service_role 直接查 DB 確認 `rounds.is_anonymous` 三筆的值完全符合畫面(初賽/決賽 false,第2輪 true)。測完把三輪全部設回 `true`(預設匿名)。**逐輪匿名切換 UI 視覺驗證正式補完,不再是「只驗證資料層」。**
