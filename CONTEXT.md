@@ -9,8 +9,20 @@
 _Avoid_: 賽制(這個詞專指 FormatBlock 組合,不是比賽本身;混用會搞不清楚「建立一場賽事」跟「設定一輪賽制」是兩件事)
 
 **Organizer(主辦者)**:
-建立了至少一場 Competition 的使用者,對自己建立的 Competition(們)有管理權限(審核投稿、設定賽制、設定時程),權限範圍僅限於自己建立的 Competition,看不到、也管不到其他 Organizer 的比賽。任何登入使用者建立第一場 Competition 的當下就自動成為 Organizer,沒有額外的申請或審核步驟。
+建立了至少一場 Competition 的使用者,是該 Competition 的擁有者(ownership),對自己建立的 Competition(們)有完整管理權限(審核投稿、設定賽制、設定時程、評審評分、邀請 Collaborator),權限範圍僅限於自己建立的 Competition,看不到、也管不到其他 Organizer 的比賽。任何登入使用者建立第一場 Competition 的當下就自動成為 Organizer,沒有額外的申請或審核步驟(唯一的前置動作是完成一次性的主辦人身分檔案設定,自助完成,不用等誰核准)。一場 Competition 永遠只有一位 Organizer,ownership 目前不可轉讓(見 Collaborator)。個人檔案頁的「主辦過 N 場比賽」只計算 Organizer 身分,不計 Collaborator。
 _Avoid_: 管理員(不夠精確,容易跟 PlatformAdmin 搞混,兩者權限範圍完全不同)
+
+**Collaborator(協作者)**:
+被某場 Competition 的 Organizer 邀請、協助管理該場比賽的使用者(見 ADR-0003)。Collaborator 不是 Organizer,不擁有比賽,只被授予 Organizer 個別勾選的權限子集(審核投稿 / 賽制建立 / 時程設定 / 評審評分 / 邀請其他 Collaborator 這五項,各自獨立開關,不是全有或全無)。「邀請其他 Collaborator」本身也是一項可授予的權限,預設只有 Organizer 擁有。
+_Avoid_: 副主辦、管理員(這兩個詞暗示對等權限,容易誤導成方案 B「完全對等」,已在 ADR-0003 否決)
+
+**Comment(留言)**:
+任一登入使用者對某個 Submission 留下的文字回饋。不能對自己的作品留言(呼應 Vote 的「不能投自己」規則)。只有在該 Submission 所屬 Round 的身份已依 AnonymityMode 揭露後才開放留言,見 CommentEndorsement。
+_待確認_:留言本身要不要有審核/檢舉機制(例如惡意留言)——這輪沒有展開,先當作跟 Submission 審核無關的獨立功能。
+
+**CommentEndorsement(留言認可度)**:
+Submission 的原作者對一則 Comment 給予的 0–100% 認可度(預設 0%,未認可),只有原作者本人能設定,Organizer 不能代為認可。留言者當輪若同時是本輪的 Participant 且有通過審核的 Submission,會依認可度取得加分,計入該輪的 WeightedScoreItem(見 ADR-0004,不是不設上限的 BonusScoreItem)。留言者若當輪沒有投稿,留言/認可仍可進行,但沒有分數可加。
+_Avoid_: 按讚、愛心(這兩個詞暗示二元的是非,實際上是連續的 0–100% 槓桿,只是 UI 上可能提供「一鍵設 100%」的捷徑)
 
 **PlatformAdmin(平台管理員)**:
 與 Organizer 不同層級的角色,看得到全站所有 Competition,職責是處理 Report、排解跨比賽的爭議/濫用。不是自助開放的角色,由平台方手動指派(指派機制不在本輪範圍內展開)。
@@ -37,7 +49,7 @@ ScoringRule 底下的單一計分來源,分兩種性質:
 - **WeightedScoreItem(加權計分項目)**:計入排名,同一個 ScoringRule 底下所有 WeightedScoreItem 的權重總和固定要等於 100%(硬性規則,主辦設定時系統即時檢查)
 - **BonusScoreItem(額外加分項目)**:不受 100% 限制,直接加總在加權小計之上(例如魔王加給)
 
-範本庫項目:投票(系統自動)、外部投票(主辦匯入)、影片流量(系統排程抓取)、關鍵字/主題符合加分(系統文字比對,可能需人工確認邊界)、魔王加給(人工輸入,通常是 BonusScoreItem)。
+範本庫項目:投票(系統自動)、外部投票(主辦匯入)、影片流量(系統排程抓取)、關鍵字/主題符合加分(系統文字比對,可能需人工確認邊界)、魔王加給(人工輸入,通常是 BonusScoreItem)、留言認可加分(見 CommentEndorsement,系統依 CommentEndorsement 自動加總,是 WeightedScoreItem 不是 BonusScoreItem,建議權重 ≤5%)。
 _待確認_:「魔王加給」目前假設任何持有「內容評分」權限的人都能填,還沒確認要不要限定給特定的嘉賓/導師評審才能操作——非阻塞,先當通用評分權限處理,之後要收斂再改。
 
 **Participant(參賽者)**:

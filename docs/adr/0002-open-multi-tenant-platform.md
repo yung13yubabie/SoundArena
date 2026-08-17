@@ -1,5 +1,7 @@
 # 從單一主辦轉為開放多租戶平台
 
+> **「Organization 明確不做」這一條已被 [ADR-0003](./0003-collaborator-tiered-permissions.md) 推翻**——其餘決定(開放自建、兩層權限、Report 機制)仍然有效,不受影響。
+
 SPEC.md 初版假設 SoundArena 是站方自己主辦比賽的網站,審核後台/賽制建立/時程設定都是單一「管理員」角色在用。實測競品 songcontest.ai(同類 AI 音樂比賽平台)後發現其為開放平台——任何使用者都能自建比賽(「Organize a Contest」)、有自己的比賽管理後台(「My Contests」)、有比賽瀏覽/發現頁。經與使用者確認,SoundArena 改採同樣定位:任何登入使用者可自由建立 Competition 並成為其 Organizer,不設審核門檻(先求覆蓋率,濫用問題留給第二層機制處理)。
 
 隨之而來的必要變更:
