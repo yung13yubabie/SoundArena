@@ -125,14 +125,14 @@ C:\Users\LIN\Documents\github\SoundArena\
 
 ## 下一步(哪個先做,使用者可以自己選)
 
-1. **公開結果/排名頁跟 `/u/[id]` 名次已經做完**(08-16 深夜第四輪,見文件尾端「公開結果」段落)——`/results` 公開結果頁、`/u/[id]` 的名次都接上真資料了。
-2. **Discord guilds.join 補完**:使用者把 Bot 邀進 SoundArena Discord 伺服器,把伺服器 ID 填進 `.env.local` 跟 Vercel 的 `DISCORD_GUILD_ID`
-3. **`/admin/*` 的角色級權限保護**:proxy.ts 目前只檢查「有沒有登入」,沒檢查「這個人是不是這場比賽的 Organizer」——RLS 是實際擋著的那層,08-16 晚間那輪加了 UI 層的競賽切換器(只列自己的比賽)跟主辦身分設定閘門,但 route 層級的角色檢查還是沒做,見上方已知缺口 2
-4. **Cloudflare R2**:建 bucket、拿金鑰、接上音檔上傳/簽章下載
-5. **通知系統**:schema 還沒建,但訂閱範圍的鐵律已經定案並寫進 SPEC.md 第 6 節——**報名才會訂閱,單純建立/主辦比賽不會訂閱,訂閱可取消**,實作時直接照這條規則設計 schema,不用重新討論範圍。
-6. **LINE 登入**:使用者能申請的時候回來補
-7. **獨立評審邀請機制**:目前「評審評分」= Organizer 本人,沒有邀請第三方評審(如業界導師)的功能,SPEC.md 第5節/第7節都提到這個角色但沒有對應的 schema(`judges`/`judge_assignments` 之類的表)——需要時再設計,範圍還沒訂。
-8. **邀請連結整合模板訊息**:唯一還沒排進去的使用者原始需求——主辦分享比賽連結時,希望能帶出整合賽制/投票資訊的訊息模板,並支援 `{變數}` 填入——範圍還沒訂(模板存哪裡、哪些變數、UI 長怎樣都待設計)。FormatBlock 的 `config` 具體設定 UI 已在 08-16 深夜第五輪做完(限定主題輪的關鍵字/曲風),見文件尾端。
+1. **Collaborator + Comment/CommentEndorsement 的 UI 還沒做**(08-17 這輪剛做完 schema/RLS,見文件尾端)——資料庫層已經能正確擋權限,但沒有任何畫面:邀請協作者、勾選權限的介面、留言輸入框、原作認可的介面全部還沒有。「我的比賽」清單目前的查詢也還是只抓 `organizer_id = 我`,不會抓「我只是協作者」的比賽,需要另外改查詢邏輯。這是下一個最自然的動工項目,前面的概念定案(ADR-0003/0004)已經做完,直接進 UI 就好,不用再討論範圍。
+2. **公開結果/排名頁跟 `/u/[id]` 名次已經做完**(08-16 深夜第四輪,見文件尾端「公開結果」段落)——`/results` 公開結果頁、`/u/[id]` 的名次都接上真資料了。
+3. **Discord guilds.join 補完**:使用者把 Bot 邀進 SoundArena Discord 伺服器,把伺服器 ID 填進 `.env.local` 跟 Vercel 的 `DISCORD_GUILD_ID`
+4. **`/admin/*` 的角色級權限保護**:proxy.ts 目前只檢查「有沒有登入」,沒檢查「這個人是不是這場比賽的 Organizer 或 Collaborator」——RLS 是實際擋著的那層,但 route 層級的檢查還是沒做,見上方已知缺口 2
+5. **Cloudflare R2**:建 bucket、拿金鑰、接上音檔上傳/簽章下載
+6. **通知系統**:schema 還沒建,但訂閱範圍的鐵律已經定案並寫進 SPEC.md 第 6 節——**報名才會訂閱,單純建立/主辦比賽不會訂閱,訂閱可取消**,實作時直接照這條規則設計 schema,不用重新討論範圍。
+7. **LINE 登入**:使用者能申請的時候回來補
+8. **邀請連結整合模板訊息**:唯一還沒排進去的使用者原始需求——主辦分享比賽連結時,希望能帶出整合賽制/投票資訊的訊息模板,並支援 `{變數}` 填入——範圍還沒訂(模板存哪裡、哪些變數、UI 長怎樣都待設計)。
 
 ---
 
@@ -320,3 +320,45 @@ C:\Users\LIN\Documents\github\SoundArena\
 ### 已知缺口(這輪刻意沒做)
 
 - 其他 special 積木(業界導師制、敗部復活戰)跟部分 grouping 積木(隊伍賽的隊伍人數/計分方式、抽籤分組的組數)理論上也可能需要 config,但 SPEC.md 沒有具體寫出這些積木需要什麼欄位——這輪只做了 SPEC 明確定義的「限定主題輪」,沒有替其他積木發明 config 欄位形狀,避免猜錯結構之後要重改。
+
+---
+
+## 08-17 追加:Collaborator + Comment/CommentEndorsement——schema 跟 RLS(用 mattpocock-skills 先做概念定案)
+
+使用者提出兩個會動到既有架構決定的新想法(比賽協作、留言認可加分),這輪先用 `mattpocock-skills:domain-modeling` 把概念釘死、寫進 `CONTEXT.md` + 兩份新 ADR,確認理解正確後才動手寫 schema。過程用 `AskUserQuestion` 問清楚了幾個關鍵分岔(不是自己猜),完整脈絡見 `docs/adr/0003-collaborator-tiered-permissions.md`、`docs/adr/0004-comment-endorsement-scoring.md`、`CONTEXT.md` 的 Collaborator/Comment/CommentEndorsement 詞條——**新 session 要接手這兩個功能,先讀這三個檔案,不要只看下面的摘要**。
+
+### 這輪做了什麼(只有 schema/RLS,沒有 UI——使用者明確要求先做這塊)
+
+- **`competition_collaborators` 表**:一場比賽仍然只有一位 Organizer(擁有者,不可轉讓),但可以邀請任意數量 Collaborator,五項權限(`can_review`/`can_edit_format`/`can_edit_schedule`/`can_judge`/`can_invite`)各自獨立勾選,對應現有五個管理後台頁面。
+- **四個 SECURITY DEFINER helper function**:`is_competition_organizer`、`is_competition_collaborator`、`has_collaborator_permission(competition_id, permission)`、`can_manage_competition(competition_id, permission)`(= 是 Organizer 或有對應權限的 Collaborator)。全部用 SECURITY DEFINER 是因為這些 function 會被「別的表的 policy」跟「`competition_collaborators` 自己的 policy」同時呼叫,後者如果用行內 subquery 查自己的表,會踩到 `20260816100724` 那次修過的無限遞迴同一個坑。
+- **`competition_collaborators` 自己的 RLS**:Organizer 永遠能管;有 `invite` 權限的 Collaborator 能邀人,但**只能給出自己也有的權限子集**(不能讓一個只有 review 的人邀進一個 judge 全開的人)——這條用 WITH CHECK 直接比對新增列的欄位值跟邀請者自己的權限,已用真實兩個帳號的 session 測過會擋。權限異動(改別人能碰什麼)跟移除協作者只有 Organizer 能做,不下放給 invite 權限,避免協作者互相調高彼此權限。
+- **既有九張表的 policy 全部改過**(`competitions`/`rounds`/`scoring_rules`/`score_items`/`round_format_blocks`/`registrations`/`submissions`/`votes`/`submission_scores`):原本寫死「只有 organizer_id = auth.uid()」的地方全部換成 `can_manage_competition(id, '對應權限')`,權限對應到現有管理頁面的分工(`format`=賽制建立、`schedule`=時程設定、`review`=審核後台、`judge`=評審評分)。`competitions`/`rounds` 因為同時被 format 頁跟 schedule 頁寫,兩種權限都放行(RLS 是列級,沒辦法只開放特定欄位給特定權限,這是接受的簡化)。
+- **`comments` 表 + `CommentEndorsement`**:任何登入使用者可留言(不能留給自己的作品,trigger 擋,跟 votes 的自投票檢查同一套邏輯);原作用 `endorsement_percent`(0–100)認可,只有原作能改,而且**欄位級 GRANT/REVOKE 鎖死只能改 `endorsement_percent`/`endorsed_at`**,不能連留言內容、commenter_id 一起改掉(這個坑跟 profiles 那次一樣,這次直接把「要 revoke from public 不是只 revoke from authenticated」的教訓套上去,沒有再繞一次彎路)。
+- **`round_identity_revealed(round_id)` 抽成共用 function**:`get_round_submissions` 原本自己內嵌一份揭露邏輯(fully_public/per_round_anonymous/full_anonymous_until_final 三選一),這輪抽出來獨立成一個 function,`comments` 的可讀/可寫都靠這個判斷——該輪身份還沒依匿名規則揭露前,留言/認可整個不開放,避免匿名投票階段被留言干擾或洩漏身份。
+- **`score_item_templates` 新增 `comment_endorsement` 範本**,`get_round_scores` 認得這個 key 時,算法是:**留言者當輪對「別人作品」留言、且被認可的百分比加總,算在留言者自己那一輪的投稿上**(不是算在被留言的那篇)——直接呼應 ADR-0004。
+
+### 端到端實測過(用真實 session,不是只用 service_role)
+
+`service_role` 會繞過所有 RLS,測不出 RLS 到底擋不擋得住——這輪用 Supabase Admin API 幫兩個測試帳號(既有的開發帳號 `linpcw@gmail.com`,跟上一輪建立的假帳號「測試選手二號」)各設一組臨時密碼,換成真的 `access_token`,拿這兩個真實身份直接打 REST API 測:
+
+1. 加入協作前,「測試選手二號」改別人投稿審核狀態 → 0 rows(擋下)
+2. 授予 `can_review=true`(`can_judge=false`)後,同一個改動 → 成功;寫 `submission_scores` → 403(judge 權限沒給,正確擋下)
+3. 授予 `can_invite=true` 後,嘗試邀請一個帶 `can_judge=true` 的新協作者(自己沒有 judge)→ 403;改成只給 `can_review=true`(自己有的)→ 201 成功
+4. 留言給自己的作品 → trigger 擋下(`cannot comment on your own submission`)
+5. 留言給對方作品 → 成功;原作(組織者身份)認可 80% → 成功;原作嘗試順便改留言內容本身 → 403(欄位授權擋下,不是只有 RLS 列級擋)
+6. 暫時把 `comment_endorsement` 加進真實 ScoringRule 驗證 `get_round_scores` 真的會算出 80.00 算在留言者自己的投稿上,驗證完立刻用另一個 migration 復原成原本的 40/25/35,不留測試治具痕跡在正式資料裡
+
+已 commit(`48a3f20`)、push。**沒有 `vercel deploy`**——這輪完全沒碰 `web/` 底下的程式碼,純資料庫層。
+
+### 遺留的測試帳號密碼(僅供下次測試用,不是真的登入方式)
+
+- `linpcw@gmail.com` / `Test-Password-Organizer-2026!`——這是使用者自己的真實帳號,設了一組密碼登入方式,**不影響原本的 Google OAuth 登入**,單純多一種登入管道,方便下次測試 RLS 時不用再繞去改瀏覽器 session。
+- `test-second-contestant@soundarena.test` / `Test-Password-Collab-2026!`——上一輪建立的假帳號,現在同時是「深夜擂台 EP.04」的參賽者(`測試選手二號`)跟該場比賽的 Collaborator(`can_review=true`, `can_invite=true`)。
+- 「深夜擂台 EP.04」的 `comments` 表裡留著一筆真實的留言+認可(測試選手二號留言給夜遊者的「抽象善良」,認可度 80%)——這是功能展示資料,不是測試治具,故意留著。
+
+### 已知缺口(這輪刻意沒做,下一步就是這些)
+
+- **完全沒有 UI**:邀請協作者的介面、勾選五項權限的畫面、留言輸入框、原作認可(勾選/拉%數)的介面全部沒有。
+- **「我的比賽」清單查詢還沒更新**:`/admin/format`、`/admin/schedule`、`/admin/review`、`/judge` 這幾頁目前抓「我主辦的比賽」都還是 `.eq("organizer_id", userId)`,不會抓到「我只是協作者」的比賽——RLS 已經會放行讀取,但查詢條件沒把 Collaborator 涵蓋進去,協作者現在即使被邀請了也在 UI 上找不到那場比賽,要另外改查詢邏輯(例如改成先查 `competition_collaborators` 拿到有權限的 competition_id 清單,再合併查詢)。
+- **`comment_endorsement` 沒有出現在 `/admin/format` 的計分項目選單**:`score_item_templates` 已經有這個範本,但 `admin/format` 頁面挑選計分項目的下拉選單/邏輯目前是寫死 `DEFAULT_SCORE_ITEMS`(見 `admin/format/actions.ts`)在建立比賽時自動塞入投票/影片流量/外部投票三項,沒有「從範本庫挑選啟用哪些項目」的通用 UI——這其實是比 comment_endorsement 更早就存在的既有缺口(CONTEXT.md 裡「魔王加給」也一樣沒有介面可以啟用),不是這輪新產生的,但這輪讓它更明顯了。
+- **防灌水機制沒有實作**:ADR-0004 提到的「兩個參賽者互相認可拉抬分數」風險,這輪只設了保守權重(5%)當預設建議值,沒有系統面的偵測或強制上限,之後真的觀察到濫用再處理。
