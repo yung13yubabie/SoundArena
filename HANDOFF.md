@@ -125,7 +125,7 @@ C:\Users\LIN\Documents\github\SoundArena\
 
 ## 下一步(哪個先做,使用者可以自己選)
 
-1. **Collaborator + Comment/CommentEndorsement 的 UI 還沒做**(08-17 這輪剛做完 schema/RLS,見文件尾端)——資料庫層已經能正確擋權限,但沒有任何畫面:邀請協作者、勾選權限的介面、留言輸入框、原作認可的介面全部還沒有。「我的比賽」清單目前的查詢也還是只抓 `organizer_id = 我`,不會抓「我只是協作者」的比賽,需要另外改查詢邏輯。這是下一個最自然的動工項目,前面的概念定案(ADR-0003/0004)已經做完,直接進 UI 就好,不用再討論範圍。
+1. **Collaborator + Comment/CommentEndorsement + 逐輪匿名的 UI 還沒做**(08-17 這輪 schema/RLS 全部做完,見文件尾端「08-17」兩個段落,含 ADR-0003/0004/0005/0006)——資料庫層已經能正確擋權限、正確隱藏留言者身份,但沒有任何畫面:邀請協作者、勾選權限、留言輸入框、原作認可、「全部套用+個別調整」的逐輪匿名切換全部還沒有。「我的比賽」清單目前的查詢也還是只抓 `organizer_id = 我`,不會抓「我只是協作者」的比賽,需要另外改查詢邏輯。`CreateCompetitionForm`/`CompetitionMetaForm` 的匿名三選一下拉選單也要在同一輪拔掉,換成新的逐輪切換。這是下一個最自然的動工項目,概念定案已經做完,直接進 UI 就好,不用再討論範圍。
 2. **公開結果/排名頁跟 `/u/[id]` 名次已經做完**(08-16 深夜第四輪,見文件尾端「公開結果」段落)——`/results` 公開結果頁、`/u/[id]` 的名次都接上真資料了。
 3. **Discord guilds.join 補完**:使用者把 Bot 邀進 SoundArena Discord 伺服器,把伺服器 ID 填進 `.env.local` 跟 Vercel 的 `DISCORD_GUILD_ID`
 4. **`/admin/*` 的角色級權限保護**:proxy.ts 目前只檢查「有沒有登入」,沒檢查「這個人是不是這場比賽的 Organizer 或 Collaborator」——RLS 是實際擋著的那層,但 route 層級的檢查還是沒做,見上方已知缺口 2
@@ -362,3 +362,45 @@ C:\Users\LIN\Documents\github\SoundArena\
 - **「我的比賽」清單查詢還沒更新**:`/admin/format`、`/admin/schedule`、`/admin/review`、`/judge` 這幾頁目前抓「我主辦的比賽」都還是 `.eq("organizer_id", userId)`,不會抓到「我只是協作者」的比賽——RLS 已經會放行讀取,但查詢條件沒把 Collaborator 涵蓋進去,協作者現在即使被邀請了也在 UI 上找不到那場比賽,要另外改查詢邏輯(例如改成先查 `competition_collaborators` 拿到有權限的 competition_id 清單,再合併查詢)。
 - **`comment_endorsement` 沒有出現在 `/admin/format` 的計分項目選單**:`score_item_templates` 已經有這個範本,但 `admin/format` 頁面挑選計分項目的下拉選單/邏輯目前是寫死 `DEFAULT_SCORE_ITEMS`(見 `admin/format/actions.ts`)在建立比賽時自動塞入投票/影片流量/外部投票三項,沒有「從範本庫挑選啟用哪些項目」的通用 UI——這其實是比 comment_endorsement 更早就存在的既有缺口(CONTEXT.md 裡「魔王加給」也一樣沒有介面可以啟用),不是這輪新產生的,但這輪讓它更明顯了。
 - **防灌水機制沒有實作**:ADR-0004 提到的「兩個參賽者互相認可拉抬分數」風險,這輪只設了保守權重(5%)當預設建議值,沒有系統面的偵測或強制上限,之後真的觀察到濫用再處理。
+
+---
+
+## 08-17 追加 2:留言匿名修正(ADR-0005)+ 匿名模式改逐輪設定(ADR-0006)
+
+上一段做完 schema/RLS 後,使用者看過設計馬上回饋兩個修正,一樣先用 `mattpocock-skills:domain-modeling` 把新決策寫進 `CONTEXT.md` + 兩份新 ADR(`0005-comment-visible-identity-hidden-until-reveal.md`、`0006-per-round-anonymity-toggle.md`),`0004` 補了指向 `0005` 的 superseded 註記。**新 session 接手這兩塊,一樣先讀 ADR 全文,不要只看摘要。**
+
+### 修正 1:留言認可加分歸屬——確認原本就做對了
+
+使用者重申「加在留言者身上」,核對後這就是這輪一開始的設計(`get_round_scores` 的 `comment_endorsement` 分支算的是「留言者自己那輪的投稿」),沒有改動。
+
+### 修正 2(ADR-0005):留言內容隨時可見,只有身份延後揭露
+
+原本整個 Comment 功能(讀/寫/認可)都被 `round_identity_revealed()` 擋住,使用者確認這太保守——他想要的是「可以在個人狀態頁、投票紀錄旁邊隨時看到留言」,只有「這是誰寫的」才該延後揭露,而且**連原作自己審核要不要認可時都看不到是誰**(呼應 JudgeBoard 對主辦本人也一律匿名的既有精神,不開特例)。
+
+改法:
+- `comments` 的 select/insert policy 從「該輪身份已揭露」改成「該場比賽公開 + 該投稿已通過審核」(後面這個 approved 限制是這輪測試時才發現的漏洞,原本設計完全沒檢查投稿審核狀態,理論上可以留言給還在待審核甚至已退回的投稿——一併補上)
+- `commenter_id` 這個欄位改成**誰都不能直接讀**(欄位級 REVOKE,連 Organizer/Collaborator 都不行),身份只能透過新的 `get_submission_comments(submission_id)` function 讀——這個 function 會依 `round_identity_revealed()` 決定要不要帶出 `commenter_display_name`,但**留言者自己一定看得到自己的**(`is_own_comment` 欄位 + 不受揭露規則限制),避免使用者連自己寫的留言都認不出來
+- **實測直接踩到一個真實的踩坑點,已經寫進上面的 commit message,這裡再提醒一次**:用 `Prefer: return=representation`(對應 supabase-js 預設的 `.select()`)插入留言會收到 `403 permission denied`——這是**預期行為**,不是 bug,因為 PostgREST 想把 `commenter_id` 一起 return 回來,而那個欄位誰都不給讀。**之後寫 `submitComment` 這類 Server Action 時,insert 完不要用預設 `.select()`,要嘛不 select、要嘛明確列出允許的欄位**,不然會誤以為留言送出失敗。
+
+### 修正 3(ADR-0006):AnonymityMode 從 Competition 三選一改成 Round 逐輪開關
+
+使用者不要「全程匿名決賽才公開 / 單輪匿名 / 全程公開」這三選一,改成:每個 Round 自己一個「是否匿名」開關,Competition 層級有個「全部套用」的批次動作方便一次設定,設完仍可個別調整某一輪。揭露規則因此簡化成一條:**該輪標記匿名 → 投票截止才揭露該輪身份;沒標記匿名 → 一開始就公開**,不再需要判斷「是不是決賽」。
+
+改法:
+- 新增 `rounds.is_anonymous boolean not null default true`
+- `round_identity_revealed()` 整個換掉判斷邏輯,不再讀 `competitions.anonymity_mode`
+- **`competitions.anonymity_mode` 這個欄位刻意留著,但現在沒有任何邏輯會讀它**——沒有直接砍掉是因為 `CreateCompetitionForm`/`CompetitionMetaForm`/對應的 Server Action 目前還在寫入這欄位,這輪只做 schema/RLS 不碰 UI。**下一輪做「全部套用+個別調整」畫面時,要同時把這個欄位、舊的三選一下拉選單、寫入它的程式碼一起拔掉**,不要讓新舊兩套機制同時存在造成混淆。
+
+### 端到端實測過
+
+用上一輪已經設好臨時密碼的兩個真實帳號 session(組織者本人 + 測試選手二號)測:
+1. `get_round_submissions`/`get_round_scores` 對「初賽」(已揭露輪次)重新跑一次,輸出跟改動前完全一致——確認 `round_identity_revealed()` 換掉判斷邏輯後沒有 regression
+2. 把「決賽」(還在匿名、投票還沒截止)的一筆測試投稿臨時改成 approved,拿測試選手二號的 session 留言 → 成功(不需要等揭露)
+3. 用 `get_submission_comments` 分別以三種身份查同一則留言:**匿名訪客**(用 anon key,沒登入)→ 看得到內容,身份 null;**原作本人**(組織者)→ 一樣看得到內容,身份一樣是 null(刻意不開特例);**留言者自己**→ 看得到自己的暱稱,`is_own_comment=true`。三種結果都對得上設計
+4. 測完把臨時改動的投稿狀態改回 `rejected`,不留測試痕跡
+
+已 commit(`713ac69`)、push。**沒有 `vercel deploy`**——這兩輪全部是資料庫層改動,沒碰 `web/`。
+
+### 已知的小瑕疵(不影響功能,值得記一下)
+
+- `get_submission_comments` 給完全匿名訪客(anon key、沒登入)的 `is_own_comment` 欄位回傳 `null` 不是 `false`(因為 SQL 的 `commenter_id = auth.uid()`,`auth.uid()` 是 null 時比較結果就是 null)——UI 端把 null 當 false 處理就好,功能上沒問題,只是型別上不夠乾淨,之後有空再包一層 `coalesce(...,false)`。
