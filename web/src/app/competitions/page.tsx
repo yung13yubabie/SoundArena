@@ -17,6 +17,8 @@ export default async function CompetitionsPage({
 }) {
   const { competition: competitionId } = await searchParams;
   const supabase = await createClient();
+  const { data: claims } = await supabase.auth.getClaims();
+  const authed = !!claims?.claims;
 
   if (!competitionId) {
     const { data: competitions } = await supabase
@@ -27,7 +29,7 @@ export default async function CompetitionsPage({
 
     return (
       <div>
-        <SiteHeader authed={false} active="competitions" />
+        <SiteHeader authed={authed} active="competitions" />
         <div className="mx-auto max-w-[1180px] px-11 pt-10 pb-24">
           <div className="mb-7">
             <div className="mb-2 text-xs uppercase tracking-widest text-accent">Screen · 比賽</div>
@@ -65,7 +67,7 @@ export default async function CompetitionsPage({
   if (!competition || !competition.is_public) {
     return (
       <div>
-        <SiteHeader authed={false} active="competitions" />
+        <SiteHeader authed={authed} active="competitions" />
         <div className="mx-auto max-w-[1180px] px-11 pt-10 pb-24">
           <EmptyState icon="alert" title="找不到這場比賽" sub="連結可能有誤，回活動頁重新找一次" />
         </div>
@@ -101,6 +103,11 @@ export default async function CompetitionsPage({
   }));
 
   return (
-    <CompetitionBrowser competitionId={competition.id} competitionName={competition.name} rounds={browserRounds} />
+    <CompetitionBrowser
+      competitionId={competition.id}
+      competitionName={competition.name}
+      rounds={browserRounds}
+      authed={authed}
+    />
   );
 }

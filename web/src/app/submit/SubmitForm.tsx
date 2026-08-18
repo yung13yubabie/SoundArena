@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { SiteHeader } from "@/components/SiteHeader";
 import { Icon } from "@/lib/icons";
 import { submitEntry, verifySunoSharer } from "./actions";
@@ -92,8 +93,14 @@ export function SubmitForm({ options }: { options: RoundOption[] }) {
           <div className="glass max-w-[560px] p-7">
             <div className="flex items-center gap-2.5 rounded-[10px] border border-ok/30 bg-ok/10 p-3.5 text-[12.5px] text-ok">
               <Icon name="check" />
-              「{title}」已送出，狀態轉為「待人工審核」，可以在「個人狀態」頁查看進度
+              「{title}」已送出，狀態轉為「待人工審核」
             </div>
+            <Link
+              href="/status"
+              className="mt-3.5 inline-block rounded-[10px] bg-gradient-to-r from-[#ff9457] via-accent to-accent-2 px-4.5 py-2.5 text-[13.5px] font-semibold text-[#1a0e08]"
+            >
+              前往「我的狀態」查看進度 →
+            </Link>
           </div>
         </div>
       </div>

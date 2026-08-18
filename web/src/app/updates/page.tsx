@@ -4,14 +4,14 @@ import { createClient } from "@/lib/supabase/server";
 
 export default async function UpdatesPage() {
   const supabase = await createClient();
-  const { data: entries } = await supabase
-    .from("changelog_entries")
-    .select("id, title, description, published_at")
-    .order("published_at", { ascending: false });
+  const [{ data: entries }, { data: claims }] = await Promise.all([
+    supabase.from("changelog_entries").select("id, title, description, published_at").order("published_at", { ascending: false }),
+    supabase.auth.getClaims(),
+  ]);
 
   return (
     <div>
-      <SiteHeader authed={false} />
+      <SiteHeader authed={!!claims?.claims} />
       <div className="mx-auto max-w-[1180px] px-11 pt-10 pb-24">
         <div className="mb-7">
           <div className="mb-2 text-xs uppercase tracking-widest text-accent">更新記錄</div>

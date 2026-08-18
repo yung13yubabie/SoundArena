@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { SiteHeader } from "@/components/SiteHeader";
 import { Icon } from "@/lib/icons";
 import { registerForCompetition } from "./actions";
@@ -46,8 +47,14 @@ export function RegisterForm({ competitionId, competitionName, existing, registr
           <div className="glass mt-7 max-w-[560px] p-7">
             <div className="flex items-center gap-2.5 rounded-[10px] border border-ok/30 bg-ok/10 p-3.5 text-[12.5px] text-ok">
               <Icon name="check" />
-              已報名「{shown.display_name}」，Suno 帳號 {shown.suno_handle} 已登記，可以前往「投稿」頁提交作品了
+              已報名「{shown.display_name}」，Suno 帳號 {shown.suno_handle} 已登記
             </div>
+            <Link
+              href="/submit"
+              className="mt-3.5 inline-block rounded-[10px] bg-gradient-to-r from-[#ff9457] via-accent to-accent-2 px-4.5 py-2.5 text-[13.5px] font-semibold text-[#1a0e08]"
+            >
+              前往投稿頁提交作品 →
+            </Link>
           </div>
         </div>
       </div>

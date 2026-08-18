@@ -38,7 +38,7 @@ function organizerName(organizer: Competition["organizer"]): string {
   return profile?.display_name || "未命名主辦方";
 }
 
-export function DiscoveryList({ competitions }: { competitions: Competition[] }) {
+export function DiscoveryList({ competitions, authed }: { competitions: Competition[]; authed: boolean }) {
   const [filter, setFilter] = useState<"all" | Status>("all");
 
   const filtered = useMemo(() => {
@@ -48,7 +48,7 @@ export function DiscoveryList({ competitions }: { competitions: Competition[] })
 
   return (
     <div>
-      <SiteHeader authed={false} />
+      <SiteHeader authed={authed} active="events" />
       <div className="mx-auto max-w-[1180px] px-11 pt-10 pb-24">
         <div className="mb-7">
           <div className="mb-2 text-xs uppercase tracking-widest text-accent">Screen · Discovery（不需登入）</div>

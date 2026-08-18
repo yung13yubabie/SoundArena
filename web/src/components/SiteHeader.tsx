@@ -30,25 +30,19 @@ export function SiteHeader({ authed = true, active, roleLabel }: SiteHeaderProps
         <span className="text-[14.5px] font-semibold">聲擂 SoundArena</span>
       </div>
 
-      {authed ? (
-        <nav className="flex flex-1 gap-5">
-          {NAV_ITEMS.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`border-b-2 py-1.5 text-[13px] transition-colors ${
-                active === item.key
-                  ? "border-accent text-ink"
-                  : "border-transparent text-ink-dim hover:text-ink"
-              }`}
-            >
-              {item.label}
-            </Link>
-          ))}
-        </nav>
-      ) : (
-        <div className="flex-1" />
-      )}
+      <nav className="flex flex-1 gap-5">
+        {NAV_ITEMS.map((item) => (
+          <Link
+            key={item.href}
+            href={item.href}
+            className={`border-b-2 py-1.5 text-[13px] transition-colors ${
+              active === item.key ? "border-accent text-ink" : "border-transparent text-ink-dim hover:text-ink"
+            }`}
+          >
+            {item.label}
+          </Link>
+        ))}
+      </nav>
 
       <div className="flex items-center gap-3">
         <Link href="/updates" className="text-[12.5px] text-ink-faint transition-colors hover:text-ink">
