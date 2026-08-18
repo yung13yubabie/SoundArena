@@ -47,8 +47,13 @@ export default async function AdminFormatPage({
   if (!claims?.claims?.sub) redirect("/login");
   const userId = claims.claims.sub as string;
 
-  const { data: profile } = await supabase.from("profiles").select("host_setup_completed").eq("id", userId).maybeSingle();
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("host_setup_completed, is_platform_admin")
+    .eq("id", userId)
+    .maybeSingle();
   if (!profile?.host_setup_completed) redirect("/admin/profile");
+  const isPlatformAdmin = profile.is_platform_admin ?? false;
 
   const myCompetitions = await getManageableCompetitions(supabase, "format");
 
@@ -57,7 +62,7 @@ export default async function AdminFormatPage({
     : myCompetitions[0];
 
   if (!competition) {
-    return <CreateCompetitionForm />;
+    return <CreateCompetitionForm isPlatformAdmin={isPlatformAdmin} />;
   }
 
   const competitionList = myCompetitions.map((c) => ({ id: c.id, name: c.name }));
@@ -135,6 +140,7 @@ export default async function AdminFormatPage({
       rounds={roundData}
       formatBlockCatalog={formatBlockCatalog}
       competitionList={competitionList}
+      isPlatformAdmin={isPlatformAdmin}
     />
   );
 }

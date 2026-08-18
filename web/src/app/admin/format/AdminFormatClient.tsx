@@ -446,6 +446,7 @@ interface AdminFormatClientProps {
   rounds: RoundData[];
   formatBlockCatalog: FormatBlockCatalog;
   competitionList: Array<{ id: string; name: string }>;
+  isPlatformAdmin?: boolean;
 }
 
 export function AdminFormatClient({
@@ -455,11 +456,17 @@ export function AdminFormatClient({
   rounds,
   formatBlockCatalog,
   competitionList,
+  isPlatformAdmin = false,
 }: AdminFormatClientProps) {
   const [isPending, startTransition] = useTransition();
 
   return (
-    <AdminShell active="format" competitions={competitionList} activeCompetitionId={competition.id}>
+    <AdminShell
+      active="format"
+      competitions={competitionList}
+      activeCompetitionId={competition.id}
+      isPlatformAdmin={isPlatformAdmin}
+    >
       <div className="mb-7">
         <div className="mb-2 text-xs uppercase tracking-widest text-accent">Screen · 賽制建立</div>
         <h1 className="font-display text-[30px]">建立比賽</h1>

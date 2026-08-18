@@ -61,11 +61,15 @@ export default async function RegisterPage({
     );
   }
 
-  const { data: competition } = await supabase
-    .from("competitions")
-    .select("id, name, registration_closes_at")
-    .eq("id", competitionId)
-    .maybeSingle();
+  const [{ data: competition }, { data: existing }] = await Promise.all([
+    supabase.from("competitions").select("id, name, registration_closes_at").eq("id", competitionId).maybeSingle(),
+    supabase
+      .from("registrations")
+      .select("id, display_name, suno_handle")
+      .eq("competition_id", competitionId)
+      .eq("user_id", userId)
+      .maybeSingle(),
+  ]);
 
   if (!competition) {
     return (
@@ -77,13 +81,6 @@ export default async function RegisterPage({
       </div>
     );
   }
-
-  const { data: existing } = await supabase
-    .from("registrations")
-    .select("id, display_name, suno_handle")
-    .eq("competition_id", competition.id)
-    .eq("user_id", userId)
-    .maybeSingle();
 
   const registrationClosed =
     !!competition.registration_closes_at && new Date(competition.registration_closes_at) < new Date();

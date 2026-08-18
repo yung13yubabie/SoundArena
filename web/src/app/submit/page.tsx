@@ -31,23 +31,24 @@ export default async function SubmitPage() {
   const regs = (registrations ?? []) as unknown as RegistrationRow[];
   const competitionIds = regs.map((r) => r.competition_id);
 
-  const { data: rounds } = competitionIds.length
-    ? await supabase
-        .from("rounds")
-        .select("id, name, competition_id")
-        .in("competition_id", competitionIds)
-        .eq("allows_new_submissions", true)
-    : { data: [] };
-
-  const { data: existingSubmissions } = regs.length
-    ? await supabase
-        .from("submissions")
-        .select("round_id, registration_id")
-        .in(
-          "registration_id",
-          regs.map((r) => r.id),
-        )
-    : { data: [] };
+  const [{ data: rounds }, { data: existingSubmissions }] = await Promise.all([
+    competitionIds.length
+      ? supabase
+          .from("rounds")
+          .select("id, name, competition_id")
+          .in("competition_id", competitionIds)
+          .eq("allows_new_submissions", true)
+      : Promise.resolve({ data: [] as { id: string; name: string; competition_id: string }[] }),
+    regs.length
+      ? supabase
+          .from("submissions")
+          .select("round_id, registration_id")
+          .in(
+            "registration_id",
+            regs.map((r) => r.id),
+          )
+      : Promise.resolve({ data: [] as { round_id: string; registration_id: string }[] }),
+  ]);
 
   const roundIds = (rounds ?? []).map((r) => r.id);
   const { data: themedBlocks } = roundIds.length

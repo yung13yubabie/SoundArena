@@ -11,7 +11,7 @@ export default async function AdminProfilePage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("display_name, bio, social_link, featured_track_url, host_setup_completed")
+    .select("display_name, bio, social_link, featured_track_url, host_setup_completed, is_platform_admin")
     .eq("id", userId)
     .maybeSingle();
 
@@ -21,7 +21,7 @@ export default async function AdminProfilePage() {
     .eq("organizer_id", userId);
 
   return (
-    <AdminShell active="profile">
+    <AdminShell active="profile" isPlatformAdmin={profile?.is_platform_admin ?? false}>
       <div className="mb-7">
         <div className="mb-2 text-xs uppercase tracking-widest text-accent">Screen · 主辦人身分</div>
         <h1 className="font-display text-[30px]">設定你的主持人檔案</h1>

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { AdminShell } from "@/components/AdminShell";
 import { createCompetition } from "./actions";
 
-export function CreateCompetitionForm() {
+export function CreateCompetitionForm({ isPlatformAdmin = false }: { isPlatformAdmin?: boolean }) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -20,7 +20,7 @@ export function CreateCompetitionForm() {
   }
 
   return (
-    <AdminShell active="format">
+    <AdminShell active="format" isPlatformAdmin={isPlatformAdmin}>
       <div className="mb-7">
         <div className="mb-2 text-xs uppercase tracking-widest text-accent">Screen · 賽制建立</div>
         <h1 className="font-display text-[30px]">建立你的第一場比賽</h1>

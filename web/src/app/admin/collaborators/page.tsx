@@ -57,8 +57,13 @@ export default async function AdminCollaboratorsPage({
   if (!claims?.claims?.sub) redirect("/login");
   const userId = claims.claims.sub as string;
 
-  const { data: profile } = await supabase.from("profiles").select("host_setup_completed").eq("id", userId).maybeSingle();
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("host_setup_completed, is_platform_admin")
+    .eq("id", userId)
+    .maybeSingle();
   if (!profile?.host_setup_completed) redirect("/admin/profile");
+  const isPlatformAdmin = profile.is_platform_admin ?? false;
 
   const myCompetitions = await getManageableCompetitions(supabase, "invite");
 
@@ -69,7 +74,7 @@ export default async function AdminCollaboratorsPage({
 
   if (!competition) {
     return (
-      <AdminShell active="collaborators">
+      <AdminShell active="collaborators" isPlatformAdmin={isPlatformAdmin}>
         <div className="mb-7">
           <div className="mb-2 text-xs uppercase tracking-widest text-accent">Screen · 協作者管理</div>
           <h1 className="font-display text-[30px]">還沒有比賽可以管理協作者</h1>
@@ -110,7 +115,12 @@ export default async function AdminCollaboratorsPage({
       : NO_PERMISSIONS;
 
   return (
-    <AdminShell active="collaborators" competitions={competitionList} activeCompetitionId={competition.id}>
+    <AdminShell
+      active="collaborators"
+      competitions={competitionList}
+      activeCompetitionId={competition.id}
+      isPlatformAdmin={isPlatformAdmin}
+    >
       <div className="mb-7">
         <div className="mb-2 text-xs uppercase tracking-widest text-accent">Screen · 協作者管理</div>
         <h1 className="font-display text-[30px]">協作者 — {competition.name}</h1>

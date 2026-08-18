@@ -41,8 +41,13 @@ export default async function JudgePage({
   const userId = claims?.claims?.sub as string | undefined;
   if (!userId) redirect("/login");
 
-  const { data: profile } = await supabase.from("profiles").select("host_setup_completed").eq("id", userId).maybeSingle();
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("host_setup_completed, is_platform_admin")
+    .eq("id", userId)
+    .maybeSingle();
   if (!profile?.host_setup_completed) redirect("/admin/profile");
+  const isPlatformAdmin = profile.is_platform_admin ?? false;
 
   const myCompetitions = await getManageableCompetitions(supabase, "judge");
 
@@ -54,7 +59,7 @@ export default async function JudgePage({
 
   if (!competition) {
     return (
-      <AdminShell active="judge">
+      <AdminShell active="judge" isPlatformAdmin={isPlatformAdmin}>
         <div className="mb-7">
           <div className="mb-2 text-xs uppercase tracking-widest text-accent">Screen · 評審評分</div>
           <h1 className="font-display text-[30px]">還沒有比賽可以評分</h1>
@@ -104,7 +109,12 @@ export default async function JudgePage({
 
   if (!round) {
     return (
-      <AdminShell active="judge" competitions={competitionList} activeCompetitionId={competition.id}>
+      <AdminShell
+      active="judge"
+      competitions={competitionList}
+      activeCompetitionId={competition.id}
+      isPlatformAdmin={isPlatformAdmin}
+    >
         {header}
         <EmptyState icon="inbox" title="這場比賽還沒有任何輪次" sub="先到「賽制建立」頁新增輪次" />
       </AdminShell>
@@ -137,7 +147,12 @@ export default async function JudgePage({
 
   if (!scoringRule || scoreItems.length === 0) {
     return (
-      <AdminShell active="judge" competitions={competitionList} activeCompetitionId={competition.id}>
+      <AdminShell
+      active="judge"
+      competitions={competitionList}
+      activeCompetitionId={competition.id}
+      isPlatformAdmin={isPlatformAdmin}
+    >
         {header}
         <EmptyState icon="inbox" title="這一輪還沒有設定計分項目" sub="先到「賽制建立」頁設定 Competition 預設或本輪的 ScoringRule" />
       </AdminShell>
@@ -174,7 +189,12 @@ export default async function JudgePage({
   });
 
   return (
-    <AdminShell active="judge" competitions={competitionList} activeCompetitionId={competition.id}>
+    <AdminShell
+      active="judge"
+      competitions={competitionList}
+      activeCompetitionId={competition.id}
+      isPlatformAdmin={isPlatformAdmin}
+    >
       {header}
       {submissions.length === 0 ? (
         <EmptyState icon="inbox" title="目前沒有待評分作品" sub="等待本輪投稿審核完成後,待評分清單才會出現作品" />

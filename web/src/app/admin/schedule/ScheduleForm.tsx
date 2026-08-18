@@ -13,6 +13,7 @@ interface ScheduleFormProps {
   roundIds: string[];
   initial: Dates;
   competitionList: Array<{ id: string; name: string }>;
+  isPlatformAdmin?: boolean;
 }
 
 const PHASE_FIELDS: Array<{ label: string; startKey: keyof Dates; endKey: keyof Dates }> = [
@@ -22,7 +23,14 @@ const PHASE_FIELDS: Array<{ label: string; startKey: keyof Dates; endKey: keyof 
   { label: "公布期", startKey: "announcementStart", endKey: "announcementEnd" },
 ];
 
-export function ScheduleForm({ competitionId, competitionName, roundIds, initial, competitionList }: ScheduleFormProps) {
+export function ScheduleForm({
+  competitionId,
+  competitionName,
+  roundIds,
+  initial,
+  competitionList,
+  isPlatformAdmin = false,
+}: ScheduleFormProps) {
   const [dates, setDates] = useState<Dates>(initial);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -52,7 +60,12 @@ export function ScheduleForm({ competitionId, competitionName, roundIds, initial
   }
 
   return (
-    <AdminShell active="schedule" competitions={competitionList} activeCompetitionId={competitionId}>
+    <AdminShell
+      active="schedule"
+      competitions={competitionList}
+      activeCompetitionId={competitionId}
+      isPlatformAdmin={isPlatformAdmin}
+    >
       <div className="mb-7">
         <div className="mb-2 text-xs uppercase tracking-widest text-accent">Screen · 時程設定</div>
         <h1 className="font-display text-[30px]">賽事時程 — {competitionName}</h1>

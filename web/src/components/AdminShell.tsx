@@ -20,6 +20,10 @@ interface AdminShellProps {
   children: ReactNode;
   competitions?: AdminCompetitionOption[];
   activeCompetitionId?: string;
+  // PlatformAdmin 視角(全站比賽/檢舉處理)目前完全是 MOCK_ALL_COMPETITIONS_PLATFORM/
+  // MOCK_REPORTS 假資料——沒有真的全站查詢。不是 Organizer/Collaborator 該看到的東西,
+  // 預設 false,只有呼叫端查過 profiles.is_platform_admin 為 true 才會顯示切換開關。
+  isPlatformAdmin?: boolean;
 }
 
 const ORG_ITEMS = [
@@ -45,11 +49,18 @@ const ORG_ROUTES: Record<AdminShellProps["active"], string> = {
   collaborators: "/admin/collaborators",
 };
 
-export function AdminShell({ active, children, competitions, activeCompetitionId }: AdminShellProps) {
+export function AdminShell({
+  active,
+  children,
+  competitions,
+  activeCompetitionId,
+  isPlatformAdmin = false,
+}: AdminShellProps) {
   const router = useRouter();
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
-  const [viewpoint, setViewpoint] = useState<"organizer" | "platform">("organizer");
+  const [viewpoint, setViewpointState] = useState<"organizer" | "platform">("organizer");
+  const setViewpoint = (v: "organizer" | "platform") => setViewpointState(isPlatformAdmin ? v : "organizer");
   const [section, setSection] = useState<Section>(active);
   const [reports, setReports] = useState(MOCK_REPORTS);
 
@@ -80,7 +91,7 @@ export function AdminShell({ active, children, competitions, activeCompetitionId
             <Icon name="chevron" size={13} className={collapsed ? "" : "rotate-90"} />
           </button>
 
-          {!collapsed && (
+          {!collapsed && isPlatformAdmin && (
             <div className="mb-3.5 flex items-center gap-2.5">
               <Switch
                 on={viewpoint === "platform"}
@@ -149,9 +160,9 @@ export function AdminShell({ active, children, competitions, activeCompetitionId
         </aside>
 
         <main className="min-w-0 flex-1 px-10 pt-9 pb-25">
-          {viewpoint === "organizer" && children}
+          {(!isPlatformAdmin || viewpoint === "organizer") && children}
 
-          {viewpoint === "platform" && section === "platform-competitions" && (
+          {isPlatformAdmin && viewpoint === "platform" && section === "platform-competitions" && (
             <div>
               <div className="mb-7">
                 <div className="mb-2 text-xs uppercase tracking-widest text-accent">PlatformAdmin · 全站比賽</div>
@@ -191,7 +202,7 @@ export function AdminShell({ active, children, competitions, activeCompetitionId
             </div>
           )}
 
-          {viewpoint === "platform" && section === "platform-reports" && (
+          {isPlatformAdmin && viewpoint === "platform" && section === "platform-reports" && (
             <div>
               <div className="mb-7">
                 <div className="mb-2 text-xs uppercase tracking-widest text-accent">PlatformAdmin · 檢舉處理</div>
