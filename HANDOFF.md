@@ -125,16 +125,16 @@ C:\Users\LIN\Documents\github\SoundArena\
 
 ## 下一步(哪個先做,使用者可以自己選)
 
-1. **Collaborator + Comment/CommentEndorsement UI 已經做完**(08-18 這輪,見文件尾端)——`/admin/collaborators` 邀請協作者、五權限勾選、移除;`/vote`/`/status` 都接上留言 + 認可。
-2. **逐輪匿名切換 UI 已經做完**(08-17 第三輪,見文件尾端)。
-3. **公開結果/排名頁跟 `/u/[id]` 名次已經做完**(08-16 深夜第四輪)。
-4. **Discord guilds.join 補完**:使用者把 Bot 邀進 SoundArena Discord 伺服器,把伺服器 ID 填進 `.env.local` 跟 Vercel 的 `DISCORD_GUILD_ID`
-5. **`/admin/*` 的角色級路由保護**:proxy.ts 目前只檢查「有沒有登入」,沒檢查「這個人是不是這場比賽的 Organizer 或 Collaborator」——RLS 是實際擋著的那層,route 層級的檢查還是沒做(現在有 Collaborator 了,這個缺口比之前更值得補)。
+1. **08-18 第二輪除錯已修完三個真實 bug**(見文件尾端)——`/submit` 的 Suno 身份比對從 mock 換成真的 API;`AdminShell` 的 PlatformAdmin 假資料視角補上權限檢查;`/register`/`/submit` 平行化查詢。
+2. **`/admin/*` 的角色級路由保護**:proxy.ts 目前只檢查「有沒有登入」,沒檢查「這個人是不是這場比賽的 Organizer 或 Collaborator」——RLS 是實際擋著的那層,route 層級的檢查還是沒做(現在有 Collaborator 了,這個缺口比之前更值得補)。
+3. **頁面切換速度**:這輪只做了「查詢平行化」這個從程式碼就能確認的優化,沒有完全解釋使用者感受到的延遲——Vercel Hobby 方案的 serverless cold start、middleware+page 各自呼叫一次 `getClaims()` 的重複開銷,都是可能的殘餘原因,值得的話可以考慮:量測真實的 TTFB(不是肉眼估計)、把 middleware 驗證過的 user id 透過 header 往下傳給 page 用(省掉第二次 `getClaims()`)、或評估升級 Vercel 方案。
+4. **音檔上傳依然沒接**:`/submit` 的「上傳音檔案」欄位還是佔位符,沒有真的存檔——這是 Cloudflare R2 那個任務範圍(見下方第 6 項),跟這輪修的 Suno 身份比對是兩件事,不要搞混。
+5. **Discord guilds.join 補完**:使用者把 Bot 邀進 SoundArena Discord 伺服器,把伺服器 ID 填進 `.env.local` 跟 Vercel 的 `DISCORD_GUILD_ID`
 6. **Cloudflare R2**:建 bucket、拿金鑰、接上音檔上傳/簽章下載
 7. **通知系統**:schema 還沒建,但訂閱範圍的鐵律已經定案並寫進 SPEC.md 第 6 節——**報名才會訂閱,單純建立/主辦比賽不會訂閱,訂閱可取消**。
-8. **LINE 登入**:使用者能申請的時候回來補
+8. **LINE 登入**:使用者已明確表示放棄這條線,不用再排進待辦。
 9. **邀請連結整合模板訊息**:唯一還沒排進去的使用者原始需求,範圍還沒訂。
-10. **`score_item_templates` 沒有通用的「啟用計分項目」UI**:`comment_endorsement` 這個範本已經存在,但 `/admin/format` 建立比賽時是寫死塞入投票/影片流量/外部投票三項(`DEFAULT_SCORE_ITEMS`),沒有介面能讓 Organizer 自己從範本庫勾選啟用 `comment_endorsement`——留言認可加分在資料庫層完全能算,但目前沒有 UI 路徑能真的把這個計分項目加進某場比賽的 ScoringRule。08-17 就記錄過這個缺口,這輪做完 Comment UI 後更明顯。
+10. **`score_item_templates` 沒有通用的「啟用計分項目」UI**:`comment_endorsement` 這個範本已經存在,但 `/admin/format` 建立比賽時是寫死塞入投票/影片流量/外部投票三項(`DEFAULT_SCORE_ITEMS`),沒有介面能讓 Organizer 自己從範本庫勾選啟用 `comment_endorsement`。
 
 ---
 
@@ -465,3 +465,25 @@ C:\Users\LIN\Documents\github\SoundArena\
 本機 `npm run dev` 起 dev server,用組織者帳號(`linpcw@gmail.com`,瀏覽器本來就還是登入狀態)實際點過:邀請 `test-second-contestant@soundarena.test`(她已經是既有協作者,正確被 unique constraint 擋下並顯示「這個人已經是協作者了」)→ 切換她的「賽制建立」權限開關 → service_role 查 DB 確認真的寫入 `can_edit_format=true` → 切回去 → 再查一次確認復原。`/status` 頁點開「抽象善良」投稿的留言區,既有測試留言(「測試選手二號」、已認可 80%)正確顯示;另外用 `test-second-contestant` 的真實 access token 直接呼叫 `POST /rest/v1/comments`(跟 `submitComment` 完全相同的 payload/header,包含不帶 `.select()`)驗證寫入路徑本身沒有 403,插入成功後在瀏覽器重新整理 `/status` 確認新留言顯示、點「認可」按鈕確認滑桿消失、顯示「已認可 100%」——測完用 service_role 刪除這則自動化測試留言,不留痕跡。TypeScript (`tsc --noEmit`) 跟 `next build` 全程乾淨。
 
 已 commit(`6261594`)、push、`vercel deploy --prod` 上線(第一次遇到已知的「Not authorized」瞬態錯誤,重試一次就過了)。
+
+---
+
+## 08-18 第二輪:用 /systematic-debugging + /debugging-and-error-recovery 查真實 bug 回報
+
+使用者這輪回報一串問題,標成「最重要的」那組是:「登入不會實際跳轉」「UI 上還有 MOCK 資料沒撤下」「查看報名=已經登入了」「比賽也是 mock 資料」「切頁太慢」,並明確點名要用 `/systematic-debugging` + `/debugging-and-error-recovery` 兩個 skill 處理——**這輪的原則是先重現、找到根因,再動手改,不是看訊息就猜著修**,詳細過程見這兩個 skill 的「Iron Law:沒做完根因調查不准動手修」。
+
+### 查證結果:三個是真的 bug,一個是誤會
+
+1. **`/submit` 的 Suno 身份比對從一開始就是 mock**(`SubmitForm.tsx` 的 `MOCK_SUNO_LOOKUP`/`mockParseSunoLink`,只認得兩組寫死的測試分享碼,程式碼自己的註解就寫著「正式串接時由後端呼叫 Suno 公開 API 取代」——這句話從沒被兌現)。**這代表任何真實使用者貼自己的 Suno 連結投稿,一定會被判定成「非本人作品」,整條投稿流水線對真實使用者來說根本是壞的**,只有知道那兩組測試碼的人(也就是我自己)才測得過。這是使用者說「整條流水線也沒試過」最直接的證據。
+   - 修法:新增 `verifySunoSharer(url)` server action(`web/src/app/submit/actions.ts`),真的呼叫 `GET https://studio-api-prod.suno.com/api/share/code/{code}`(這輪用兩組已知真實分享碼實測過,回傳 `sharer_handle`/`sharer_display_name`/`sharer_avatar_url`,格式跟預期一致)。
+   - **這個 API 沒有回傳作品標題**——試過 `studio-api-prod.suno.com/api/clip/{content_id}`、`studio-api.suno.ai/api/clip/{id}`、`suno.com/api/clip/{id}` 三種常見的 Suno 第三方 wrapper 慣用路徑,分別是 404 / 503(該網域已被停用)/ 落回 SPA 殼(不是 API)。沒有再繼續亂猜下去(避免浪費 token 硬試未知端點)——改成誠實調整範圍:**標題現在是使用者自己輸入的欄位**,不再假裝能自動帶出;身份比對(SPEC 真正在意安全性的那部分)是真的了。
+2. **`AdminShell` 的「Organizer 視角 / PlatformAdmin 視角」切換完全沒有權限檢查**——任何登入的 Organizer 或 Collaborator 都能點那顆 Switch,看到「全站比賽」「檢舉處理」兩個畫面,而這兩個畫面**從頭到尾都是 `MOCK_ALL_COMPETITIONS_PLATFORM`/`MOCK_REPORTS` 假資料**,不是查不到真資料時的 fallback,是打從一開始就沒接真資料。用 service_role 查過:目前資料庫裡沒有任何一個帳號(包含組織者本人)`is_platform_admin=true`,所以這個「PlatformAdmin 專屬畫面」在這之前是任何人都點得到的。**這幾乎可以肯定就是使用者說「比賽也都是mock的資料」在講的東西**。
+   - 修法:`AdminShell` 新增 `isPlatformAdmin` prop(預設 `false`),Switch 跟兩個 platform 畫面區塊都用它擋住;因為每個管理頁本來就會查一次 `profiles.host_setup_completed` 做設定檔完成度檢查,這輪直接在同一個 `.select()` 裡順便多選 `is_platform_admin`(零額外 round trip),往下傳給 `AdminShell` 或中間包一層的 client 元件(`CreateCompetitionForm`/`AdminFormatClient`/`ScheduleForm`)。九個呼叫點(`admin/format`、`admin/review`、`admin/schedule`、`judge`、`admin/collaborators`、`admin/profile` 六個 page.tsx + 三個 client 元件)全部改過。
+3. **「查看報名 = 已經登入了」查證後不是網站的 bug**——用真正沒帶 cookie 的 `curl` 直接打 `/register?competition=...`,正確在 0.5 秒內回 307 轉址到 `/login`,證明 proxy.ts 的登入閘門邏輯本身是對的。瀏覽器裡看到「已經登入」,是因為**這個對話用的瀏覽器自動化工具是共用使用者自己真實 Chrome profile 的 session/cookie**(跟上一輪測 Collaborator 時發現的是同一件事,即使開新的 tab group 也一樣,不是乾淨的匿名分頁)——使用者自己平常用的瀏覽器如果之前登入過 Google,也會有同樣的「一直保持登入」現象,這是預期的 session 持續行為,不是漏洞。
+4. **「切頁太慢」只確認了一部分根因**:`/register`、`/submit` 各自有兩個彼此不依賴的查詢卻寫成循序 `await`,已經改成 `Promise.all` 平行執行。**但這沒有完整解釋使用者感受到的延遲**——Vercel 免費方案的 serverless function 冷啟動、middleware(`proxy.ts`)驗證一次 `getClaims()`、page 自己又驗證一次(defense-in-depth,故意重複)這些都是合理的殘餘懷疑對象,這輪沒有繼續深挖(屬於「環境/基礎設施層級」的性質,不是單靠改程式碼就能完全消除,誠實記錄,不假裝已經解決)。
+
+### 端到端實測過
+
+`tsc --noEmit`、`next build` 全程乾淨。本機 dev server 真實瀏覽器點過:貼真實 Suno 分享連結(`https://suno.com/s/IKWrakvC2p7TUqRZ`)→ 畫面顯示真的頭像照片跟「身份比對通過(sharer 帳號 @my13u 與報名帳號一致)」(不是 mock 卡片)→ 填標題送出 → service_role 查 DB 確認 `sharer_handle` 真的是從 API 拿到的 `my13u`,不是任何寫死的值 → 刪除這筆測試投稿。組織者帳號(`is_platform_admin=false`)重新整理 `/admin/format`,確認側欄的視角切換 Switch 完全不見了(修前修後截圖對比過)。
+
+已 commit(`4ca1c02`)、push、`vercel deploy --prod` 上線。
