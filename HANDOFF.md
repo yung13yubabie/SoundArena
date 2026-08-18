@@ -127,8 +127,8 @@ C:\Users\LIN\Documents\github\SoundArena\
 
 **使用者的排序(08-19 定案)**:先把自己能做完的功能缺口收乾淨 → 使用者自己完整跑一輪報名→投稿→投票→評分→留言 → 回饋調整 → 最後才進 taste-skill UI/UX 改版(含手機板)。**在使用者說「可以了」之前,不要主動開始 taste-skill 改版。**
 
-1. **待使用者回覆(08-19 提出,還沒定案)**:使用者要「報名審核」——主辦人能像審核投稿一樣審核報名,可以退回並給理由,理由是防範「比賽蟑螂」(惡意/灌水報名)。這是**新功能**,不是 bug,`registrations` 表目前沒有 `pending_review` 這種審核狀態(只有 `active`/`eliminated`,是淘汰用的)。開工前**必須先問清楚**:退回後可不可以重新報名?退回理由要不要跟投稿退回一樣顯示給本人看?審核窗口是報名當下就要人工過,還是報名截止後主辦人一次處理?這幾題沒問過,不要自己猜著寫 schema。同一則訊息裡使用者也說「為什麼要檢舉比賽 這個移除」——**已經移除 `ReportButton` UI**,但這其實是 ADR-0002 定義的「PlatformAdmin 處理跨比賽濫用」機制,跟「報名審核」是兩個不同概念(使用者當下可能把兩者搞混了)。`reports` 表/RLS 刻意沒有一起砍掉,等使用者確認是真的要整個拿掉這個 ADR-0002 決定,還是只是覺得目前用不到、UI 先藏起來就好。
-2. **08-18~19 四輪除錯已經修完八個真實缺口**(見文件尾端)——`/submit` 的 Suno 身份比對從 mock 換成真的 API;`AdminShell` 的 PlatformAdmin 假資料視角補上權限檢查;`/register`/`/submit` 平行化查詢;`comment_endorsement` 計分項目終於有介面能啟用;`/competitions` 整頁原本完全沒接資料庫,已重建成真資料;檢舉功能原本假裝成功,後來又被使用者要求移除;**`SiteHeader` 在 Discovery/`/competitions`/`/updates` 三頁一律顯示未登入樣式,即使真的登入了也一樣——導覽列整個消失,這是「介面孤立」「一直顯示登入狀態」的真正根因**,已修好(這三頁現在會查真實登入狀態,導覽列也改成一律顯示,不再由 `authed` 控制顯示與否);報名完成/投稿完成畫面原本只用文字提到下一步,沒有真的按鈕,已補上。
+1. **08-19 第四輪:報名審核(ADR-0008)+ 徹底移除 Report(ADR-0007)已經做完**(見文件尾端)——這是這輪最大的一塊,`/register`/`/admin/review`/`/status`/`/submit` 都改過,已經用真實 access token 完整測過整條狀態機(建報名→退回→重新送出→通過→能投稿),包含安全邊界(非本人不能碰別人的報名)。**唯一還沒做的是視覺驗證**——這輪瀏覽器 session 過期了,沒有強行繞過 Google 登入(既有的安全邊界),下次使用者登入時麻煩實際點一次 `/register` 送出報名 → `/admin/review` 看到待審核 → 退回試試 → 確認畫面跟資料層驗證過的一致。
+2. **08-18~19 四輪除錯已經修完八個真實缺口**(見文件尾端)——`/submit` 的 Suno 身份比對從 mock 換成真的 API;`AdminShell` 的 PlatformAdmin 假資料視角補上權限檢查;`/register`/`/submit` 平行化查詢;`comment_endorsement` 計分項目終於有介面能啟用;`/competitions` 整頁原本完全沒接資料庫,已重建成真資料;**`SiteHeader` 在 Discovery/`/competitions`/`/updates` 三頁一律顯示未登入樣式,即使真的登入了也一樣——導覽列整個消失,這是「介面孤立」「一直顯示登入狀態」的真正根因**,已修好;報名完成/投稿完成畫面原本只用文字提到下一步,沒有真的按鈕,已補上。
 3. **音檔上傳依然沒接**:`/submit` 的「上傳音檔案」欄位、`/competitions` 的播放功能都還是佔位符——這是 Cloudflare R2 任務範圍(見下方第 5 項)。**這是目前「完整跑一輪」最大的缺口**,沒有真的音檔,試聽/投票/評分階段聽不到東西。
 4. **頁面切換速度**:只做了「查詢平行化」這個從程式碼就能確認的優化。本機 dev server 這輪的實測數字(僅供參考,不是 production 數字):`/competitions` 一次冷載入 3.3 秒,拆解成 `next.js: 1.6s`(dev 模式即時編譯,production build 不會有這段)+ `proxy.ts: 56ms`(很快,不是瓶頸)+ `application-code: 1.6s`(真正的查詢時間,對三個查詢來說偏慢,可能是本機到 Supabase ap-southeast-1 的連線延遲)。production 上的真實數字還沒有量過。
 5. **Cloudflare R2**:建 bucket、拿金鑰、接上音檔上傳/簽章下載——**這件事只有使用者能做**,接手的 session 要主動問使用者「R2 金鑰準備好了嗎」,不要卡在這裡空等。使用者已經同意要跟 Discord 一起接。
@@ -137,7 +137,8 @@ C:\Users\LIN\Documents\github\SoundArena\
 8. **通知系統**:schema 還沒建,訂閱範圍鐵律已定案(SPEC.md 第 6 節):**報名才會訂閱,單純建立/主辦比賽不會訂閱,訂閱可取消**。
 9. **LINE 登入**:使用者已明確表示放棄這條線,不用再排進待辦。
 10. **邀請連結整合模板訊息**:唯一還沒排進去的使用者原始需求,範圍還沒訂。
-11. **UI/UX 改版(taste-skill,含手機板響應式)**:使用者明確要求「最後」才做,等使用者實測回饋完成後才開始。已裝好 `leonxlnx/taste-skill`(`skills-lock.json`),`redesign-existing-projects` 子 skill 的稽核清單已經讀過一次,可以直接接手使用,不用重新確認要不要用。
+11. **報名蟑螂的節流機制沒做**:ADR-0008 明確記錄——退回後允許無限次重新報名,這輪沒有做任何防灌水的次數限制/冷卻時間。之後真的觀察到有人濫用「退回可以無限重報」再回來加限制,不要現在自己猜著加。
+12. **UI/UX 改版(taste-skill,含手機板響應式)**:使用者明確要求「最後」才做,等使用者實測回饋完成後才開始。已裝好 `leonxlnx/taste-skill`(`skills-lock.json`),`redesign-existing-projects` 子 skill 的稽核清單已經讀過一次,可以直接接手使用,不用重新確認要不要用。
 
 ---
 
@@ -573,3 +574,43 @@ C:\Users\LIN\Documents\github\SoundArena\
 `tsc --noEmit`、`next build` 全程乾淨。Discovery 頁:確認完整導覽列 + 右上角顯示登入頭像(不是「登入」按鈕)。`/updates`:確認同樣有完整導覽列,可以直接點「活動」離開,不用瀏覽器上一頁。`/competitions`:確認「檢舉此比賽」真的不見了,真實資料(標題/輪次/投稿)維持正確,導覽列跟 header 狀態都對。`/register`:確認「前往投稿頁提交作品 →」按鈕真的可以點。
 
 已 commit(`b8924b0`)、push、`vercel deploy --prod` 上線。
+
+---
+
+## 08-19 第四輪:報名審核工作流(ADR-0008)+ 徹底移除 Report(ADR-0007)
+
+使用者確認四個決定後(用 `AskUserQuestion` 問清楚,沒有自己猜),用 `mattpocock-skills:domain-modeling` 先把 CONTEXT.md/ADR 定案,再動手寫 schema——**新 session 接手這塊,先讀 `docs/adr/0007-remove-report-mechanism.md`、`docs/adr/0008-registration-review-status.md`、CONTEXT.md 的 RegistrationReviewStatus 詞條,不要只看這裡的摘要**。
+
+### 四個決定
+
+1. 報名被退回後,本人可以重新報名,次數不限。
+2. 退回理由要顯示給本人看(跟 Submission 退回理由同一套精神)。
+3. 審核時機是即時審核(跟 Submission 審核一樣,不是報名截止後批次處理)。
+4. 「檢舉此比賽」(ADR-0002 的 PlatformAdmin 濫用處理機制)要徹底從產品範圍拿掉,不是只藏 UI——推翻 ADR-0002 這一條。
+
+### 這輪做了什麼
+
+**Domain modeling(先做,寫進 CONTEXT.md/ADR)**:
+- CONTEXT.md:移除 Report 詞條,PlatformAdmin 詞條拿掉「處理 Report」這個職責描述(補上「已移除(ADR-0007)」註記,不是憑空消失,留下痕跡);新增 RegistrationReviewStatus 詞條,明確跟既有的 ParticipantStatus(active/eliminated)劃清界線——這是報名生命週期裡兩個獨立維度,不是同一個欄位的不同值。
+- `docs/adr/0007-remove-report-mechanism.md`、`docs/adr/0008-registration-review-status.md` 兩份新 ADR,`0002` 補上指向 `0007` 的 superseded 註記(沿用 `0003` 那次的既有寫法)。
+
+**Schema/RLS**:
+- `20260819030000_remove_report_mechanism.sql`:砍掉 `reports` 表、三條 policy、`report_status` enum——上一輪(020000)才剛補的 RLS,這輪直接整張表拿掉,不留半吊子狀態。
+- `20260819040000_registration_review_status.sql`:新增 `registrations.review_status`(`pending_review`/`approved`/`rejected`,預設 `pending_review`)、`review_note`;既有報名一律 backfill 成 `approved`,不鎖死已經在跑的測試流程。兩個新 SECURITY DEFINER function:
+  - `review_registration(registration_id, decision, note)`:只檢查 `'review'` 權限,**沒有擴大既有的 blanket UPDATE policy**(那條原本只綁 `'judge'` 權限,是給 `/judge` 標記淘汰用的)——刻意分開,避免只有 review 權限的協作者連帶碰到 judge 專用欄位,或反過來。
+  - `resubmit_registration(registration_id, display_name, suno_handle)`:本人專用,只有 `review_status='rejected'` 時才能呼叫,成功後轉回 `pending_review`。
+
+**前端**:
+- `/register`:`RegisterForm` 依 `review_status` 分三支——`pending_review` 顯示「報名審核中」;`approved` 是原本的「報名完成 + 前往投稿」;`rejected` 換成新的 `ResubmitForm`(顯示退回理由,可編輯暱稱/Suno帳號重新送出)。
+- `/admin/review`:新增「報名審核」區塊(`RegistrationReviewQueue.tsx`,樣式比照既有的投稿審核清單),放在投稿審核上方——一個頁面兩個收件匣,沒有另開新的管理頁面。
+- `/submit`:選單查詢多加 `review_status = 'approved'` 條件——待審核或被退回的報名現在真的不能投稿了(這是這輪對既有投稿流程行為的改動,值得留意)。
+- `/status`:報名審核中/被退回都會顯示對應的橫幅,退回的話附一個連到 `/register?competition=X` 重新送出的連結。
+- `AdminShell.tsx`、`mockData.ts`:拿掉「檢舉處理」畫面跟 `MOCK_REPORTS`,`ReportButton`/`reportActions.ts` 上一輪已經刪過了。
+
+### 端到端實測過(真實 access token,涵蓋完整狀態機,不是 service_role)
+
+用真實建立的第三個測試帳號(`test-third-contestant@soundarena.test`,前兩個測試帳號都已經對這場比賽報過名,unique constraint 會擋)走完整條路徑,九個步驟全部驗證:①新報名預設 `pending_review` ②組織者在待審核清單看得到 ③組織者退回並附理由,狀態轉 `rejected` ④本人看得到退回理由 ⑤退回狀態下 `/submit` 的查詢條件正確查不到(空陣列) ⑥本人修改暱稱重新送出,狀態轉回 `pending_review` ⑦**用組織者的 token 冒充呼叫 `resubmit_registration` 改別人的報名,正確被擋(`not your registration`)** ⑧組織者這次通過 ⑨通過後 `/submit` 查得到這筆報名,而且暱稱正確是重新送出時改的新名字。測完清理測試帳號跟報名。`tsc --noEmit`、`next build` 全程乾淨。
+
+**視覺驗證還沒補**——這輪要測 `/admin/review` 畫面時,瀏覽器 session 已經過期,跳轉到 Google 登入頁,沒有強行自動化繞過(既有的安全邊界,HANDOFF 前面幾輪都是這樣處理)。下次使用者登入時麻煩補一次真的點擊測試,見上面「下一步」第 1 項。
+
+已 commit(`96af5b9`)、push、`vercel deploy --prod` 上線。
