@@ -127,17 +127,17 @@ C:\Users\LIN\Documents\github\SoundArena\
 
 **使用者的排序(08-19 定案)**:先把自己能做完的功能缺口收乾淨 → 使用者自己完整跑一輪報名→投稿→投票→評分→留言 → 回饋調整 → 最後才進 taste-skill UI/UX 改版(含手機板)。**在使用者說「可以了」之前,不要主動開始 taste-skill 改版。**
 
-1. **08-18~19 三輪除錯已經修完六個真實缺口**(見文件尾端)——`/submit` 的 Suno 身份比對從 mock 換成真的 API;`AdminShell` 的 PlatformAdmin 假資料視角補上權限檢查;`/register`/`/submit` 平行化查詢;`comment_endorsement` 計分項目終於有介面能啟用;**`/competitions`(導覽列「比賽」頁)整頁原本完全沒接資料庫、標題寫死錯誤比賽名稱,已重建成真資料**;`ReportButton`(檢舉此比賽)原本點下去純粹假裝成功,`reports` 表 RLS 開了但零 policy,已補上真的寫入路徑。
-2. **音檔上傳依然沒接**:`/submit` 的「上傳音檔案」欄位、`/competitions` 的播放功能都還是佔位符——這是 Cloudflare R2 任務範圍(見下方第 4 項)。**這是目前「完整跑一輪」最大的缺口**,沒有真的音檔,試聽/投票/評分階段聽不到東西。
-3. **頁面切換速度**:只做了「查詢平行化」這個從程式碼就能確認的優化,沒有完全解釋使用者感受到的延遲——Vercel Hobby 方案的 serverless cold start、middleware+page 各自呼叫一次 `getClaims()` 的重複開銷,都是可能的殘餘原因。
-4. **Cloudflare R2**:建 bucket、拿金鑰、接上音檔上傳/簽章下載——**這件事只有使用者能做**(建 bucket、產生 API token 是 Cloudflare 帳號層級的操作),接手的 session 要主動問使用者「R2 金鑰準備好了嗎」,不要卡在這裡空等。08-19 這輪使用者已經同意要跟 Discord 一起接,可能下次上線就會帶著金鑰來。
-5. **Discord guilds.join 補完**:同樣**只有使用者能做**——把 Bot 邀進 SoundArena Discord 伺服器,把伺服器 ID 告訴接手的 session,填進 `.env.local` 跟 Vercel 的 `DISCORD_GUILD_ID`。
-6. **`AdminShell` 的「檢舉處理」畫面還是 `MOCK_REPORTS` 假資料**:這輪只修了「送出檢舉」那一半(RLS + submitReport + ReportButton),PlatformAdmin 端查看/處理檢舉清單還沒接。目前沒有任何真人是 `is_platform_admin=true`,所以這個畫面實際上不可能被觸發,不算誤導任何人,故意留到有真正的 PlatformAdmin 帳號時再一起接。
-7. **`/admin/*` 的角色級路由保護**:proxy.ts 目前只檢查「有沒有登入」——這輪重新評估過,RLS + 頁面本身的空狀態已經提供足夠的保護,不是誤導性 UI,優先度沒有原本想的高,暫緩。
+1. **待使用者回覆(08-19 提出,還沒定案)**:使用者要「報名審核」——主辦人能像審核投稿一樣審核報名,可以退回並給理由,理由是防範「比賽蟑螂」(惡意/灌水報名)。這是**新功能**,不是 bug,`registrations` 表目前沒有 `pending_review` 這種審核狀態(只有 `active`/`eliminated`,是淘汰用的)。開工前**必須先問清楚**:退回後可不可以重新報名?退回理由要不要跟投稿退回一樣顯示給本人看?審核窗口是報名當下就要人工過,還是報名截止後主辦人一次處理?這幾題沒問過,不要自己猜著寫 schema。同一則訊息裡使用者也說「為什麼要檢舉比賽 這個移除」——**已經移除 `ReportButton` UI**,但這其實是 ADR-0002 定義的「PlatformAdmin 處理跨比賽濫用」機制,跟「報名審核」是兩個不同概念(使用者當下可能把兩者搞混了)。`reports` 表/RLS 刻意沒有一起砍掉,等使用者確認是真的要整個拿掉這個 ADR-0002 決定,還是只是覺得目前用不到、UI 先藏起來就好。
+2. **08-18~19 四輪除錯已經修完八個真實缺口**(見文件尾端)——`/submit` 的 Suno 身份比對從 mock 換成真的 API;`AdminShell` 的 PlatformAdmin 假資料視角補上權限檢查;`/register`/`/submit` 平行化查詢;`comment_endorsement` 計分項目終於有介面能啟用;`/competitions` 整頁原本完全沒接資料庫,已重建成真資料;檢舉功能原本假裝成功,後來又被使用者要求移除;**`SiteHeader` 在 Discovery/`/competitions`/`/updates` 三頁一律顯示未登入樣式,即使真的登入了也一樣——導覽列整個消失,這是「介面孤立」「一直顯示登入狀態」的真正根因**,已修好(這三頁現在會查真實登入狀態,導覽列也改成一律顯示,不再由 `authed` 控制顯示與否);報名完成/投稿完成畫面原本只用文字提到下一步,沒有真的按鈕,已補上。
+3. **音檔上傳依然沒接**:`/submit` 的「上傳音檔案」欄位、`/competitions` 的播放功能都還是佔位符——這是 Cloudflare R2 任務範圍(見下方第 5 項)。**這是目前「完整跑一輪」最大的缺口**,沒有真的音檔,試聽/投票/評分階段聽不到東西。
+4. **頁面切換速度**:只做了「查詢平行化」這個從程式碼就能確認的優化。本機 dev server 這輪的實測數字(僅供參考,不是 production 數字):`/competitions` 一次冷載入 3.3 秒,拆解成 `next.js: 1.6s`(dev 模式即時編譯,production build 不會有這段)+ `proxy.ts: 56ms`(很快,不是瓶頸)+ `application-code: 1.6s`(真正的查詢時間,對三個查詢來說偏慢,可能是本機到 Supabase ap-southeast-1 的連線延遲)。production 上的真實數字還沒有量過。
+5. **Cloudflare R2**:建 bucket、拿金鑰、接上音檔上傳/簽章下載——**這件事只有使用者能做**,接手的 session 要主動問使用者「R2 金鑰準備好了嗎」,不要卡在這裡空等。使用者已經同意要跟 Discord 一起接。
+6. **Discord guilds.join 補完**:同樣**只有使用者能做**——把 Bot 邀進 SoundArena Discord 伺服器,把伺服器 ID 告訴接手的 session,填進 `.env.local` 跟 Vercel 的 `DISCORD_GUILD_ID`。
+7. **`/admin/*` 的角色級路由保護**:重新評估過,RLS + 頁面本身的空狀態已經提供足夠的保護,優先度沒有原本想的高,暫緩。
 8. **通知系統**:schema 還沒建,訂閱範圍鐵律已定案(SPEC.md 第 6 節):**報名才會訂閱,單純建立/主辦比賽不會訂閱,訂閱可取消**。
 9. **LINE 登入**:使用者已明確表示放棄這條線,不用再排進待辦。
 10. **邀請連結整合模板訊息**:唯一還沒排進去的使用者原始需求,範圍還沒訂。
-11. **UI/UX 改版(taste-skill,含手機板響應式)**:使用者明確要求「最後」才做,等使用者實測回饋完成後才開始。已裝好 `leonxlnx/taste-skill`(`skills-lock.json`),`redesign-existing-projects` 子 skill 的稽核清單已經讀過一次(字體/色彩/版面/互動狀態/內容/元件/圖示/程式碼品質七大類),可以直接接手使用,不用重新確認要不要用。
+11. **UI/UX 改版(taste-skill,含手機板響應式)**:使用者明確要求「最後」才做,等使用者實測回饋完成後才開始。已裝好 `leonxlnx/taste-skill`(`skills-lock.json`),`redesign-existing-projects` 子 skill 的稽核清單已經讀過一次,可以直接接手使用,不用重新確認要不要用。
 
 ---
 
@@ -547,3 +547,29 @@ C:\Users\LIN\Documents\github\SoundArena\
 `tsc --noEmit`、`next build` 全程乾淨,`/competitions` 路由從 static(○)變成 dynamic(ƒ),確認真的在查資料庫。本機瀏覽器點 Discovery 卡片的「試聽作品」→ 正確顯示「深夜擂台 EP.04」(不再是假的 EP.03)、三個真實輪次、初賽底下兩首真實投稿標題(「抽象善良」「路上ランウェイ」,不是「未命名作品 #N」)。點「檢舉此比賽」填原因送出 → 顯示「檢舉已送出」→ 用 service_role 查 `reports` 表確認 `reporter_id`/`competition_id`/`reason` 全部正確寫入,測完刪除。
 
 已 commit(`dc8be7d`)、push、`vercel deploy --prod` 上線。
+
+---
+
+## 08-19 第三輪:使用者上 Vercel 正式站實測,抓到 header 真正的根因 bug
+
+使用者這輪是**真的上 `https://web-mocha-xi-12.vercel.app` 正式站測試**,不是聽我講——回報四件事:①登入後左上角一直顯示「登入」而不是登出狀態;②報名這條線要加「主辦人審核 + 退回給理由」防範惡意報名者,並且問「為什麼要檢舉比賽,這個移除」;③「所有介面似乎被孤立」,點「回饋」「更新」要按瀏覽器上一頁才能離開;④從首頁查看報名後顯示可投稿,但投稿的 UI 不見了,而且「還是有mock的假資料」。
+
+### 根因(一次查證,不是四個獨立猜測——三、四點其實是同一個 bug 的不同症狀)
+
+`SiteHeader.tsx` 原本的邏輯是 `authed ? <nav>...</nav> : <div className="flex-1" />`——**`authed` 這個 prop 同時控制「該不該顯示整個主導覽列」跟「右側顯示登入還是登出按鈕」,但呼叫端把「這頁需不需要登入才能看」跟「使用者實際上有沒有登入」這兩個完全不同的概念搞混了**。Discovery(`/`)、`/competitions`、`/updates` 三個「不強制要求登入」的頁面全部寫死 `authed={false}`,不管訪客有沒有真的登入——結果是:一個真的已經登入的使用者,只要瀏覽這三個頁面中的任何一個,就會看到「登入」按鈕(看起來像沒登入)**而且完整導覽列直接消失**(因為 `authed=false` 連 `<nav>` 都不渲染)。這正好同時解釋了使用者的①跟③:①是右側按鈕誤判成未登入樣式;③是因為導覽列整個不見了,只能困在原地用瀏覽器上一頁離開,不是這幾個頁面真的沒有互相連結,是**條件判斷把 nav 整個關掉了**。
+
+④的「投稿 UI 不見了」是另一個獨立問題:`RegisterForm.tsx` 的「報名完成」畫面原本只有純文字「可以前往「投稿」頁提交作品了」,**從來沒有真的 `<Link>`**——使用者說的「顯示可投稿,但投稿這個UI不見了」就是字面意思,那句話根本不是連結,是死的文字。`SubmitForm.tsx` 的「投稿已送出」畫面也是同一個模式(提到「個人狀態」頁但沒有連結)。「然後還是有mock的假資料」這句,結合①②③一起看,很可能是「整個網站因為 header 一直顯示未登入、到處是死路,感覺整個是假的」的整體印象,不是指向另一個新的具體 mock 實例——這輪沒有再挖到第三個 mock 資料源(已經對照過上一輪抓到的兩個都已修好、部署)。
+
+### 這輪做了什麼
+
+1. **`SiteHeader.tsx`**:拿掉 `authed` 對 `<nav>` 顯示與否的控制,**導覽列一律顯示**(proxy.ts 本來就會在真的點進需要登入的頁面時擋下轉去 `/login`,不需要 header 自己重複這層判斷)。`authed` 現在只單純控制右側是登入按鈕還是登出按鈕/「意見回饋」連結。
+2. **Discovery(`app/page.tsx`)、`/competitions`(`page.tsx`,兩處 early-return 都要改)、`/updates`(`page.tsx`)**:改成真的查一次 `supabase.auth.getClaims()`,把真實登入狀態往下傳,不再寫死 `authed={false}`。`DiscoveryList.tsx`、`CompetitionBrowser.tsx` 對應新增 `authed: boolean` prop。
+3. **`RegisterForm.tsx`「報名完成」、`SubmitForm.tsx`「投稿已送出」**:純文字提及下一步的地方都換成真的 `<Link>` 按鈕(前往投稿頁 / 前往我的狀態)。
+4. **移除 `ReportButton`**:使用者明確說「這個移除」,已經刪掉元件本身(`web/src/components/ReportButton.tsx`)跟它的 action 檔(`web/src/lib/reportActions.ts`),`CompetitionBrowser.tsx` 不再引用。**`reports` 資料表跟 RLS policy 刻意沒有一起砍**——這是 ADR-0002 明確定義的「開放多租戶平台需要有人能檢舉濫用比賽」機制,跟使用者真正想要的「報名審核」是兩件不同的事,很可能是這輪訊息裡被搞混的兩個概念。已經在回覆裡跟使用者說清楚差異,等使用者確認要不要正式推翻 ADR-0002 這一條(用 mattpocock-skills:domain-modeling 處理,這輪還沒做,因為使用者的意圖還不夠明確)。
+5. **報名審核(比賽蟑螂防範)還沒動手**——這是新功能,不是 bug,`registrations` 表目前完全沒有審核狀態的欄位(`status` 只有 `active`/`eliminated`,是淘汰機制用的,不是審核用的)。開工前列了三個必須先問清楚的分岔,寫在上面「下一步」第 1 項,不要憑印象自己決定。
+
+### 端到端實測過(本機瀏覽器,真實登入 session)
+
+`tsc --noEmit`、`next build` 全程乾淨。Discovery 頁:確認完整導覽列 + 右上角顯示登入頭像(不是「登入」按鈕)。`/updates`:確認同樣有完整導覽列,可以直接點「活動」離開,不用瀏覽器上一頁。`/competitions`:確認「檢舉此比賽」真的不見了,真實資料(標題/輪次/投稿)維持正確,導覽列跟 header 狀態都對。`/register`:確認「前往投稿頁提交作品 →」按鈕真的可以點。
+
+已 commit(`b8924b0`)、push、`vercel deploy --prod` 上線。
