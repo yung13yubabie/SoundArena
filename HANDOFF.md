@@ -127,16 +127,17 @@ C:\Users\LIN\Documents\github\SoundArena\
 
 **使用者的排序(08-19 定案)**:先把自己能做完的功能缺口收乾淨 → 使用者自己完整跑一輪報名→投稿→投票→評分→留言 → 回饋調整 → 最後才進 taste-skill UI/UX 改版(含手機板)。**在使用者說「可以了」之前,不要主動開始 taste-skill 改版。**
 
-1. **08-18~19 這兩輪已經修完四個真實缺口**(見文件尾端)——`/submit` 的 Suno 身份比對從 mock 換成真的 API;`AdminShell` 的 PlatformAdmin 假資料視角補上權限檢查;`/register`/`/submit` 平行化查詢;`comment_endorsement` 計分項目終於有介面能啟用(「從範本加入計分項目」)。
-2. **音檔上傳依然沒接**:`/submit` 的「上傳音檔案」欄位還是佔位符,沒有真的存檔——這是 Cloudflare R2 任務範圍(見下方第 4 項)。**這是目前「完整跑一輪」最大的缺口**,沒有真的音檔,投票/評分階段聽不到東西。
+1. **08-18~19 三輪除錯已經修完六個真實缺口**(見文件尾端)——`/submit` 的 Suno 身份比對從 mock 換成真的 API;`AdminShell` 的 PlatformAdmin 假資料視角補上權限檢查;`/register`/`/submit` 平行化查詢;`comment_endorsement` 計分項目終於有介面能啟用;**`/competitions`(導覽列「比賽」頁)整頁原本完全沒接資料庫、標題寫死錯誤比賽名稱,已重建成真資料**;`ReportButton`(檢舉此比賽)原本點下去純粹假裝成功,`reports` 表 RLS 開了但零 policy,已補上真的寫入路徑。
+2. **音檔上傳依然沒接**:`/submit` 的「上傳音檔案」欄位、`/competitions` 的播放功能都還是佔位符——這是 Cloudflare R2 任務範圍(見下方第 4 項)。**這是目前「完整跑一輪」最大的缺口**,沒有真的音檔,試聽/投票/評分階段聽不到東西。
 3. **頁面切換速度**:只做了「查詢平行化」這個從程式碼就能確認的優化,沒有完全解釋使用者感受到的延遲——Vercel Hobby 方案的 serverless cold start、middleware+page 各自呼叫一次 `getClaims()` 的重複開銷,都是可能的殘餘原因。
-4. **Cloudflare R2**:建 bucket、拿金鑰、接上音檔上傳/簽章下載——**這件事只有使用者能做**(建 bucket、產生 API token 是 Cloudflare 帳號層級的操作),接手的 session 要主動問使用者「R2 金鑰準備好了嗎」,不要卡在這裡空等。
+4. **Cloudflare R2**:建 bucket、拿金鑰、接上音檔上傳/簽章下載——**這件事只有使用者能做**(建 bucket、產生 API token 是 Cloudflare 帳號層級的操作),接手的 session 要主動問使用者「R2 金鑰準備好了嗎」,不要卡在這裡空等。08-19 這輪使用者已經同意要跟 Discord 一起接,可能下次上線就會帶著金鑰來。
 5. **Discord guilds.join 補完**:同樣**只有使用者能做**——把 Bot 邀進 SoundArena Discord 伺服器,把伺服器 ID 告訴接手的 session,填進 `.env.local` 跟 Vercel 的 `DISCORD_GUILD_ID`。
-6. **`/admin/*` 的角色級路由保護**:proxy.ts 目前只檢查「有沒有登入」——這輪重新評估過,RLS + 頁面本身的空狀態已經提供足夠的保護,不是誤導性 UI,優先度沒有原本想的高,暫緩。
-7. **通知系統**:schema 還沒建,訂閱範圍鐵律已定案(SPEC.md 第 6 節):**報名才會訂閱,單純建立/主辦比賽不會訂閱,訂閱可取消**。
-8. **LINE 登入**:使用者已明確表示放棄這條線,不用再排進待辦。
-9. **邀請連結整合模板訊息**:唯一還沒排進去的使用者原始需求,範圍還沒訂。
-10. **UI/UX 改版(taste-skill,含手機板響應式)**:使用者明確要求「最後」才做,等使用者實測回饋完成後才開始。已裝好 `leonxlnx/taste-skill`(`skills-lock.json`),`redesign-existing-projects` 子 skill 的稽核清單已經讀過一次(字體/色彩/版面/互動狀態/內容/元件/圖示/程式碼品質七大類),可以直接接手使用,不用重新確認要不要用。
+6. **`AdminShell` 的「檢舉處理」畫面還是 `MOCK_REPORTS` 假資料**:這輪只修了「送出檢舉」那一半(RLS + submitReport + ReportButton),PlatformAdmin 端查看/處理檢舉清單還沒接。目前沒有任何真人是 `is_platform_admin=true`,所以這個畫面實際上不可能被觸發,不算誤導任何人,故意留到有真正的 PlatformAdmin 帳號時再一起接。
+7. **`/admin/*` 的角色級路由保護**:proxy.ts 目前只檢查「有沒有登入」——這輪重新評估過,RLS + 頁面本身的空狀態已經提供足夠的保護,不是誤導性 UI,優先度沒有原本想的高,暫緩。
+8. **通知系統**:schema 還沒建,訂閱範圍鐵律已定案(SPEC.md 第 6 節):**報名才會訂閱,單純建立/主辦比賽不會訂閱,訂閱可取消**。
+9. **LINE 登入**:使用者已明確表示放棄這條線,不用再排進待辦。
+10. **邀請連結整合模板訊息**:唯一還沒排進去的使用者原始需求,範圍還沒訂。
+11. **UI/UX 改版(taste-skill,含手機板響應式)**:使用者明確要求「最後」才做,等使用者實測回饋完成後才開始。已裝好 `leonxlnx/taste-skill`(`skills-lock.json`),`redesign-existing-projects` 子 skill 的稽核清單已經讀過一次(字體/色彩/版面/互動狀態/內容/元件/圖示/程式碼品質七大類),可以直接接手使用,不用重新確認要不要用。
 
 ---
 
@@ -515,3 +516,34 @@ C:\Users\LIN\Documents\github\SoundArena\
 用真實 organizer access token 直接呼叫 `add_score_item_from_template` RPC(跟 `addScoreItem` action 完全相同路徑)—— 成功建立「留言認可加分」,`label`/`kind`/`template_id` 全部正確,測完 service_role 刪除。接著本機瀏覽器(這輪擴充套件一度斷線,等它自己重連後繼續,沒有強行繞過)實際點過完整流程:下拉選單選「留言認可加分」(用 JS 原生 setter 設值,原生 `<select>` 用滑鼠點擊在自動化裡容易失焦,這是既有踩坑記錄的做法)→ 點「加入」→ 新項目正確出現在清單、權重 0%、下拉選單自動排除掉它 → 點 X 移除 → 點「儲存計分設定」→ 顯示「已儲存」→ 資料庫確認恢復成原本三項(投票/影片流量/外部投票),沒留測試痕跡。`tsc --noEmit`、`next build` 全程乾淨。
 
 已 commit(`10ab5b1`)、push、`vercel deploy --prod` 上線。
+
+---
+
+## 08-19 第二輪:全領域技術債掃描——`/competitions` 整頁是 mock、檢舉功能假裝成功
+
+使用者這輪要求「先做第一條(R2/DC),還有…順便掃全領域 使否還有 接一半的 謊稱成功的 slop開發技術債」,同樣點名 `/systematic-debugging` + `/debugging-and-error-recovery`。R2/DC 兩件事只有使用者能做(需要 Cloudflare/Discord 帳號層級操作),已經在回覆裡列清楚要跟使用者要什麼(R2:Account ID/Access Key ID/Secret Access Key/bucket 名稱;Discord:邀 bot 進伺服器 + Server ID),等使用者下次帶著這些回來。**這篇記錄的是「掃全領域」那部分做了什麼。**
+
+### 掃描方法(不是憑印象,是系統性檢查)
+
+1. grep 整個 `web/src` 找 TODO/FIXME/placeholder/「尚未」/「還沒接」等字樣註記——大部分是正常的 UI placeholder 文字跟已經誠實揭露的缺口(例如 SubmitForm 早就寫明「Cloudflare R2 的功能還沒接」),沒有新發現。
+2. grep `window.alert/confirm/prompt`、殘留 `console.log`、`as any` 濫用——全部乾淨,只有一處良性的 `SupabaseClient<any>` 泛型workaround。
+3. **關鍵一步**:對 `web/src/app` 底下**每一個** `page.tsx` 檢查有沒有 import supabase——這是找「整頁完全沒接資料庫」最可靠的方法,不用一個一個手動看。結果:**只有 `/competitions/page.tsx` 沒有**,其他所有路由都至少有一次真實查詢。
+4. 針對 `/competitions` 深入讀完整份程式碼,同時查它有沒有被任何真實入口連結到(grep 全站找 `/competitions` 的 `<Link>`)。
+
+### 找到的兩個真實問題
+
+1. **`/competitions`(導覽列「比賽」頁)整頁 100% mock,而且是孤兒頁面**——`"use client"` 元件,標題寫死「深夜擂台 EP.03」(注意:資料庫裡真實的比賽叫「EP.04」,這個假名字甚至跟真資料對不上),曲目清單全部是 `tracks(n, prefix)` 產生的「未命名作品 #N」假資料,還有一個「海選模式/對戰模式」的切換 UI,對戰模式是完全裝飾性的並排播放框,不對應 schema 裡任何真實概念(沒有「對戰」這種賽制)。**而且整站沒有任何地方連結到這個路由**——Discovery 卡片原本只連到 `/register`,使用者只能手動打網址才會看到這個頁面,一看就是寫死的假資料。這是這次掃描找到最大的一塊——不在任何一次 HANDOFF「已知缺口」記錄裡,是被完全遺漏、沒人発現的技術債。
+2. **`ReportButton`(檢舉此比賽)點下去純粹是 UI 謊言**——`onClick={() => setSent(true)}`,只改本地 state,沒有任何網路請求。`reports` 資料表從 `init_schema.sql` 就 `enable row level security`,但**從來沒有寫過任何一條 policy**——就算真的接上,在補 policy 之前也會被 RLS 完全擋下(zero policy = 沒人能寫)。
+
+### 這輪做了什麼
+
+- **`supabase/migrations/20260819020000_reports_rls.sql`**:補上 `reports` 的三條 policy——登入使用者可對公開比賽送出檢舉(`reporter_id = auth.uid()`)、PlatformAdmin 可讀取/處理。**刻意沒有處理 AdminShell 那邊「檢舉處理」清單的真資料串接**——目前資料庫裡零個帳號是 `is_platform_admin=true`,那個畫面實際上不可能被任何真人看到,不算「誤導使用者」,留到有真正的 PlatformAdmin 帳號時再一起做,避免這輪範圍無限擴大。
+- **`web/src/lib/reportActions.ts`**:新增 `submitReport(competitionId, reason)`,`ReportButton.tsx` 改用真的 action,新增 `competitionId` 必填 prop、loading/error 狀態。
+- **`/competitions` 整頁重寫**:拆成 `page.tsx`(Server Component,比照 `/register` 的「沒帶參數列清單、帶了 `?competition=` 查詳情」寫法,`is_public` 一併檢查)+ 新的 `CompetitionBrowser.tsx`(Client Component,保留原本輪次分組展開/收合的視覺設計,拿掉沒有真實依據的「對戰模式」)。曲目清單查真實 `submissions`(`status='approved' AND allow_public_playback=true`,RLS 本身還會再疊加 `registrations.is_public=true`,不用前端重複判斷)。播放功能誠實顯示「Cloudflare R2 還沒接上」,不假裝能播。
+- **`DiscoveryList.tsx`** 每張比賽卡片新增「試聽作品 →」連結到 `/competitions?competition=<id>`——**這是全站第一個連到這個頁面的真實入口**,補上這個之前,`/competitions` 徹底是孤兒路由。
+
+### 端到端實測過
+
+`tsc --noEmit`、`next build` 全程乾淨,`/competitions` 路由從 static(○)變成 dynamic(ƒ),確認真的在查資料庫。本機瀏覽器點 Discovery 卡片的「試聽作品」→ 正確顯示「深夜擂台 EP.04」(不再是假的 EP.03)、三個真實輪次、初賽底下兩首真實投稿標題(「抽象善良」「路上ランウェイ」,不是「未命名作品 #N」)。點「檢舉此比賽」填原因送出 → 顯示「檢舉已送出」→ 用 service_role 查 `reports` 表確認 `reporter_id`/`competition_id`/`reason` 全部正確寫入,測完刪除。
+
+已 commit(`dc8be7d`)、push、`vercel deploy --prod` 上線。
