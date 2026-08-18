@@ -125,16 +125,18 @@ C:\Users\LIN\Documents\github\SoundArena\
 
 ## 下一步(哪個先做,使用者可以自己選)
 
-1. **08-18 第二輪除錯已修完三個真實 bug**(見文件尾端)——`/submit` 的 Suno 身份比對從 mock 換成真的 API;`AdminShell` 的 PlatformAdmin 假資料視角補上權限檢查;`/register`/`/submit` 平行化查詢。
-2. **`/admin/*` 的角色級路由保護**:proxy.ts 目前只檢查「有沒有登入」,沒檢查「這個人是不是這場比賽的 Organizer 或 Collaborator」——RLS 是實際擋著的那層,route 層級的檢查還是沒做(現在有 Collaborator 了,這個缺口比之前更值得補)。
-3. **頁面切換速度**:這輪只做了「查詢平行化」這個從程式碼就能確認的優化,沒有完全解釋使用者感受到的延遲——Vercel Hobby 方案的 serverless cold start、middleware+page 各自呼叫一次 `getClaims()` 的重複開銷,都是可能的殘餘原因,值得的話可以考慮:量測真實的 TTFB(不是肉眼估計)、把 middleware 驗證過的 user id 透過 header 往下傳給 page 用(省掉第二次 `getClaims()`)、或評估升級 Vercel 方案。
-4. **音檔上傳依然沒接**:`/submit` 的「上傳音檔案」欄位還是佔位符,沒有真的存檔——這是 Cloudflare R2 那個任務範圍(見下方第 6 項),跟這輪修的 Suno 身份比對是兩件事,不要搞混。
-5. **Discord guilds.join 補完**:使用者把 Bot 邀進 SoundArena Discord 伺服器,把伺服器 ID 填進 `.env.local` 跟 Vercel 的 `DISCORD_GUILD_ID`
-6. **Cloudflare R2**:建 bucket、拿金鑰、接上音檔上傳/簽章下載
-7. **通知系統**:schema 還沒建,但訂閱範圍的鐵律已經定案並寫進 SPEC.md 第 6 節——**報名才會訂閱,單純建立/主辦比賽不會訂閱,訂閱可取消**。
+**使用者的排序(08-19 定案)**:先把自己能做完的功能缺口收乾淨 → 使用者自己完整跑一輪報名→投稿→投票→評分→留言 → 回饋調整 → 最後才進 taste-skill UI/UX 改版(含手機板)。**在使用者說「可以了」之前,不要主動開始 taste-skill 改版。**
+
+1. **08-18~19 這兩輪已經修完四個真實缺口**(見文件尾端)——`/submit` 的 Suno 身份比對從 mock 換成真的 API;`AdminShell` 的 PlatformAdmin 假資料視角補上權限檢查;`/register`/`/submit` 平行化查詢;`comment_endorsement` 計分項目終於有介面能啟用(「從範本加入計分項目」)。
+2. **音檔上傳依然沒接**:`/submit` 的「上傳音檔案」欄位還是佔位符,沒有真的存檔——這是 Cloudflare R2 任務範圍(見下方第 4 項)。**這是目前「完整跑一輪」最大的缺口**,沒有真的音檔,投票/評分階段聽不到東西。
+3. **頁面切換速度**:只做了「查詢平行化」這個從程式碼就能確認的優化,沒有完全解釋使用者感受到的延遲——Vercel Hobby 方案的 serverless cold start、middleware+page 各自呼叫一次 `getClaims()` 的重複開銷,都是可能的殘餘原因。
+4. **Cloudflare R2**:建 bucket、拿金鑰、接上音檔上傳/簽章下載——**這件事只有使用者能做**(建 bucket、產生 API token 是 Cloudflare 帳號層級的操作),接手的 session 要主動問使用者「R2 金鑰準備好了嗎」,不要卡在這裡空等。
+5. **Discord guilds.join 補完**:同樣**只有使用者能做**——把 Bot 邀進 SoundArena Discord 伺服器,把伺服器 ID 告訴接手的 session,填進 `.env.local` 跟 Vercel 的 `DISCORD_GUILD_ID`。
+6. **`/admin/*` 的角色級路由保護**:proxy.ts 目前只檢查「有沒有登入」——這輪重新評估過,RLS + 頁面本身的空狀態已經提供足夠的保護,不是誤導性 UI,優先度沒有原本想的高,暫緩。
+7. **通知系統**:schema 還沒建,訂閱範圍鐵律已定案(SPEC.md 第 6 節):**報名才會訂閱,單純建立/主辦比賽不會訂閱,訂閱可取消**。
 8. **LINE 登入**:使用者已明確表示放棄這條線,不用再排進待辦。
 9. **邀請連結整合模板訊息**:唯一還沒排進去的使用者原始需求,範圍還沒訂。
-10. **`score_item_templates` 沒有通用的「啟用計分項目」UI**:`comment_endorsement` 這個範本已經存在,但 `/admin/format` 建立比賽時是寫死塞入投票/影片流量/外部投票三項(`DEFAULT_SCORE_ITEMS`),沒有介面能讓 Organizer 自己從範本庫勾選啟用 `comment_endorsement`。
+10. **UI/UX 改版(taste-skill,含手機板響應式)**:使用者明確要求「最後」才做,等使用者實測回饋完成後才開始。已裝好 `leonxlnx/taste-skill`(`skills-lock.json`),`redesign-existing-projects` 子 skill 的稽核清單已經讀過一次(字體/色彩/版面/互動狀態/內容/元件/圖示/程式碼品質七大類),可以直接接手使用,不用重新確認要不要用。
 
 ---
 
@@ -487,3 +489,29 @@ C:\Users\LIN\Documents\github\SoundArena\
 `tsc --noEmit`、`next build` 全程乾淨。本機 dev server 真實瀏覽器點過:貼真實 Suno 分享連結(`https://suno.com/s/IKWrakvC2p7TUqRZ`)→ 畫面顯示真的頭像照片跟「身份比對通過(sharer 帳號 @my13u 與報名帳號一致)」(不是 mock 卡片)→ 填標題送出 → service_role 查 DB 確認 `sharer_handle` 真的是從 API 拿到的 `my13u`,不是任何寫死的值 → 刪除這筆測試投稿。組織者帳號(`is_platform_admin=false`)重新整理 `/admin/format`,確認側欄的視角切換 Switch 完全不見了(修前修後截圖對比過)。
 
 已 commit(`4ca1c02`)、push、`vercel deploy --prod` 上線。
+
+---
+
+## 08-19:comment_endorsement 計分項目補上「加入」介面 + motionsites 生態系的兩個外部查證
+
+使用者這輪說「目前下一步 你認為做什麼 我是認為都做完 讓我實際跑一次後 繼續調整 最後沒問題 用TASTER進行uiux修改」——**明確的排序是:先把自己能做完的功能缺口收乾淨,使用者自己完整跑一輪,回饋調整,最後才進 taste-skill 改版**。同時丟了兩個外部連結:`github.com/thanhtrongg/motionsites-prompt-exporter` 跟「或上網查 motionsites.ai 參考」。
+
+### 外部查證:一個不用、一個查了
+
+- **`motionsites-prompt-exporter` 不會用**:讀過 README 後確認這是一個從瀏覽器 devtools 挖出 motionsites.ai(一個賣 AI prompt 的付費市集)後端 Supabase anon key、拿去自動化批次爬他們商品目錄的工具。即使 README 自稱「只爬免費 metadata」,這仍然是繞過官方介面對別人的商業產品做規模化擷取——而且**同一個生態系的姊妹 repo(`motionsites.ai-prompt-library`)上一輪就查到被 GitHub 正式 DMCA 下架**,是已經有過真實法律行動的前例。沒有設定或執行這個工具。
+- **motionsites.ai 官網本身查了**(正常訪客瀏覽,沒有問題):深色背景、大膽英雄標題、卡片網格陳列設計範例、動畫背景營造科技感——這個方向記下來,留給之後 taste-skill 改版參考,不算侵權(單純看設計風格,沒有複製任何具體內容)。
+
+### 這輪做了什麼
+
+**`comment_endorsement` 計分項目終於有介面能啟用**——`replace_score_items`(既有的計分項目儲存 RPC)從一開始就只做 UPDATE + DELETE,從來沒有 INSERT 分支,所以即使 `score_item_templates` 範本庫早就有 `comment_endorsement`,Organizer 完全沒有任何介面路徑能把它加進某場比賽的 ScoringRule——留言/認可功能做完整條線,但這個計分項目一直沒辦法真的被啟用,是 08-17 就記錄、拖到現在的已知缺口。
+
+- 新 migration:`add_score_item_from_template(p_scoring_rule_id, p_template_key)`——真的 INSERT 一筆新的 `score_items`,`weight_percent` 預設 0(不影響既有加權總和=100%的檢查)。RLS 早就允許 INSERT(`score_items writable by organizer or collaborator` 本來就是 `for all` policy),沒有另外開權限。
+- `admin/format/actions.ts` 新增 `addScoreItem(scoringRuleId, templateKey)` server action,回傳新建的 id。
+- `admin/format/page.tsx` 多查一次 `score_item_templates` 範本庫,`score_items` 查詢也多 join 一次 `score_item_templates(key)`,把「這個項目對應哪個範本」的資訊往下傳。
+- `AdminFormatClient.tsx` 的 `ScoreEditor` 元件新增「從範本加入計分項目」下拉選單(自動排除已經用過的範本)+「加入」按鈕,加入後直接把新項目推進本地 state(不用整頁重新整理就看得到),沿用既有的「儲存」按鈕存檔。Competition 預設規則跟每輪的覆寫規則(`RoundFormatCard`)兩個地方都接上了。
+
+### 端到端實測過
+
+用真實 organizer access token 直接呼叫 `add_score_item_from_template` RPC(跟 `addScoreItem` action 完全相同路徑)—— 成功建立「留言認可加分」,`label`/`kind`/`template_id` 全部正確,測完 service_role 刪除。接著本機瀏覽器(這輪擴充套件一度斷線,等它自己重連後繼續,沒有強行繞過)實際點過完整流程:下拉選單選「留言認可加分」(用 JS 原生 setter 設值,原生 `<select>` 用滑鼠點擊在自動化裡容易失焦,這是既有踩坑記錄的做法)→ 點「加入」→ 新項目正確出現在清單、權重 0%、下拉選單自動排除掉它 → 點 X 移除 → 點「儲存計分設定」→ 顯示「已儲存」→ 資料庫確認恢復成原本三項(投票/影片流量/外部投票),沒留測試痕跡。`tsc --noEmit`、`next build` 全程乾淨。
+
+已 commit(`10ab5b1`)、push、`vercel deploy --prod` 上線。
