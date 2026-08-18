@@ -13,6 +13,7 @@ import {
   removeRound,
   toggleScoringOverride,
   saveScoreItems,
+  addScoreItem,
   setRoundAnonymity,
   setAllRoundsAnonymity,
 } from "./actions";
@@ -22,6 +23,13 @@ export interface ScoreItemData {
   label: string;
   kind: "weighted" | "bonus";
   weightPercent: number | null;
+  templateKey: string | null;
+}
+
+export interface ScoreItemTemplate {
+  key: string;
+  label: string;
+  defaultKind: "weighted" | "bonus";
 }
 
 export interface ThemeConfig {
@@ -58,15 +66,47 @@ function ScoreEditor({
   scoringRuleId,
   initialItems,
   context,
+  catalog,
 }: {
   scoringRuleId: string;
   initialItems: ScoreItemData[];
   context: string;
+  catalog: ScoreItemTemplate[];
 }) {
   const [items, setItems] = useState(initialItems);
   const [saving, setSaving] = useState(false);
+  const [adding, setAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [pickerKey, setPickerKey] = useState("");
+
+  const usedKeys = new Set(items.map((it) => it.templateKey).filter((k): k is string => !!k));
+  const availableTemplates = catalog.filter((t) => !usedKeys.has(t.key));
+
+  async function addItem() {
+    const template = availableTemplates.find((t) => t.key === pickerKey);
+    if (!template) return;
+    setAdding(true);
+    setError(null);
+    const result = await addScoreItem(scoringRuleId, template.key);
+    setAdding(false);
+    if ("error" in result) {
+      setError(result.error);
+      return;
+    }
+    setItems((its) => [
+      ...its,
+      {
+        id: result.id,
+        label: template.label,
+        kind: template.defaultKind,
+        weightPercent: template.defaultKind === "weighted" ? 0 : null,
+        templateKey: template.key,
+      },
+    ]);
+    setPickerKey("");
+    setSaved(false);
+  }
 
   const setWeight = (id: string, w: number) => {
     setItems((its) => its.map((it) => (it.id === id ? { ...it, weightPercent: w } : it)));
@@ -134,6 +174,29 @@ function ScoreEditor({
           </button>
         </div>
       ))}
+      {availableTemplates.length > 0 && (
+        <div className="mt-2.5 flex items-center gap-2">
+          <select
+            value={pickerKey}
+            onChange={(e) => setPickerKey(e.target.value)}
+            className="flex-1 rounded-lg border border-panel-border bg-black/25 px-2.25 py-1.75 text-[12.5px] text-ink [color-scheme:dark]"
+          >
+            <option value="">從範本加入計分項目…</option>
+            {availableTemplates.map((t) => (
+              <option key={t.key} value={t.key}>
+                {t.label}
+              </option>
+            ))}
+          </select>
+          <button
+            onClick={addItem}
+            disabled={!pickerKey || adding}
+            className="flex items-center gap-1 rounded-lg border border-panel-border bg-white/[0.04] px-2.5 py-1.75 text-[12px] text-ink disabled:opacity-40"
+          >
+            <Icon name="plus" size={13} /> 加入
+          </button>
+        </div>
+      )}
       {weightedItems.length > 0 && (
         <div
           className={`mt-2.5 flex items-center gap-3 rounded-[10px] px-3.5 py-2.5 text-[12.5px] ${
@@ -231,10 +294,12 @@ function RoundFormatCard({
   round,
   competitionId,
   catalog,
+  scoreTemplates,
 }: {
   round: RoundData;
   competitionId: string;
   catalog: FormatBlockCatalog;
+  scoreTemplates: ScoreItemTemplate[];
 }) {
   const [isPending, startTransition] = useTransition();
   const isLocked = !!round.locked;
@@ -354,6 +419,7 @@ function RoundFormatCard({
           scoringRuleId={round.scoringRule.id}
           initialItems={round.scoringRule.items}
           context={`「${round.name}」的覆寫規則`}
+          catalog={scoreTemplates}
         />
       )}
       {isLocked && (
@@ -445,6 +511,7 @@ interface AdminFormatClientProps {
   defaultScoreItems: ScoreItemData[];
   rounds: RoundData[];
   formatBlockCatalog: FormatBlockCatalog;
+  scoreItemTemplates: ScoreItemTemplate[];
   competitionList: Array<{ id: string; name: string }>;
   isPlatformAdmin?: boolean;
 }
@@ -455,6 +522,7 @@ export function AdminFormatClient({
   defaultScoreItems,
   rounds,
   formatBlockCatalog,
+  scoreItemTemplates,
   competitionList,
   isPlatformAdmin = false,
 }: AdminFormatClientProps) {
@@ -481,7 +549,12 @@ export function AdminFormatClient({
         <div className="mb-5">
           <label className="mb-1.5 block text-[12.5px] font-semibold text-ink-dim">Competition 預設 ScoringRule</label>
           <div className="mb-2.5 text-[11.5px] leading-relaxed text-ink-faint">套用到所有未個別覆寫的輪次。</div>
-          <ScoreEditor scoringRuleId={defaultScoringRuleId} initialItems={defaultScoreItems} context="Competition 預設規則" />
+          <ScoreEditor
+            scoringRuleId={defaultScoringRuleId}
+            initialItems={defaultScoreItems}
+            context="Competition 預設規則"
+            catalog={scoreItemTemplates}
+          />
         </div>
       )}
 
@@ -491,7 +564,13 @@ export function AdminFormatClient({
         </label>
       </div>
       {rounds.map((r) => (
-        <RoundFormatCard key={r.id} round={r} competitionId={competition.id} catalog={formatBlockCatalog} />
+        <RoundFormatCard
+          key={r.id}
+          round={r}
+          competitionId={competition.id}
+          catalog={formatBlockCatalog}
+          scoreTemplates={scoreItemTemplates}
+        />
       ))}
       <button
         disabled={isPending}

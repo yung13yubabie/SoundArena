@@ -286,3 +286,17 @@ export async function saveScoreItems(
   revalidatePath("/admin/format");
   return { success: true };
 }
+
+export async function addScoreItem(
+  scoringRuleId: string,
+  templateKey: string,
+): Promise<{ success: true; id: string } | { error: string }> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("add_score_item_from_template", {
+    p_scoring_rule_id: scoringRuleId,
+    p_template_key: templateKey,
+  });
+  if (error) return { error: error.message };
+  revalidatePath("/admin/format");
+  return { success: true, id: data as string };
+}

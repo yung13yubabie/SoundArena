@@ -7,6 +7,7 @@ import {
   type CompetitionData,
   type RoundData,
   type ScoreItemData,
+  type ScoreItemTemplate,
   type FormatBlockCatalog,
 } from "./AdminFormatClient";
 
@@ -16,6 +17,7 @@ interface ScoreItemRow {
   kind: "weighted" | "bonus";
   weight_percent: number | null;
   sort_order: number;
+  score_item_templates: { key: string } | { key: string }[] | null;
 }
 
 interface ScoringRuleRow {
@@ -30,10 +32,20 @@ interface FormatBlockRow {
   format_blocks: { key: string; category: "elimination" | "grouping" | "special" } | null;
 }
 
+function oneTemplate(value: ScoreItemRow["score_item_templates"]) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
 function toScoreItems(rows: ScoreItemRow[]): ScoreItemData[] {
   return [...rows]
     .sort((a, b) => a.sort_order - b.sort_order)
-    .map((r) => ({ id: r.id, label: r.label, kind: r.kind, weightPercent: r.weight_percent }));
+    .map((r) => ({
+      id: r.id,
+      label: r.label,
+      kind: r.kind,
+      weightPercent: r.weight_percent,
+      templateKey: oneTemplate(r.score_item_templates)?.key ?? null,
+    }));
 }
 
 export default async function AdminFormatPage({
@@ -75,21 +87,29 @@ export default async function AdminFormatPage({
 
   const roundIds = (rounds ?? []).map((r) => r.id);
 
-  const [{ data: blockRows }, { data: scoringRuleRows }, { data: catalogRows }] = await Promise.all([
-    roundIds.length
-      ? supabase.from("round_format_blocks").select("round_id, config, format_blocks(key, category)").in("round_id", roundIds)
-      : Promise.resolve({ data: [] as FormatBlockRow[] }),
-    supabase
-      .from("scoring_rules")
-      .select("id, round_id, score_items(id, label, kind, weight_percent, sort_order)")
-      .eq("competition_id", competition.id),
-    supabase.from("format_blocks").select("key, label, category").order("category").order("key"),
-  ]);
+  const [{ data: blockRows }, { data: scoringRuleRows }, { data: catalogRows }, { data: scoreTemplateRows }] =
+    await Promise.all([
+      roundIds.length
+        ? supabase.from("round_format_blocks").select("round_id, config, format_blocks(key, category)").in("round_id", roundIds)
+        : Promise.resolve({ data: [] as FormatBlockRow[] }),
+      supabase
+        .from("scoring_rules")
+        .select("id, round_id, score_items(id, label, kind, weight_percent, sort_order, score_item_templates(key))")
+        .eq("competition_id", competition.id),
+      supabase.from("format_blocks").select("key, label, category").order("category").order("key"),
+      supabase.from("score_item_templates").select("key, label, default_kind").order("label"),
+    ]);
 
   const formatBlockCatalog: FormatBlockCatalog = { elimination: [], grouping: [], special: [] };
   for (const row of catalogRows ?? []) {
     formatBlockCatalog[row.category as "elimination" | "grouping" | "special"].push({ key: row.key, label: row.label });
   }
+
+  const scoreItemTemplates: ScoreItemTemplate[] = (scoreTemplateRows ?? []).map((t) => ({
+    key: t.key,
+    label: t.label,
+    defaultKind: t.default_kind as "weighted" | "bonus",
+  }));
 
   const blocks = (blockRows ?? []) as unknown as FormatBlockRow[];
   const scoringRules = (scoringRuleRows ?? []) as unknown as ScoringRuleRow[];
@@ -139,6 +159,7 @@ export default async function AdminFormatPage({
       defaultScoreItems={defaultItems}
       rounds={roundData}
       formatBlockCatalog={formatBlockCatalog}
+      scoreItemTemplates={scoreItemTemplates}
       competitionList={competitionList}
       isPlatformAdmin={isPlatformAdmin}
     />
