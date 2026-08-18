@@ -65,7 +65,7 @@ export default async function RegisterPage({
     supabase.from("competitions").select("id, name, registration_closes_at").eq("id", competitionId).maybeSingle(),
     supabase
       .from("registrations")
-      .select("id, display_name, suno_handle")
+      .select("id, display_name, suno_handle, review_status, review_note")
       .eq("competition_id", competitionId)
       .eq("user_id", userId)
       .maybeSingle(),

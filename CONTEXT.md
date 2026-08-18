@@ -25,10 +25,8 @@ Submission 的原作者對一則 Comment 給予的 0–100% 認可度(預設 0%,
 _Avoid_: 按讚、愛心(這兩個詞暗示二元的是非,實際上是連續的 0–100% 槓桿,只是 UI 上可能提供「一鍵設 100%」的捷徑)
 
 **PlatformAdmin(平台管理員)**:
-與 Organizer 不同層級的角色,看得到全站所有 Competition,職責是處理 Report、排解跨比賽的爭議/濫用。不是自助開放的角色,由平台方手動指派(指派機制不在本輪範圍內展開)。
-
-**Report(檢舉)**:
-任何使用者對某場 Competition 提出的濫用/違規回報,進入 PlatformAdmin 的處理清單。檢舉的對象是 Competition 整體,不是個別 Submission(個別作品內容爭議由該 Competition 自己的 Organizer 在審核流程處理,見 Submission)。
+與 Organizer 不同層級的角色,看得到全站所有 Competition,職責是排解跨比賽的爭議/濫用。不是自助開放的角色,由平台方手動指派(指派機制不在本輪範圍內展開)。
+_已移除(ADR-0007)_:原本規劃「處理 Report(檢舉)」是這個角色的職責之一,ADR-0007 推翻了 Report 機制本身,PlatformAdmin 的爭議處理現在沒有站內的正式回報管道支撐——這是使用者明確要求拿掉的,不是遺漏。
 
 **Round(輪次)**:
 Competition 裡一個有序的階段(如「第1輪·海選」「第2輪·複賽」「決賽」)。FormatBlock 組合掛在 Round 上,不是掛在 Competition 上——同一場 Competition 底下,不同 Round 可以是完全不同的賽制組合(例如第1輪循環賽、第2輪3對3隊伍賽、決賽單挑對戰)。ScoringRule 預設繼承 Competition 的設定,但可以在 Round 層級被 ScoringRuleOverride 取代。是否匿名(AnonymityMode)也是 Round 自己的屬性,不是繼承 Competition。
@@ -81,7 +79,18 @@ _Avoid_: 匿名規則(不夠精確,實際上是揭露「時機」的選擇,不�
 Competition 的高層階段骨架:宣傳 → 投稿 → 投票 → 公布,通常對應到 Round 的起訖日期。跨階段有邊界規則:報名開放時間不可晚於投稿期結束(見 Registration)。
 
 **Registration(報名)**:
-Participant 建立資格的動作,綁定站內帳號與 Suno 帳號名稱。存取順序是硬性的:未登入不能報名,未報名不能投稿(登入 → 報名 → 投稿,不可跳過)。
+Participant 建立資格的動作,綁定站內帳號與 Suno 帳號名稱。存取順序是硬性的:未登入不能報名,未報名不能投稿(登入 → 報名 → 投稿,不可跳過)。ADR-0008 之後,「報名成功」不再等於「可以投稿」,中間多了 RegistrationReviewStatus 這一關。
+
+**RegistrationReviewStatus(報名審核狀態)**:
+Registration 送出後的審核狀態,防範惡意/灌水報名(使用者原話:比賽蟑螂)。狀態機:
+```
+待審核(PendingReview)
+  → 已通過(Approved) → 可以投稿(見 Submission)
+  → 已退回(Rejected,附退回理由,顯示給本人看)
+      → [本人修改暱稱/Suno帳號重新送出] → 回到「待審核」,次數不限
+```
+審核者是該 Competition 的 Organizer(或有 review 權限的 Collaborator),跟 Submission 的審核者、審核精神一致(退回要附理由、理由要讓本人看得到)——這條規則刻意比照 Submission 的審核狀態機設計,不是重新發明一套。
+_Avoid_: 跟 ParticipantStatus(active/eliminated)混為一談——ParticipantStatus 是「審核通過、正式參賽後,比賽進行中的存活狀態」;RegistrationReviewStatus 是「審核通過之前,能不能開始參賽」的關卡。這是報名生命週期裡兩個獨立的狀態維度,不是同一個欄位的不同值,順序上 RegistrationReviewStatus 先發生。
 
 ## 已收斂的舊疑問
 

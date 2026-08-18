@@ -14,6 +14,8 @@ interface RegistrationRow {
   eliminated_in_round_id: string | null;
   competition_id: string;
   is_public: boolean;
+  review_status: "pending_review" | "approved" | "rejected";
+  review_note: string | null;
   competitions: { name: string } | { name: string }[] | null;
 }
 
@@ -49,7 +51,7 @@ export default async function StatusPage() {
 
   const { data: registrations } = await supabase
     .from("registrations")
-    .select("id, status, eliminated_in_round_id, competition_id, is_public, competitions(name)")
+    .select("id, status, eliminated_in_round_id, competition_id, is_public, review_status, review_note, competitions(name)")
     .eq("user_id", userId);
 
   const regs = (registrations ?? []) as unknown as RegistrationRow[];
@@ -100,6 +102,24 @@ export default async function StatusPage() {
             return (
               <div key={reg.id} className="mb-7">
                 <h2 className="mb-3 text-[16px] font-semibold">{oneName(reg.competitions)}</h2>
+
+                {reg.review_status === "pending_review" && (
+                  <div className="mb-3 flex items-center gap-2.5 rounded-[11px] border border-warn/30 bg-warn/8 px-4 py-2.75 text-[12.5px] text-warn">
+                    <Icon name="alert" size={15} />
+                    報名審核中，主辦人審核通過後才能投稿
+                  </div>
+                )}
+                {reg.review_status === "rejected" && (
+                  <div className="mb-3 flex items-center gap-2.5 rounded-[11px] border border-bad/30 bg-bad/8 px-4 py-2.75 text-[12.5px] text-bad">
+                    <Icon name="alert" size={15} />
+                    <span className="flex-1">
+                      報名被退回：{reg.review_note || "（主辦人沒有留下原因）"}
+                    </span>
+                    <Link href={`/register?competition=${reg.competition_id}`} className="font-semibold text-bad hover:underline">
+                      修改後重新送出 →
+                    </Link>
+                  </div>
+                )}
 
                 {reg.status === "eliminated" && (
                   <div className="mb-3 flex items-center gap-2.5 rounded-[11px] border border-bad/30 bg-bad/8 px-4 py-2.75 text-[12.5px] text-bad">

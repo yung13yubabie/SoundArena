@@ -33,3 +33,25 @@ export async function registerForCompetition(formData: FormData): Promise<Action
   revalidatePath("/status");
   return { success: true };
 }
+
+export async function resubmitRegistration(
+  registrationId: string,
+  displayName: string,
+  sunoHandle: string,
+): Promise<ActionResult> {
+  const supabase = await createClient();
+  const trimmedName = displayName.trim();
+  const trimmedHandle = sunoHandle.trim();
+  if (!trimmedName || !trimmedHandle) return { error: "請填寫暱稱與 Suno 帳號" };
+
+  const { error } = await supabase.rpc("resubmit_registration", {
+    p_registration_id: registrationId,
+    p_display_name: trimmedName,
+    p_suno_handle: trimmedHandle,
+  });
+  if (error) return { error: error.message };
+
+  revalidatePath("/register");
+  revalidatePath("/status");
+  return { success: true };
+}

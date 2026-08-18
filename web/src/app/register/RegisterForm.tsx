@@ -4,12 +4,22 @@ import { useState } from "react";
 import Link from "next/link";
 import { SiteHeader } from "@/components/SiteHeader";
 import { Icon } from "@/lib/icons";
-import { registerForCompetition } from "./actions";
+import { registerForCompetition, resubmitRegistration } from "./actions";
+
+type ReviewStatus = "pending_review" | "approved" | "rejected";
+
+interface ExistingRegistration {
+  id: string;
+  display_name: string;
+  suno_handle: string;
+  review_status: ReviewStatus;
+  review_note: string | null;
+}
 
 interface RegisterFormProps {
   competitionId: string;
   competitionName: string;
-  existing: { id: string; display_name: string; suno_handle: string } | null;
+  existing: ExistingRegistration | null;
   registrationClosed: boolean;
 }
 
@@ -37,8 +47,19 @@ export function RegisterForm({ competitionId, competitionName, existing, registr
     }
   }
 
-  if (existing || submitted) {
-    const shown = existing ?? { display_name: nickname, suno_handle: sunoHandle };
+  if (existing?.review_status === "rejected") {
+    return (
+      <ResubmitForm
+        registrationId={existing.id}
+        competitionName={competitionName}
+        reviewNote={existing.review_note}
+        initialNickname={existing.display_name}
+        initialSunoHandle={existing.suno_handle}
+      />
+    );
+  }
+
+  if (existing?.review_status === "approved") {
     return (
       <div>
         <SiteHeader authed active="events" />
@@ -47,7 +68,7 @@ export function RegisterForm({ competitionId, competitionName, existing, registr
           <div className="glass mt-7 max-w-[560px] p-7">
             <div className="flex items-center gap-2.5 rounded-[10px] border border-ok/30 bg-ok/10 p-3.5 text-[12.5px] text-ok">
               <Icon name="check" />
-              已報名「{shown.display_name}」，Suno 帳號 {shown.suno_handle} 已登記
+              已報名「{existing.display_name}」，Suno 帳號 {existing.suno_handle} 已登記
             </div>
             <Link
               href="/submit"
@@ -55,6 +76,24 @@ export function RegisterForm({ competitionId, competitionName, existing, registr
             >
               前往投稿頁提交作品 →
             </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (existing?.review_status === "pending_review" || submitted) {
+    const shown = existing ?? { display_name: nickname, suno_handle: sunoHandle };
+    return (
+      <div>
+        <SiteHeader authed active="events" />
+        <div className="mx-auto max-w-[1180px] px-11 pt-10 pb-24">
+          <h1 className="font-display text-[30px]">報名審核中</h1>
+          <div className="glass mt-7 max-w-[560px] p-7">
+            <div className="flex items-center gap-2.5 rounded-[10px] border border-warn/30 bg-warn/10 p-3.5 text-[12.5px] text-warn">
+              <Icon name="alert" />
+              已收到「{shown.display_name}」的報名，Suno 帳號 {shown.suno_handle}，等主辦人審核通過後才能投稿
+            </div>
           </div>
         </div>
       </div>
@@ -81,7 +120,7 @@ export function RegisterForm({ competitionId, competitionName, existing, registr
           <div className="mb-2 text-xs uppercase tracking-widest text-accent">Screen · 報名</div>
           <h1 className="font-display text-[30px]">報名參賽 — {competitionName}</h1>
           <p className="mt-1.5 max-w-[680px] text-sm leading-relaxed text-ink-dim">
-            填寫基本資料並提供 Suno 帳號，之後每一輪投稿都會用這組帳號核對身份。
+            填寫基本資料並提供 Suno 帳號，送出後由主辦人審核，審核通過才能投稿。
           </p>
         </div>
 
@@ -123,6 +162,101 @@ export function RegisterForm({ competitionId, competitionName, existing, registr
           {!canSubmit && (
             <p className="mt-2 text-[11.5px] text-ink-faint">兩個欄位都填寫後才能送出。</p>
           )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ResubmitForm({
+  registrationId,
+  competitionName,
+  reviewNote,
+  initialNickname,
+  initialSunoHandle,
+}: {
+  registrationId: string;
+  competitionName: string;
+  reviewNote: string | null;
+  initialNickname: string;
+  initialSunoHandle: string;
+}) {
+  const [nickname, setNickname] = useState(initialNickname);
+  const [sunoHandle, setSunoHandle] = useState(initialSunoHandle);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [resent, setResent] = useState(false);
+  const canSubmit = nickname.trim() !== "" && sunoHandle.trim() !== "";
+
+  async function handleResubmit() {
+    setPending(true);
+    setError(null);
+    const result = await resubmitRegistration(registrationId, nickname, sunoHandle);
+    setPending(false);
+    if ("error" in result) {
+      setError(result.error);
+    } else {
+      setResent(true);
+    }
+  }
+
+  if (resent) {
+    return (
+      <div>
+        <SiteHeader authed active="events" />
+        <div className="mx-auto max-w-[1180px] px-11 pt-10 pb-24">
+          <h1 className="font-display text-[30px]">報名審核中</h1>
+          <div className="glass mt-7 max-w-[560px] p-7">
+            <div className="flex items-center gap-2.5 rounded-[10px] border border-warn/30 bg-warn/10 p-3.5 text-[12.5px] text-warn">
+              <Icon name="alert" />
+              已重新送出，等主辦人再次審核
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <SiteHeader authed active="events" />
+      <div className="mx-auto max-w-[1180px] px-11 pt-10 pb-24">
+        <div className="mb-7">
+          <div className="mb-2 text-xs uppercase tracking-widest text-accent">Screen · 報名</div>
+          <h1 className="font-display text-[30px]">報名被退回 — {competitionName}</h1>
+        </div>
+
+        <div className="glass max-w-[560px] p-7">
+          <div className="mb-5 flex items-start gap-2.5 rounded-[10px] border border-bad/30 bg-bad/10 p-3.5 text-[12.5px] text-bad">
+            <Icon name="alert" className="mt-0.5 flex-none" />
+            <span>退回原因：{reviewNote || "（主辦人沒有留下原因）"}</span>
+          </div>
+
+          <label className="mb-1.5 block text-[12.5px] font-semibold text-ink-dim">參賽者暱稱</label>
+          <input
+            className="mb-5 w-full rounded-[10px] border border-panel-border bg-black/25 px-3.5 py-2.5 text-[13.5px] text-ink outline-none focus:border-accent/50"
+            value={nickname}
+            onChange={(e) => setNickname(e.target.value)}
+          />
+
+          <label className="mb-1.5 block text-[12.5px] font-semibold text-ink-dim">Suno 帳號名稱 或 個人主頁網址</label>
+          <input
+            className="w-full rounded-[10px] border border-panel-border bg-black/25 px-3.5 py-2.5 text-[13.5px] text-ink outline-none focus:border-accent/50"
+            value={sunoHandle}
+            onChange={(e) => setSunoHandle(e.target.value)}
+          />
+
+          {error && (
+            <p className="mt-4 rounded-[10px] border border-bad/30 bg-bad/10 p-2.5 text-[12px] text-bad">{error}</p>
+          )}
+
+          <button
+            className="mt-4 w-full rounded-[10px] bg-gradient-to-r from-[#ff9457] via-accent to-accent-2 py-3 text-[13.5px] font-semibold text-[#1a0e08] disabled:opacity-45"
+            disabled={!canSubmit || pending}
+            onClick={handleResubmit}
+          >
+            {pending ? "送出中…" : "修改後重新送出審核"}
+          </button>
         </div>
       </div>
     </div>

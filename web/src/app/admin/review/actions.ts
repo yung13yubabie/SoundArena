@@ -31,3 +31,22 @@ export async function reviewSubmission(
   revalidatePath("/status");
   return { success: true };
 }
+
+export async function reviewRegistration(
+  registrationId: string,
+  decision: "approved" | "rejected",
+  note?: string,
+): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("review_registration", {
+    p_registration_id: registrationId,
+    p_decision: decision,
+    p_note: note?.trim() || null,
+  });
+  if (error) return { error: error.message };
+
+  revalidatePath("/admin/review");
+  revalidatePath("/status");
+  revalidatePath("/register");
+  return { success: true };
+}

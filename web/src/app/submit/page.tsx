@@ -26,7 +26,8 @@ export default async function SubmitPage() {
     .from("registrations")
     .select("id, suno_handle, competition_id, competitions(name)")
     .eq("user_id", userId)
-    .eq("status", "active");
+    .eq("status", "active")
+    .eq("review_status", "approved");
 
   const regs = (registrations ?? []) as unknown as RegistrationRow[];
   const competitionIds = regs.map((r) => r.competition_id);

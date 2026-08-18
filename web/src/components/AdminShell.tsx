@@ -5,10 +5,9 @@ import { useRouter, usePathname } from "next/navigation";
 import { SiteHeader } from "@/components/SiteHeader";
 import { Icon } from "@/lib/icons";
 import { Switch } from "@/components/Switch";
-import { EmptyState } from "@/components/EmptyState";
-import { MOCK_ALL_COMPETITIONS_PLATFORM, MOCK_REPORTS } from "@/lib/mockData";
+import { MOCK_ALL_COMPETITIONS_PLATFORM } from "@/lib/mockData";
 
-type Section = "review" | "format" | "schedule" | "profile" | "judge" | "collaborators" | "platform-competitions" | "platform-reports";
+type Section = "review" | "format" | "schedule" | "profile" | "judge" | "collaborators" | "platform-competitions";
 
 interface AdminCompetitionOption {
   id: string;
@@ -20,9 +19,9 @@ interface AdminShellProps {
   children: ReactNode;
   competitions?: AdminCompetitionOption[];
   activeCompetitionId?: string;
-  // PlatformAdmin 視角(全站比賽/檢舉處理)目前完全是 MOCK_ALL_COMPETITIONS_PLATFORM/
-  // MOCK_REPORTS 假資料——沒有真的全站查詢。不是 Organizer/Collaborator 該看到的東西,
-  // 預設 false,只有呼叫端查過 profiles.is_platform_admin 為 true 才會顯示切換開關。
+  // PlatformAdmin 視角(全站比賽)目前是 MOCK_ALL_COMPETITIONS_PLATFORM 假資料——沒有真的
+  // 全站查詢。不是 Organizer/Collaborator 該看到的東西,預設 false,只有呼叫端查過
+  // profiles.is_platform_admin 為 true 才會顯示切換開關。
   isPlatformAdmin?: boolean;
 }
 
@@ -35,10 +34,7 @@ const ORG_ITEMS = [
   { key: "profile" as const, label: "主辦人身分", icon: "user" as const },
 ];
 
-const PLATFORM_ITEMS = [
-  { key: "platform-competitions" as const, label: "全站比賽", icon: "inbox" as const },
-  { key: "platform-reports" as const, label: "檢舉處理", icon: "alert" as const },
-];
+const PLATFORM_ITEMS = [{ key: "platform-competitions" as const, label: "全站比賽", icon: "inbox" as const }];
 
 const ORG_ROUTES: Record<AdminShellProps["active"], string> = {
   review: "/admin/review",
@@ -62,17 +58,11 @@ export function AdminShell({
   const [viewpoint, setViewpointState] = useState<"organizer" | "platform">("organizer");
   const setViewpoint = (v: "organizer" | "platform") => setViewpointState(isPlatformAdmin ? v : "organizer");
   const [section, setSection] = useState<Section>(active);
-  const [reports, setReports] = useState(MOCK_REPORTS);
 
   function goTo(key: AdminShellProps["active"]) {
     const suffix = activeCompetitionId ? `?c=${activeCompetitionId}` : "";
     router.push(`${ORG_ROUTES[key]}${suffix}`);
   }
-
-  const resolveReport = (id: number) =>
-    setReports((rs) => rs.map((r) => (r.id === id ? { ...r, state: "resolved" as const } : r)));
-
-  const pendingCount = reports.filter((r) => r.state === "pending").length;
 
   return (
     <div>
@@ -150,11 +140,6 @@ export function AdminShell({
               >
                 <Icon name={it.icon} size={15} />
                 {!collapsed && <span>{it.label}</span>}
-                {!collapsed && it.key === "platform-reports" && pendingCount > 0 && (
-                  <span className="ml-auto rounded-full border border-bad/35 bg-bad/8 px-2 py-0.5 text-[11px] text-bad">
-                    {pendingCount}
-                  </span>
-                )}
               </button>
             ))}
         </aside>
@@ -199,48 +184,6 @@ export function AdminShell({
                   ))}
                 </tbody>
               </table>
-            </div>
-          )}
-
-          {isPlatformAdmin && viewpoint === "platform" && section === "platform-reports" && (
-            <div>
-              <div className="mb-7">
-                <div className="mb-2 text-xs uppercase tracking-widest text-accent">PlatformAdmin · 檢舉處理</div>
-                <h1 className="font-display text-[30px]">待處理檢舉</h1>
-                <p className="mt-1.5 max-w-[680px] text-sm leading-relaxed text-ink-dim">
-                  檢舉對象是整場比賽，不是個別投稿（個別投稿內容由該比賽自己的 Organizer 審核）。
-                </p>
-              </div>
-              {pendingCount === 0 ? (
-                <EmptyState icon="check" title="目前沒有待處理的檢舉" sub="所有檢舉都已處理完畢" />
-              ) : (
-                reports.map((r) => (
-                  <div
-                    key={r.id}
-                    className={`glass mb-2.5 p-4 ${r.state === "resolved" ? "opacity-45" : ""}`}
-                  >
-                    <div className="mb-2 flex justify-between">
-                      <span className="text-[13.5px] font-semibold">{r.competition}</span>
-                      <span className="rounded-full border border-panel-border px-2.25 py-0.75 text-[11px] text-ink-dim">
-                        檢舉人：{r.reporter}
-                      </span>
-                    </div>
-                    <div className="mb-2.5 text-[12.5px] text-ink-dim">{r.reason}</div>
-                    {r.state === "pending" ? (
-                      <button
-                        onClick={() => resolveReport(r.id)}
-                        className="rounded-[10px] bg-gradient-to-r from-[#ff9457] via-accent to-accent-2 px-3.5 py-1.5 text-[11.5px] font-semibold text-[#1a0e08]"
-                      >
-                        標記已處理
-                      </button>
-                    ) : (
-                      <span className="rounded-full border border-ok/35 bg-ok/8 px-2.25 py-0.75 text-[11px] text-ok">
-                        已處理
-                      </span>
-                    )}
-                  </div>
-                ))
-              )}
             </div>
           )}
         </main>

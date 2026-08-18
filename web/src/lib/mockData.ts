@@ -99,19 +99,3 @@ export const MOCK_ALL_COMPETITIONS_PLATFORM = [
   { id: "c3", name: "新手擂台盃", organizer: "午夜鯨", status: "upcoming" },
 ];
 
-export const MOCK_REPORTS = [
-  {
-    id: 1,
-    competition: "Lo-fi 對決之夜",
-    reporter: "匿名參賽者",
-    reason: "疑似要求參賽者私下轉帳才能晉級，懷疑詐騙。",
-    state: "pending" as "pending" | "resolved",
-  },
-  {
-    id: 2,
-    competition: "新手擂台盃",
-    reporter: "午夜鯨",
-    reason: "賽制規則賽中途更改，未事先公告。",
-    state: "pending" as "pending" | "resolved",
-  },
-];
