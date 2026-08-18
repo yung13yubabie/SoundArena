@@ -8,7 +8,7 @@ import { Switch } from "@/components/Switch";
 import { EmptyState } from "@/components/EmptyState";
 import { MOCK_ALL_COMPETITIONS_PLATFORM, MOCK_REPORTS } from "@/lib/mockData";
 
-type Section = "review" | "format" | "schedule" | "profile" | "judge" | "platform-competitions" | "platform-reports";
+type Section = "review" | "format" | "schedule" | "profile" | "judge" | "collaborators" | "platform-competitions" | "platform-reports";
 
 interface AdminCompetitionOption {
   id: string;
@@ -16,7 +16,7 @@ interface AdminCompetitionOption {
 }
 
 interface AdminShellProps {
-  active: "review" | "format" | "schedule" | "profile" | "judge";
+  active: "review" | "format" | "schedule" | "profile" | "judge" | "collaborators";
   children: ReactNode;
   competitions?: AdminCompetitionOption[];
   activeCompetitionId?: string;
@@ -27,6 +27,7 @@ const ORG_ITEMS = [
   { key: "format" as const, label: "賽制建立", icon: "crown" as const },
   { key: "schedule" as const, label: "時程設定", icon: "calendar" as const },
   { key: "judge" as const, label: "評審評分", icon: "star" as const },
+  { key: "collaborators" as const, label: "協作者管理", icon: "users" as const },
   { key: "profile" as const, label: "主辦人身分", icon: "user" as const },
 ];
 
@@ -41,6 +42,7 @@ const ORG_ROUTES: Record<AdminShellProps["active"], string> = {
   schedule: "/admin/schedule",
   profile: "/admin/profile",
   judge: "/judge",
+  collaborators: "/admin/collaborators",
 };
 
 export function AdminShell({ active, children, competitions, activeCompetitionId }: AdminShellProps) {

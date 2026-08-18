@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { SiteHeader } from "@/components/SiteHeader";
 import { EmptyState } from "@/components/EmptyState";
 import { Icon } from "@/lib/icons";
+import { CommentsPanel } from "@/components/CommentsPanel";
 import { SUBMISSION_STATE_META, STATE_PILL_CLASS, type SubmissionState } from "@/lib/mockData";
 import { PrivacyPanel, type PrivacyRegistration, type PrivacySubmission } from "./PrivacyPanel";
 
@@ -149,6 +150,9 @@ export default async function StatusPage() {
                               <span className="text-bad">・退回原因：{sub.review_note}</span>
                             )}
                           </div>
+                        )}
+                        {sub && sub.status === "approved" && (
+                          <CommentsPanel submissionId={sub.id} canComment={false} canEndorse={true} />
                         )}
                       </div>
                     );

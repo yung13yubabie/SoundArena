@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getManageableCompetitions } from "@/lib/manageableCompetitions";
 import { AdminShell } from "@/components/AdminShell";
 import { EmptyState } from "@/components/EmptyState";
 import { JudgeBoard, type JudgeSubmission, type JudgeScoreItem } from "./JudgeBoard";
@@ -43,17 +44,13 @@ export default async function JudgePage({
   const { data: profile } = await supabase.from("profiles").select("host_setup_completed").eq("id", userId).maybeSingle();
   if (!profile?.host_setup_completed) redirect("/admin/profile");
 
-  const { data: myCompetitions } = await supabase
-    .from("competitions")
-    .select("id, name")
-    .eq("organizer_id", userId)
-    .order("created_at", { ascending: false });
+  const myCompetitions = await getManageableCompetitions(supabase, "judge");
 
   const competition = requestedId
-    ? (myCompetitions ?? []).find((c) => c.id === requestedId)
-    : (myCompetitions ?? [])[0];
+    ? myCompetitions.find((c) => c.id === requestedId)
+    : myCompetitions[0];
 
-  const competitionList = (myCompetitions ?? []).map((c) => ({ id: c.id, name: c.name }));
+  const competitionList = myCompetitions.map((c) => ({ id: c.id, name: c.name }));
 
   if (!competition) {
     return (

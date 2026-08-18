@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getManageableCompetitions } from "@/lib/manageableCompetitions";
 import { CreateCompetitionForm } from "./CreateCompetitionForm";
 import {
   AdminFormatClient,
@@ -49,21 +50,17 @@ export default async function AdminFormatPage({
   const { data: profile } = await supabase.from("profiles").select("host_setup_completed").eq("id", userId).maybeSingle();
   if (!profile?.host_setup_completed) redirect("/admin/profile");
 
-  const { data: myCompetitions } = await supabase
-    .from("competitions")
-    .select("id, name")
-    .eq("organizer_id", userId)
-    .order("created_at", { ascending: false });
+  const myCompetitions = await getManageableCompetitions(supabase, "format");
 
   const competition = requestedId
-    ? (myCompetitions ?? []).find((c) => c.id === requestedId)
-    : (myCompetitions ?? [])[0];
+    ? myCompetitions.find((c) => c.id === requestedId)
+    : myCompetitions[0];
 
   if (!competition) {
     return <CreateCompetitionForm />;
   }
 
-  const competitionList = (myCompetitions ?? []).map((c) => ({ id: c.id, name: c.name }));
+  const competitionList = myCompetitions.map((c) => ({ id: c.id, name: c.name }));
 
   const { data: rounds } = await supabase
     .from("rounds")

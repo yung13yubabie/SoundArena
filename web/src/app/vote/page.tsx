@@ -86,13 +86,16 @@ export default async function VotePage({
 
   const { data: round } = await supabase
     .from("rounds")
-    .select("id, name, voting_opens_at, voting_closes_at, competitions(id, name, anonymity_mode, is_public)")
+    .select("id, name, voting_opens_at, voting_closes_at, competitions(id, name, is_public)")
     .eq("id", roundId)
     .maybeSingle();
 
   if (!round) redirect("/vote");
   const competition = one(round.competitions);
   if (!competition?.is_public) redirect("/vote");
+
+  const { data: revealedData } = await supabase.rpc("round_identity_revealed", { p_round_id: roundId });
+  const revealed = revealedData === true;
 
   const votingOpen =
     !!round.voting_opens_at &&
@@ -112,8 +115,6 @@ export default async function VotePage({
     .eq("round_id", roundId)
     .eq("voter_id", userId)
     .maybeSingle();
-
-  const revealed = competition.anonymity_mode === "fully_public";
 
   const items: VoteSubmission[] = ((submissions ?? []) as unknown as SubmissionRow[]).map((s) => {
     const reg = one(s.registrations);

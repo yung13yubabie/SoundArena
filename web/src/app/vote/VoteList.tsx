@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { Icon } from "@/lib/icons";
 import { PlayerBar } from "@/components/PlayerBar";
+import { CommentsPanel } from "@/components/CommentsPanel";
 import { castVote } from "./actions";
 
 export interface VoteSubmission {
@@ -93,6 +94,7 @@ export function VoteList({
                 </button>
               )}
             </div>
+            <CommentsPanel submissionId={s.id} canComment={!s.isOwn} canEndorse={false} />
           </div>
         ))}
       </div>

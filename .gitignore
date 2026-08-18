@@ -4,3 +4,8 @@ Thumbs.db
 
 # design/verify.js 產出的截圖,可重跑腳本重新產生,不當永久檔案看
 design/screenshots/
+
+# taste-skill(npx skills add)materialize 出來的實際內容跟符號連結,連結是這台機器的
+# 絕對路徑,換一台機器就是壞的——只留 skills-lock.json,要用時跑 `npx skills add` 重新產生。
+.agents/
+.claude/skills/
