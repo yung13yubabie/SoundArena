@@ -127,18 +127,17 @@ C:\Users\LIN\Documents\github\SoundArena\
 
 **使用者的排序(08-19 定案)**:先把自己能做完的功能缺口收乾淨 → 使用者自己完整跑一輪報名→投稿→投票→評分→留言 → 回饋調整 → 最後才進 taste-skill UI/UX 改版(含手機板)。**在使用者說「可以了」之前,不要主動開始 taste-skill 改版。**
 
-1. **08-19 第四輪:報名審核(ADR-0008)+ 徹底移除 Report(ADR-0007)已經做完**(見文件尾端)——這是這輪最大的一塊,`/register`/`/admin/review`/`/status`/`/submit` 都改過,已經用真實 access token 完整測過整條狀態機(建報名→退回→重新送出→通過→能投稿),包含安全邊界(非本人不能碰別人的報名)。**唯一還沒做的是視覺驗證**——這輪瀏覽器 session 過期了,沒有強行繞過 Google 登入(既有的安全邊界),下次使用者登入時麻煩實際點一次 `/register` 送出報名 → `/admin/review` 看到待審核 → 退回試試 → 確認畫面跟資料層驗證過的一致。
-2. **08-18~19 四輪除錯已經修完八個真實缺口**(見文件尾端)——`/submit` 的 Suno 身份比對從 mock 換成真的 API;`AdminShell` 的 PlatformAdmin 假資料視角補上權限檢查;`/register`/`/submit` 平行化查詢;`comment_endorsement` 計分項目終於有介面能啟用;`/competitions` 整頁原本完全沒接資料庫,已重建成真資料;**`SiteHeader` 在 Discovery/`/competitions`/`/updates` 三頁一律顯示未登入樣式,即使真的登入了也一樣——導覽列整個消失,這是「介面孤立」「一直顯示登入狀態」的真正根因**,已修好;報名完成/投稿完成畫面原本只用文字提到下一步,沒有真的按鈕,已補上。
-3. **音檔上傳依然沒接**:`/submit` 的「上傳音檔案」欄位、`/competitions` 的播放功能都還是佔位符——這是 Cloudflare R2 任務範圍(見下方第 5 項)。**這是目前「完整跑一輪」最大的缺口**,沒有真的音檔,試聽/投票/評分階段聽不到東西。
-4. **頁面切換速度**:只做了「查詢平行化」這個從程式碼就能確認的優化。本機 dev server 這輪的實測數字(僅供參考,不是 production 數字):`/competitions` 一次冷載入 3.3 秒,拆解成 `next.js: 1.6s`(dev 模式即時編譯,production build 不會有這段)+ `proxy.ts: 56ms`(很快,不是瓶頸)+ `application-code: 1.6s`(真正的查詢時間,對三個查詢來說偏慢,可能是本機到 Supabase ap-southeast-1 的連線延遲)。production 上的真實數字還沒有量過。
-5. **Cloudflare R2**:建 bucket、拿金鑰、接上音檔上傳/簽章下載——**這件事只有使用者能做**,接手的 session 要主動問使用者「R2 金鑰準備好了嗎」,不要卡在這裡空等。使用者已經同意要跟 Discord 一起接。
-6. **Discord guilds.join 補完**:同樣**只有使用者能做**——把 Bot 邀進 SoundArena Discord 伺服器,把伺服器 ID 告訴接手的 session,填進 `.env.local` 跟 Vercel 的 `DISCORD_GUILD_ID`。
-7. **`/admin/*` 的角色級路由保護**:重新評估過,RLS + 頁面本身的空狀態已經提供足夠的保護,優先度沒有原本想的高,暫緩。
-8. **通知系統**:schema 還沒建,訂閱範圍鐵律已定案(SPEC.md 第 6 節):**報名才會訂閱,單純建立/主辦比賽不會訂閱,訂閱可取消**。
+1. **08-19 第五輪:清完剩餘待辦清單,只剩 R2/Discord 卡在使用者手上**(見文件尾端)——通知事件系統(訂閱+記錄,寄信/Discord 私訊還沒真的發送)、報名重新送出冷卻機制、`/admin/*` 路由層級保護、分享文字產生器全部做完並實測過。
+2. **視覺驗證累積待補(兩輪份)**:報名審核(08-19 第四輪)+ 這輪的新功能,瀏覽器 session 這兩輪都過期,沒有強行繞過 Google 登入。下次使用者登入時麻煩依序點一次:`/register` 送出報名 → `/admin/review` 看到待審核、退回試試 → `/status` 確認通知列表跟訂閱開關顯示正確 → `/admin/schedule` 看分享文字產生器。
+3. **音檔上傳依然沒接**:`/submit` 的「上傳音檔案」欄位、`/competitions` 的播放功能都還是佔位符——這是 Cloudflare R2 任務範圍(見下方第 4 項)。**這是目前「完整跑一輪」最大的缺口**。
+4. **Cloudflare R2**:建 bucket、拿金鑰、接上音檔上傳/簽章下載——**只有使用者能做**,接手的 session 要主動問「R2 金鑰準備好了嗎」。
+5. **Discord guilds.join 補完**:同樣**只有使用者能做**——把 Bot 邀進 SoundArena Discord 伺服器,把伺服器 ID 告訴接手的 session。
+6. **頁面切換速度——已經量過 production 真實數字,根因很可能是地理距離**:`/register` 未登入時只轉址(不進頁面渲染)是 0.2–0.4 秒,證明 middleware 本身不是瓶頸;有真的資料查詢的頁面普遍落在 1.2–2.6 秒。Vercel function region(iad1,美東)跟 Supabase 專案 region(ap-southeast-1,新加坡)幾乎在地球兩端,這是最可能的根因。**要真的解決需要 Vercel Pro 方案改 region,或搬遷 Supabase 專案**,兩者都是有成本/風險的決定,只有使用者能拍板,這輪只做到量測+診斷,沒有動手改。
+7. **通知系統只接了兩個觸發點**:報名成功、投稿送出。SPEC.md 第 6 節其餘的(逾期未投稿提醒、投票開始、晉級開放投稿提醒、該輪淘汰/晉級結果、最終名次公布)需要排程機制(pg_cron)或 Organizer 端的「確認發送」按鈕,這輪刻意沒做,見 `docs/adr/0009-notification-events-without-delivery.md`。
+8. **實際寄信/Discord 私訊還沒接上**:`notification_events` 表已經在正確記錄「該發什麼、發給誰」,但 `status` 永遠停在 `pending`,沒有背景程序真的呼叫外部服務——使用者確認過目前沒有寄信服務商的 API key,這是刻意的範圍縮減。之後有 API key,只要新增一支背景程序處理 `pending` 事件即可,不用重構。
 9. **LINE 登入**:使用者已明確表示放棄這條線,不用再排進待辦。
-10. **邀請連結整合模板訊息**:唯一還沒排進去的使用者原始需求,範圍還沒訂。
-11. **報名蟑螂的節流機制沒做**:ADR-0008 明確記錄——退回後允許無限次重新報名,這輪沒有做任何防灌水的次數限制/冷卻時間。之後真的觀察到有人濫用「退回可以無限重報」再回來加限制,不要現在自己猜著加。
-12. **UI/UX 改版(taste-skill,含手機板響應式)**:使用者明確要求「最後」才做,等使用者實測回饋完成後才開始。已裝好 `leonxlnx/taste-skill`(`skills-lock.json`),`redesign-existing-projects` 子 skill 的稽核清單已經讀過一次,可以直接接手使用,不用重新確認要不要用。
+10. **邀請連結整合訊息模板已經做完**:`/admin/schedule` 新增「分享文字」區塊,自動用目前設定的時程 + 報名連結組出一段可複製貼上的公告文字。範圍刻意簡化成「系統固定模板 + 自動代入」,沒有做「主辦自訂模板內容」這個更進階的版本(使用者原話有提到「設定」模板,如果這個簡化版不夠用,需要再擴充)。
+11. **UI/UX 改版(taste-skill,含手機板響應式)**:使用者明確要求「最後」才做,等使用者實測回饋完成後才開始。已裝好 `leonxlnx/taste-skill`(`skills-lock.json`),`redesign-existing-projects` 子 skill 的稽核清單已經讀過一次,可以直接接手使用,不用重新確認要不要用。
 
 ---
 
@@ -614,3 +613,43 @@ C:\Users\LIN\Documents\github\SoundArena\
 **視覺驗證還沒補**——這輪要測 `/admin/review` 畫面時,瀏覽器 session 已經過期,跳轉到 Google 登入頁,沒有強行自動化繞過(既有的安全邊界,HANDOFF 前面幾輪都是這樣處理)。下次使用者登入時麻煩補一次真的點擊測試,見上面「下一步」第 1 項。
 
 已 commit(`96af5b9`)、push、`vercel deploy --prod` 上線。
+
+---
+
+## 08-19 第五輪:清空剩餘待辦——冷卻機制、路由保護、分享文字、通知事件系統
+
+使用者這輪直接列出上一輪回報的六項待辦,說「做完!」。除了通知系統以外都範圍明確,直接動手;通知系統有兩個 SPEC.md 早就標成「待定」的分岔,用 `AskUserQuestion` 問過(不是自己猜)才動工。**新 session 接手,先讀 `docs/adr/0009-notification-events-without-delivery.md`。**
+
+### 1. 報名重新送出冷卻(10 分鐘)
+
+`ADR-0008` 當初刻意不做節流(「之後真的觀察到濫用再加」),這輪使用者要求現在就加。新增 `registrations.last_resubmitted_at`,**刻意不共用**既有的 `updated_at`——`updated_at` 也會被 Organizer 的 `review_registration`(退回動作本身)刷新,共用的話「主辦剛退回」會誤觸發「本人的冷卻」,兩個不同角色的動作被混在一起算,不合理。第一次退回後的重新送出永遠不會被擋(欄位初始是 null)。
+
+### 2. `/admin/*` 路由層級保護
+
+`proxy.ts` 新增 `has_any_competition_access()` RPC(輕量 EXISTS 查詢,同時檢查是不是任何比賽的 Organizer 或 Collaborator),對 `/admin/review`、`/admin/schedule`、`/admin/collaborators`、`/judge` 這幾個「管理特定比賽」的頁面生效——完全沒主辦、沒協作過任何比賽的人會被導去 `/admin/format`。**刻意不含** `/admin/format`(開放平台任何人都能從這裡建立第一場比賽,ADR-0002)跟 `/admin/profile`(想成為主辦人的人本來就該能到達)。
+
+### 3. 分享文字產生器
+
+`/admin/schedule` 新增「分享文字」區塊,用頁面上本來就有的時程資料(不用新查詢)組出一段可複製貼上的公告文字(報名連結、報名/投稿截止、投票開始、比賽瀏覽連結)。這是使用者最早期提過、一直沒訂範圍的「邀請連結整合訊息模板」需求的簡化版——**做的是「系統固定模板 + 即時代入真實資料」,不是「主辦可以自訂模板文字」**,如果使用者要的是後者,這輪的實作不夠,需要再擴充(存一個 `share_message_template` 欄位、給編輯 UI)。
+
+### 4. 頁面切換速度:量測 production 真實數字 + 找到很可能的根因
+
+`curl -w` 直接打正式站,量到:`/register` 未登入時的 middleware-only 轉址(不進頁面渲染)只要 0.2–0.4 秒,證明 `proxy.ts` 本身不是瓶頸;有真的資料查詢的頁面(Discovery、`/competitions`、`/updates`)普遍落在 1.2–2.6 秒,而且「暖機後」不一定比「第一次」快(觀察到 1.3s→2.6s 這種反直覺的情況)。**很可能的根因:Vercel serverless function region(iad1,美國東岸)跟 Supabase 專案 region(ap-southeast-1,新加坡)幾乎在地球兩端**,每個查詢都要跨半個地球一次網路往返,頁面又是好幾個查詢疊加。這不是程式碼可以修的問題——**要真的解決,選項是升級 Vercel Pro 換 function region,或搬遷 Supabase 專案**,兩者都是有金錢成本或資料遷移風險的決定,這輪只做到診斷,沒有動手(也不該擅自動手)。
+
+### 5. 通知系統(ADR-0009)
+
+用 `AskUserQuestion` 問清楚兩個 SPEC.md 標成「待定」的分岔:①目前沒有已備妥 API key 的寄信服務商,確認先不做真的寄信;②Discord 用私訊不用頻道。
+
+- 新增 `registrations.notifications_enabled`(訂閱開關,附著在 Registration 上,不是獨立實體——SPEC.md「報名才是訂閱動作」)。
+- 新增 `notification_events` 表,`create_notification_event()` 這個 SECURITY DEFINER function 是唯一寫入路徑——讀 `auth.users.raw_app_meta_data ->> 'provider'` 決定管道(google→email,discord→私訊,其餘登入方式目前不建立事件,因為表裡的 channel enum 只有這兩種值)。
+- `status` 預設 `pending`,這就是最誠實的呈現方式——**沒有另外裝一個 `console.log` 假裝已經在寄信**,之後真的接上寄信服務商,只要加一支背景程序把 `pending` 的事件送出、改狀態,不用重構。
+- 已接上的觸發點只有兩個:報名成功(`registerForCompetition`)、投稿送出(`submitEntry`),都是「非致命附加動作」(仿照既有的 `joinDiscordGuild()` 慣例,通知建立失敗不影響核心動作成功)。SPEC.md 第 6 節其餘觸發點(逾期未投稿提醒、投票開始、晉級開放投稿提醒、淘汰/晉級結果、最終公布)需要排程機制或 Organizer 端的「確認發送」按鈕,這輪刻意沒做。
+- `/status` 頁新增「通知」列表區塊(顯示 title/body/狀態)+ 每筆報名旁邊的訂閱開關(`NotificationToggle.tsx`)。
+
+**這輪抓到一個實測才發現的真實型別錯誤**:`create_notification_event()` 一開始用 `case when ... then 'skipped' else 'pending' end` 決定狀態,`'skipped'`/`'pending'` 這兩個字串字面值被 Postgres 推斷成 `text` 型別,但 `notification_events.status` 欄位是 `notification_delivery_status` enum——**`create or replace function` 在建立階段沒有抓到這個型別不符,呼叫時才報 `42804`**。修法是把兩個分支都顯式轉型 `::notification_delivery_status`,寫在新的 migration 裡(不修改已經 push 過的舊 migration 檔案本身)。
+
+### 端到端實測過(真實 access token,不是 service_role)
+
+四項都個別驗證過:①冷卻機制——第一次重新送出成功,立刻再送第二次正確被擋(訊息含精確的剩餘秒數)。②路由保護——`has_any_competition_access()` 對組織者/協作者回傳 `true`,對一個全新建立、跟任何比賽都沒關係的帳號回傳 `false`。③通知系統——完整跑過「報名(pending,channel=email)→ 關閉訂閱後再觸發(skipped)→ 重新開啟訂閱後再觸發(pending)」三態,確認型別修正後正確運作。測試帳號跟資料事後都清理乾淨。`tsc --noEmit`、`next build` 全程乾淨。
+
+已 commit(`b856d37`)、push、`vercel deploy --prod` 上線。
