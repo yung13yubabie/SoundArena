@@ -2,15 +2,31 @@
 
 import { useState } from "react";
 import { Icon } from "@/lib/icons";
+import { submitReport } from "@/lib/reportActions";
 
 interface ReportButtonProps {
+  competitionId: string;
   target: string;
 }
 
-export function ReportButton({ target }: ReportButtonProps) {
+export function ReportButton({ competitionId, target }: ReportButtonProps) {
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState("");
   const [sent, setSent] = useState(false);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSubmit() {
+    setPending(true);
+    setError(null);
+    const result = await submitReport(competitionId, reason);
+    setPending(false);
+    if ("error" in result) {
+      setError(result.error);
+      return;
+    }
+    setSent(true);
+  }
 
   if (sent) {
     return (
@@ -41,6 +57,7 @@ export function ReportButton({ target }: ReportButtonProps) {
             value={reason}
             onChange={(e) => setReason(e.target.value)}
           />
+          {error && <p className="mt-2 text-[11.5px] text-bad">{error}</p>}
           <div className="mt-2 flex justify-end gap-2">
             <button
               onClick={() => setOpen(false)}
@@ -49,11 +66,11 @@ export function ReportButton({ target }: ReportButtonProps) {
               取消
             </button>
             <button
-              disabled={!reason.trim()}
-              onClick={() => setSent(true)}
+              disabled={!reason.trim() || pending}
+              onClick={handleSubmit}
               className="rounded-[10px] bg-gradient-to-r from-[#ff9457] via-accent to-accent-2 px-3 py-1.5 text-[11.5px] font-semibold text-[#1a0e08] disabled:opacity-45"
             >
-              送出檢舉
+              {pending ? "送出中…" : "送出檢舉"}
             </button>
           </div>
         </div>

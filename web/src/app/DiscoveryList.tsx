@@ -98,12 +98,20 @@ export function DiscoveryList({ competitions }: { competitions: Competition[] })
                     </Link>{" "}
                     主辦
                   </div>
-                  <Link
-                    href={`/register?competition=${c.id}`}
-                    className="text-[12px] font-semibold text-accent hover:underline"
-                  >
-                    查看並報名 →
-                  </Link>
+                  <div className="flex items-center gap-3.5">
+                    <Link
+                      href={`/register?competition=${c.id}`}
+                      className="text-[12px] font-semibold text-accent hover:underline"
+                    >
+                      查看並報名 →
+                    </Link>
+                    <Link
+                      href={`/competitions?competition=${c.id}`}
+                      className="text-[12px] text-ink-dim hover:text-accent hover:underline"
+                    >
+                      試聽作品
+                    </Link>
+                  </div>
                 </div>
               );
             })}
