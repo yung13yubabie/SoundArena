@@ -49,7 +49,14 @@ export async function resubmitRegistration(
     p_display_name: trimmedName,
     p_suno_handle: trimmedHandle,
   });
-  if (error) return { error: error.message };
+  if (error) {
+    const cooldownMatch = error.message.match(/resubmit cooldown: wait (\d+) seconds/);
+    if (cooldownMatch) {
+      const minutes = Math.ceil(Number(cooldownMatch[1]) / 60);
+      return { error: `送出太頻繁，請等約 ${minutes} 分鐘後再重新送出` };
+    }
+    return { error: error.message };
+  }
 
   revalidatePath("/register");
   revalidatePath("/status");
