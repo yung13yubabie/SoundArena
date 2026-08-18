@@ -23,6 +23,58 @@ const PHASE_FIELDS: Array<{ label: string; startKey: keyof Dates; endKey: keyof 
   { label: "公布期", startKey: "announcementStart", endKey: "announcementEnd" },
 ];
 
+function buildShareMessage(competitionName: string, competitionId: string, dates: Dates, origin: string): string {
+  const show = (v: string) => v || "（尚未設定）";
+  return [
+    `${competitionName} 開放報名中`,
+    "",
+    `報名連結：${origin}/register?competition=${competitionId}`,
+    `報名截止：${show(dates.registrationDeadline)}`,
+    `投稿截止：${show(dates.submissionEnd)}`,
+    `投票開始：${show(dates.votingStart)}`,
+    "",
+    `賽制與作品試聽：${origin}/competitions?competition=${competitionId}`,
+  ].join("\n");
+}
+
+function ShareMessagePanel({
+  competitionId,
+  competitionName,
+  dates,
+}: {
+  competitionId: string;
+  competitionName: string;
+  dates: Dates;
+}) {
+  const [copied, setCopied] = useState(false);
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  const message = buildShareMessage(competitionName, competitionId, dates, origin);
+
+  async function handleCopy() {
+    await navigator.clipboard.writeText(message);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  return (
+    <div className="glass mt-6 p-5">
+      <div className="mb-1.5 text-[13.5px] font-semibold">分享文字</div>
+      <p className="mb-3 text-[11.5px] text-ink-dim">
+        整合報名連結與目前設定的時程，可以直接複製貼到 LINE / Discord 群組公告。內容會隨上面的時程設定即時更新。
+      </p>
+      <pre className="mb-3 whitespace-pre-wrap rounded-[10px] border border-panel-border bg-black/25 p-3.5 text-[12.5px] text-ink">
+        {message}
+      </pre>
+      <button
+        onClick={handleCopy}
+        className="rounded-[10px] border border-panel-border bg-white/[0.04] px-4 py-2 text-[12.5px] font-semibold text-ink"
+      >
+        {copied ? "已複製" : "複製文字"}
+      </button>
+    </div>
+  );
+}
+
 export function ScheduleForm({
   competitionId,
   competitionName,
@@ -137,6 +189,8 @@ export function ScheduleForm({
           </button>
         </div>
       </div>
+
+      <ShareMessagePanel competitionId={competitionId} competitionName={competitionName} dates={dates} />
     </AdminShell>
   );
 }

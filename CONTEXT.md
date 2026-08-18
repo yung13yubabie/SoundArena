@@ -87,10 +87,21 @@ Registration 送出後的審核狀態,防範惡意/灌水報名(使用者原話:
 待審核(PendingReview)
   → 已通過(Approved) → 可以投稿(見 Submission)
   → 已退回(Rejected,附退回理由,顯示給本人看)
-      → [本人修改暱稱/Suno帳號重新送出] → 回到「待審核」,次數不限
+      → [本人修改暱稱/Suno帳號重新送出] → 回到「待審核」,次數不限,但兩次重新送出之間有 10 分鐘冷卻(防止洗版審核隊列,不是限制總次數)
 ```
 審核者是該 Competition 的 Organizer(或有 review 權限的 Collaborator),跟 Submission 的審核者、審核精神一致(退回要附理由、理由要讓本人看得到)——這條規則刻意比照 Submission 的審核狀態機設計,不是重新發明一套。
 _Avoid_: 跟 ParticipantStatus(active/eliminated)混為一談——ParticipantStatus 是「審核通過、正式參賽後,比賽進行中的存活狀態」;RegistrationReviewStatus 是「審核通過之前,能不能開始參賽」的關卡。這是報名生命週期裡兩個獨立的狀態維度,不是同一個欄位的不同值,順序上 RegistrationReviewStatus 先發生。
+
+**Subscription(通知訂閱)**:
+不是獨立實體,是附著在 Registration 上的一個布林開關(ADR-0009)。完成 Registration 的當下自動訂閱該場 Competition 的通知,不需要另外的訂閱動作;本人隨時可以關閉,關閉不影響參賽資格本身(是兩件事)。建立/主辦一場比賽不會讓 Organizer 訂閱——訂閱的唯一觸發點是報名。
+_Avoid_: 訂閱(Subscribe)當成獨立於 Registration 的動作——SPEC.md 明確定調「報名才是訂閱動作」,不是登入、不是瀏覽、不是建立比賽。
+
+**NotificationEvent(通知事件)**:
+系統判定「某個使用者因為某件事,該收到一則通知」時建立的一筆記錄,精準對應到特定使用者(不是廣播)。管道(Channel)由使用者的登入方式決定,不是使用者自選:Google 登入 → Email;Discord 登入 → 私訊(不是伺服器頻道)。狀態機:
+```
+待送出(Pending) → 已送出(Sent) / 已失敗(Failed) / 已跳過(Skipped,例如訂閱已關閉)
+```
+_已知範圍縮減(ADR-0009)_:這輪只做了「事件建立」這一半——寄信服務商還沒選定,`Pending` 狀態目前不會被任何背景程序處理成 `Sent`,這是誠實反映現況,不是 bug。真的接上寄信/Discord webhook 後,只需要新增一支背景程序把 `Pending` 的事件送出、改狀態,不用重構既有架構。
 
 ## 已收斂的舊疑問
 

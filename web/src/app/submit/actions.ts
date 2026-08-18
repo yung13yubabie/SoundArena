@@ -69,6 +69,9 @@ export interface SubmitEntryInput {
 
 export async function submitEntry(input: SubmitEntryInput): Promise<ActionResult> {
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
   const { error } = await supabase.from("submissions").insert({
     round_id: input.roundId,
@@ -86,6 +89,27 @@ export async function submitEntry(input: SubmitEntryInput): Promise<ActionResult
   if (error) {
     if (error.code === "23505") return { error: "這個輪次你已經投稿過了" };
     return { error: error.message };
+  }
+
+  // 通知事件是附加動作,失敗不該讓投稿本身失敗(見 register/actions.ts 同樣的慣例)。
+  try {
+    if (user) {
+      const [{ data: registration }, { data: round }] = await Promise.all([
+        supabase.from("registrations").select("competition_id").eq("id", input.registrationId).maybeSingle(),
+        supabase.from("rounds").select("name").eq("id", input.roundId).maybeSingle(),
+      ]);
+      if (registration) {
+        await supabase.rpc("create_notification_event", {
+          p_user_id: user.id,
+          p_competition_id: registration.competition_id,
+          p_event_type: "submission_confirmed",
+          p_title: "投稿已送出",
+          p_body: `「${input.title}」已送出到「${round?.name ?? "本輪"}」，狀態轉為待人工審核。`,
+        });
+      }
+    }
+  } catch {
+    // 通知事件建立失敗不影響投稿本身已經成功
   }
 
   revalidatePath("/submit");

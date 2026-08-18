@@ -29,7 +29,33 @@ export async function registerForCompetition(formData: FormData): Promise<Action
     return { error: error.message };
   }
 
+  // 通知事件是報名成功之後的附加動作,失敗不該讓整個報名動作失敗(跟
+  // auth/callback/route.ts 的 joinDiscordGuild() 是同一種「非致命附加動作」慣例)。
+  try {
+    const { data: competition } = await supabase.from("competitions").select("name").eq("id", competitionId).maybeSingle();
+    await supabase.rpc("create_notification_event", {
+      p_user_id: user.id,
+      p_competition_id: competitionId,
+      p_event_type: "registration_confirmed",
+      p_title: "報名成功",
+      p_body: `已收到你對「${competition?.name ?? "這場比賽"}」的報名，等主辦人審核。`,
+    });
+  } catch {
+    // 通知事件建立失敗不影響報名本身已經成功
+  }
+
   revalidatePath("/register");
+  revalidatePath("/status");
+  return { success: true };
+}
+
+export async function setRegistrationNotifications(registrationId: string, enabled: boolean): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("set_registration_notifications", {
+    p_registration_id: registrationId,
+    p_enabled: enabled,
+  });
+  if (error) return { error: error.message };
   revalidatePath("/status");
   return { success: true };
 }

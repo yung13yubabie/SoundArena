@@ -7,6 +7,7 @@ import { Icon } from "@/lib/icons";
 import { CommentsPanel } from "@/components/CommentsPanel";
 import { SUBMISSION_STATE_META, STATE_PILL_CLASS, type SubmissionState } from "@/lib/mockData";
 import { PrivacyPanel, type PrivacyRegistration, type PrivacySubmission } from "./PrivacyPanel";
+import { NotificationToggle } from "./NotificationToggle";
 
 interface RegistrationRow {
   id: string;
@@ -14,10 +15,27 @@ interface RegistrationRow {
   eliminated_in_round_id: string | null;
   competition_id: string;
   is_public: boolean;
+  notifications_enabled: boolean;
   review_status: "pending_review" | "approved" | "rejected";
   review_note: string | null;
   competitions: { name: string } | { name: string }[] | null;
 }
+
+interface NotificationEventRow {
+  id: string;
+  title: string;
+  body: string;
+  status: "pending" | "sent" | "failed" | "skipped";
+  channel: "email" | "discord";
+  created_at: string;
+}
+
+const NOTIFICATION_STATUS_LABEL: Record<NotificationEventRow["status"], string> = {
+  pending: "待送出",
+  sent: "已送出",
+  failed: "送出失敗",
+  skipped: "已略過",
+};
 
 interface RoundRow {
   id: string;
@@ -51,8 +69,17 @@ export default async function StatusPage() {
 
   const { data: registrations } = await supabase
     .from("registrations")
-    .select("id, status, eliminated_in_round_id, competition_id, is_public, review_status, review_note, competitions(name)")
+    .select(
+      "id, status, eliminated_in_round_id, competition_id, is_public, notifications_enabled, review_status, review_note, competitions(name)",
+    )
     .eq("user_id", userId);
+
+  const { data: notificationEvents } = await supabase
+    .from("notification_events")
+    .select("id, title, body, status, channel, created_at")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(20);
 
   const regs = (registrations ?? []) as unknown as RegistrationRow[];
   const competitionIds = regs.map((r) => r.competition_id);
@@ -101,7 +128,10 @@ export default async function StatusPage() {
 
             return (
               <div key={reg.id} className="mb-7">
-                <h2 className="mb-3 text-[16px] font-semibold">{oneName(reg.competitions)}</h2>
+                <div className="mb-3 flex items-center justify-between">
+                  <h2 className="text-[16px] font-semibold">{oneName(reg.competitions)}</h2>
+                  <NotificationToggle registrationId={reg.id} initialEnabled={reg.notifications_enabled} />
+                </div>
 
                 {reg.review_status === "pending_review" && (
                   <div className="mb-3 flex items-center gap-2.5 rounded-[11px] border border-warn/30 bg-warn/8 px-4 py-2.75 text-[12.5px] text-warn">
@@ -181,6 +211,28 @@ export default async function StatusPage() {
               </div>
             );
           })
+        )}
+
+        {regs.length > 0 && (notificationEvents ?? []).length > 0 && (
+          <div className="mt-10 border-t border-panel-border pt-7">
+            <h2 className="mb-1 text-[16px] font-semibold">通知</h2>
+            <p className="mb-4 text-[12px] text-ink-dim">
+              每張報名上方可以個別開關要不要接收該場比賽的通知。實際寄信/Discord 私訊尚未接上外部服務，「待送出」是誠實的現況，不是卡住了。
+            </p>
+            <div className="flex flex-col gap-2">
+              {((notificationEvents ?? []) as unknown as NotificationEventRow[]).map((n) => (
+                <div key={n.id} className="glass flex items-start justify-between gap-4 px-4 py-3">
+                  <div>
+                    <div className="text-[13px] font-semibold">{n.title}</div>
+                    <div className="text-[12px] text-ink-dim">{n.body}</div>
+                  </div>
+                  <span className="flex-none rounded-full border border-panel-border px-2.25 py-0.75 text-[11px] text-ink-faint">
+                    {NOTIFICATION_STATUS_LABEL[n.status]}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
         )}
 
         {regs.length > 0 && (
