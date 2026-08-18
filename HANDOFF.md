@@ -125,14 +125,16 @@ C:\Users\LIN\Documents\github\SoundArena\
 
 ## 下一步(哪個先做,使用者可以自己選)
 
-1. **逐輪匿名切換 UI 已經做完**(08-17 第三輪,見文件尾端)——`CreateCompetitionForm`/`CompetitionMetaForm` 的舊三選一下拉選單已經拔掉,`/admin/format` 現在是「全部套用」批次按鈕 + 每輪自己的 Switch。**Collaborator + Comment/CommentEndorsement 的 UI 還沒做**——邀請協作者、勾選權限、留言輸入框、原作認可的介面全部還沒有。「我的比賽」清單目前的查詢也還是只抓 `organizer_id = 我`,不會抓「我只是協作者」的比賽,需要另外改查詢邏輯。這是下一個最自然的動工項目,概念定案已經做完,直接進 UI 就好,不用再討論範圍。
-2. **公開結果/排名頁跟 `/u/[id]` 名次已經做完**(08-16 深夜第四輪,見文件尾端「公開結果」段落)——`/results` 公開結果頁、`/u/[id]` 的名次都接上真資料了。
-3. **Discord guilds.join 補完**:使用者把 Bot 邀進 SoundArena Discord 伺服器,把伺服器 ID 填進 `.env.local` 跟 Vercel 的 `DISCORD_GUILD_ID`
-4. **`/admin/*` 的角色級權限保護**:proxy.ts 目前只檢查「有沒有登入」,沒檢查「這個人是不是這場比賽的 Organizer 或 Collaborator」——RLS 是實際擋著的那層,但 route 層級的檢查還是沒做,見上方已知缺口 2
-5. **Cloudflare R2**:建 bucket、拿金鑰、接上音檔上傳/簽章下載
-6. **通知系統**:schema 還沒建,但訂閱範圍的鐵律已經定案並寫進 SPEC.md 第 6 節——**報名才會訂閱,單純建立/主辦比賽不會訂閱,訂閱可取消**,實作時直接照這條規則設計 schema,不用重新討論範圍。
-7. **LINE 登入**:使用者能申請的時候回來補
-8. **邀請連結整合模板訊息**:唯一還沒排進去的使用者原始需求——主辦分享比賽連結時,希望能帶出整合賽制/投票資訊的訊息模板,並支援 `{變數}` 填入——範圍還沒訂(模板存哪裡、哪些變數、UI 長怎樣都待設計)。
+1. **Collaborator + Comment/CommentEndorsement UI 已經做完**(08-18 這輪,見文件尾端)——`/admin/collaborators` 邀請協作者、五權限勾選、移除;`/vote`/`/status` 都接上留言 + 認可。
+2. **逐輪匿名切換 UI 已經做完**(08-17 第三輪,見文件尾端)。
+3. **公開結果/排名頁跟 `/u/[id]` 名次已經做完**(08-16 深夜第四輪)。
+4. **Discord guilds.join 補完**:使用者把 Bot 邀進 SoundArena Discord 伺服器,把伺服器 ID 填進 `.env.local` 跟 Vercel 的 `DISCORD_GUILD_ID`
+5. **`/admin/*` 的角色級路由保護**:proxy.ts 目前只檢查「有沒有登入」,沒檢查「這個人是不是這場比賽的 Organizer 或 Collaborator」——RLS 是實際擋著的那層,route 層級的檢查還是沒做(現在有 Collaborator 了,這個缺口比之前更值得補)。
+6. **Cloudflare R2**:建 bucket、拿金鑰、接上音檔上傳/簽章下載
+7. **通知系統**:schema 還沒建,但訂閱範圍的鐵律已經定案並寫進 SPEC.md 第 6 節——**報名才會訂閱,單純建立/主辦比賽不會訂閱,訂閱可取消**。
+8. **LINE 登入**:使用者能申請的時候回來補
+9. **邀請連結整合模板訊息**:唯一還沒排進去的使用者原始需求,範圍還沒訂。
+10. **`score_item_templates` 沒有通用的「啟用計分項目」UI**:`comment_endorsement` 這個範本已經存在,但 `/admin/format` 建立比賽時是寫死塞入投票/影片流量/外部投票三項(`DEFAULT_SCORE_ITEMS`),沒有介面能讓 Organizer 自己從範本庫勾選啟用 `comment_endorsement`——留言認可加分在資料庫層完全能算,但目前沒有 UI 路徑能真的把這個計分項目加進某場比賽的 ScoringRule。08-17 就記錄過這個缺口,這輪做完 Comment UI 後更明顯。
 
 ---
 
@@ -436,3 +438,30 @@ C:\Users\LIN\Documents\github\SoundArena\
 ### 補充(同一天,使用者重新登入後):視覺驗證補完
 
 使用者手動重新登入後,回到 `/admin/format` 實際點過一輪:「全部設為公開」正確把「初賽」「第 2 輪」都切成公開(Switch 變灰、文字變「本輪公開」);點單一輪次的 Switch 把「第 2 輪」個別改回匿名,不影響其他輪次——批次跟個別覆寫都跟畫面顯示對得上,並且用 service_role 直接查 DB 確認 `rounds.is_anonymous` 三筆的值完全符合畫面(初賽/決賽 false,第2輪 true)。測完把三輪全部設回 `true`(預設匿名)。**逐輪匿名切換 UI 視覺驗證正式補完,不再是「只驗證資料層」。**
+
+---
+
+## 08-18:Collaborator + Comment UI 接上真實資料,順手裝了 taste-skill
+
+使用者這輪開場訊息是「接上該接上的線 完成實際功能」+ 提兩個外部 GitHub repo(`motionsites.ai-prompt-library`、`leonxlnx/taste-skill`)想拿來把網站設計得更精美。查證後:**`motionsites.ai-prompt-library` 被 GitHub 官方 DMCA 下架**(`github/dmca/2026/05/2026-05-26-motionsites.md`),完全無法存取,沒有嘗試繞過;`taste-skill` 是真的可裝的 Claude Code Skill,已用 `npx skills add https://github.com/Leonxlnx/taste-skill` 裝進專案(13 個子 skill,`skills-lock.json` 已進版控,實際 materialize 出來的 `.agents/`、`.claude/skills/*` 是這台機器的絕對路徑符號連結,不能進版控,已加進 `.gitignore`——**別的機器要用,重新跑一次 `npx skills add` 讓它讀 `skills-lock.json` 重新產生**)。用 `AskUserQuestion` 問過使用者後,確認方向是:motionsites 跳過只用 taste-skill、優先動工 Collaborator + Comment UI(HANDOFF 自己上一輪就標記這是「下一個最自然的動工項目」)。
+
+### 這輪做了什麼
+
+- **`/admin/collaborators`**(新頁面,`AdminShell` 新增「協作者管理」導覽項):列出目前協作者(名字、五權限 Switch、移除/退出按鈕),下方是邀請表單(email + 五權限 Switch)。權限異動/移除只有 Organizer 能做(呼應 ADR-0003);非 Organizer 的協作者如果有 `can_invite`,邀請表單的權限勾選會依自己實際擁有的權限鎖住其餘選項(UI 端提前擋,RLS 端也擋,雙重保險)。
+  - `find_profile_by_email(p_email)`(新 SECURITY DEFINER function):邀請流程要用 email 找到對方的 profile id,但 `profiles` 本身沒有 email 欄位(email 只在 `auth.users`,anon/authenticated 查不到)——只回傳 `id`/`display_name`/`avatar_url`,不回傳 email 本身,避免變成任意帳號 email 存在性查詢工具。
+  - `get_manageable_competitions(p_permission)`(新 SECURITY DEFINER function):補上 08-17 就記錄的已知缺口——`admin/format`/`admin/review`/`admin/schedule`/`judge` 四頁原本都寫死 `.eq("organizer_id", userId)`,協作者被邀請後在 UI 上完全找不到那場比賽。現在四頁 + 新的 collaborators 頁都改呼叫這個 function(依對應權限字串:`format`/`review`/`schedule`/`judge`/`invite`),回傳「我是 Organizer 或有對應權限的 Collaborator」的比賽清單,`web/src/lib/manageableCompetitions.ts` 包一層共用型別,五個頁面共用同一個呼叫方式。
+- **Comment/CommentEndorsement**:新共用元件 `CommentsPanel`(`web/src/components/CommentsPanel.tsx`)+ 共用 Server Action 檔 `web/src/lib/commentActions.ts`(`fetchSubmissionComments`/`submitComment`/`endorseComment`)。
+  - `/vote`:每張非本人的投稿卡片下方可以展開留言,讀 `get_submission_comments`、寫入呼叫 `submitComment`——`submitComment` 特別注意**不能用預設 `.select()`**(08-17 就踩過:PostgREST 的 `Prefer: return=representation` 會連 `commenter_id` 一起要,那個欄位誰都不給讀,直接 403),這輪按照 HANDOFF 提醒的寫法直接做對。
+  - `/status`:使用者自己的每筆已通過投稿下方,可以看留言 + 對還沒認可過的留言用滑桿(預設 100%,可調 0–100%)按「認可」——對應使用者原話「勾選同意 或者用比例槓桿拉%數」,滑桿預設 100% 等於一鍵同意,也能微調。**認可後就鎖定不能再調**(UI 端不顯示控制項了,不是資料庫層擋),避免無限來回調整。
+- **修正 `/vote` 殘留的舊匿名判斷邏輯(真實 bug,不是這輪新增的功能)**:`round_identity_revealed()` 換掉判斷邏輯是 08-17 第二輪做的(ADR-0006),但 `/vote/page.tsx` 一直沒跟著改,還在讀已經是 vestigial 欄位的 `competitions.anonymity_mode`(`revealed = competition.anonymity_mode === "fully_public"`)。因為 `createCompetition` 早就不寫這個欄位了,新建立的比賽這個欄位是資料庫預設值(不是 `fully_public`),導致**任何在 08-17 之後建立的比賽,`/vote` 頁不管該輪實際是不是標記匿名,一律顯示「標題於匿名階段不顯示」**——跟賽制頁 Switch 顯示的狀態對不上,是這輪視覺驗證時才發現。已改成呼叫 `round_identity_revealed(roundId)` RPC。
+
+### 這輪視覺驗證時抓到的兩個額外 bug(不是憑空猜的,實際點擊時發現)
+
+1. **`competition_collaborators` 對 `profiles` 有兩條外鍵**(`user_id`、`invited_by`),`page.tsx` 原本寫 `profiles(display_name, avatar_url)` 隱式 join 是歧義的,PostgREST 直接回 `PGRST201` 錯誤——因為這段程式碼沒檢查 `.error`(跟專案裡很多地方一樣的寫法),協作者列表悄悄顯示空清單,不會報錯。改成明確指定關聯:`profiles!competition_collaborators_user_id_fkey(display_name, avatar_url)`。
+2. **`profiles` 完全沒有一條 RLS policy 讓「同一場比賽的協作者互看基本資料」**——既有五條 SELECT policy(self / platform admin / organizing a public competition / host_setup_completed / has a public registration)都不涵蓋這個情境,導致協作者名字查不到,UI 端 fallback 顯示「未命名使用者」,一樣不報錯。新增 migration `20260818020000_profiles_readable_by_fellow_collaborators.sql`,只開放同場比賽的 Organizer/Collaborator 互看(欄位級 GRANT 本來就已經排除 line_user_id/discord_user_id,不論這條 row-level policy 讓哪些列可見,敏感欄位都不會外洩)。
+
+### 端到端實測過(真實瀏覽器 + 真實帳號,這次瀏覽器 session 本來就是登入狀態,不用像上一輪一樣繞去用 token)
+
+本機 `npm run dev` 起 dev server,用組織者帳號(`linpcw@gmail.com`,瀏覽器本來就還是登入狀態)實際點過:邀請 `test-second-contestant@soundarena.test`(她已經是既有協作者,正確被 unique constraint 擋下並顯示「這個人已經是協作者了」)→ 切換她的「賽制建立」權限開關 → service_role 查 DB 確認真的寫入 `can_edit_format=true` → 切回去 → 再查一次確認復原。`/status` 頁點開「抽象善良」投稿的留言區,既有測試留言(「測試選手二號」、已認可 80%)正確顯示;另外用 `test-second-contestant` 的真實 access token 直接呼叫 `POST /rest/v1/comments`(跟 `submitComment` 完全相同的 payload/header,包含不帶 `.select()`)驗證寫入路徑本身沒有 403,插入成功後在瀏覽器重新整理 `/status` 確認新留言顯示、點「認可」按鈕確認滑桿消失、顯示「已認可 100%」——測完用 service_role 刪除這則自動化測試留言,不留痕跡。TypeScript (`tsc --noEmit`) 跟 `next build` 全程乾淨。
+
+已 commit(`6261594`)、push、`vercel deploy --prod` 上線(第一次遇到已知的「Not authorized」瞬態錯誤,重試一次就過了)。
