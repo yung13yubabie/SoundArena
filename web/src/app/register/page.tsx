@@ -33,7 +33,7 @@ export default async function RegisterPage({
     return (
       <div>
         <SiteHeader authed active="events" />
-        <div className="mx-auto max-w-[1180px] px-11 pt-10 pb-24">
+        <div className="mx-auto max-w-[1180px] px-5 md:px-11 pt-10 pb-24">
           <div className="mb-7">
             <div className="mb-2 text-xs uppercase tracking-widest text-accent">Screen · 報名</div>
             <h1 className="font-display text-[30px]">選一場比賽報名</h1>
@@ -75,7 +75,7 @@ export default async function RegisterPage({
     return (
       <div>
         <SiteHeader authed active="events" />
-        <div className="mx-auto max-w-[1180px] px-11 pt-10 pb-24">
+        <div className="mx-auto max-w-[1180px] px-5 md:px-11 pt-10 pb-24">
           <EmptyState icon="alert" title="找不到這場比賽" sub="連結可能有誤，回活動頁重新找一次" />
         </div>
       </div>

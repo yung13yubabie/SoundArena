@@ -80,7 +80,7 @@ export function HelpBubble() {
         <div className="glass w-[260px] rounded-[14px] px-4 py-3.5 text-[12.5px] leading-relaxed text-ink-dim shadow-xl">
           <div className="mb-2 flex items-center justify-between">
             <span className="text-[13px] font-semibold text-ink">{tip.title}</span>
-            <button onClick={() => setOpen(false)} className="text-ink-faint transition-colors hover:text-ink" aria-label="收起說明">
+            <button onClick={() => setOpen(false)} className="focus-ring text-ink-faint transition-colors hover:text-ink" aria-label="收起說明">
               <Icon name="close" size={14} />
             </button>
           </div>
@@ -98,7 +98,7 @@ export function HelpBubble() {
         onClick={() => setOpen((v) => !v)}
         title="操作說明"
         aria-label="操作說明"
-        className="flex h-11 w-11 items-center justify-center rounded-full border border-panel-border bg-gradient-to-br from-[#ff9457] via-accent to-accent-2 text-[17px] font-semibold text-black/80 shadow-lg transition-transform hover:scale-105"
+        className="focus-ring flex h-11 w-11 items-center justify-center rounded-full border border-panel-border bg-gradient-to-br from-[#ff9457] via-accent to-accent-2 text-[17px] font-semibold text-black/80 shadow-lg transition-transform hover:scale-105"
       >
         ?
       </button>

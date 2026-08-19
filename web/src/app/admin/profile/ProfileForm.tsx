@@ -39,7 +39,7 @@ export function ProfileForm({ userId, displayName, hostedCount, initial, already
   }
 
   return (
-    <div className="grid grid-cols-[1fr_300px] items-start gap-6">
+    <div className="grid grid-cols-1 md:grid-cols-[1fr_300px] items-start gap-6">
       <div className="glass p-7">
         {!alreadySetup && (
           <div className="mb-5 flex items-center gap-2.5 rounded-[10px] border border-warn/30 bg-warn/8 p-3.5 text-[12.5px] text-warn">

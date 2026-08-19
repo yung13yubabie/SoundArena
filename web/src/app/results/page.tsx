@@ -40,7 +40,7 @@ export default async function ResultsPage({
     return (
       <div>
         <SiteHeader authed={authed} active="results" />
-        <div className="mx-auto max-w-[1180px] px-11 pt-10 pb-24">
+        <div className="mx-auto max-w-[1180px] px-5 md:px-11 pt-10 pb-24">
           <div className="mb-7">
             <div className="mb-2 text-xs uppercase tracking-widest text-accent">Screen · 結果</div>
             <h1 className="font-display text-[30px]">選擇要查看的場次結果</h1>
@@ -84,7 +84,7 @@ export default async function ResultsPage({
   return (
     <div>
       <SiteHeader authed={authed} active="results" />
-      <div className="mx-auto max-w-[1180px] px-11 pt-10 pb-24">
+      <div className="mx-auto max-w-[1180px] px-5 md:px-11 pt-10 pb-24">
         <div className="mb-7">
           <div className="mb-2 text-xs uppercase tracking-widest text-accent">Screen · 結果</div>
           <h1 className="font-display text-[30px]">{round?.name ?? "結果"} — {competition?.name ?? ""}</h1>
@@ -119,7 +119,8 @@ export default async function ResultsPage({
                       </span>
                     )}
                   </div>
-                  <table className="w-full border-collapse text-[12.5px]">
+                  <div className="overflow-x-auto">
+                  <table className="w-full min-w-[420px] border-collapse text-[12.5px]">
                     <thead>
                       <tr>
                         <th className="px-3.5 py-2.25 text-left text-[10.5px] font-semibold tracking-wide text-ink-faint uppercase">
@@ -144,6 +145,7 @@ export default async function ResultsPage({
                         ))}
                     </tbody>
                   </table>
+                  </div>
                   <div className="flex items-baseline justify-between border-t border-panel-border px-3.5 py-3">
                     <span className="text-[12.5px] text-ink-dim">
                       加權小計(滿分 100){total.bonusTotal > 0 && <> + 額外加分 {total.bonusTotal.toFixed(1)}</>}

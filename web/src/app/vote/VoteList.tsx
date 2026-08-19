@@ -45,7 +45,7 @@ export function VoteList({
       {error && (
         <p className="mb-4 rounded-[10px] border border-bad/30 bg-bad/10 p-2.5 text-[12px] text-bad">{error}</p>
       )}
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         {submissions.map((s) => (
           <div
             key={s.id}

@@ -49,7 +49,7 @@ export function DiscoveryList({ competitions, authed }: { competitions: Competit
   return (
     <div>
       <SiteHeader authed={authed} active="events" />
-      <div className="mx-auto max-w-[1180px] px-11 pt-10 pb-24">
+      <div className="mx-auto max-w-[1180px] px-5 md:px-11 pt-10 pb-24">
         <div className="mb-7">
           <div className="mb-2 text-xs uppercase tracking-widest text-accent">Screen · Discovery（不需登入）</div>
           <h1 className="font-display text-[30px]">探索比賽</h1>

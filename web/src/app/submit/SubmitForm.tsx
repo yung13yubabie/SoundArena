@@ -85,7 +85,7 @@ export function SubmitForm({ options }: { options: RoundOption[] }) {
     return (
       <div>
         <SiteHeader authed active="submit" />
-        <div className="mx-auto max-w-[1180px] px-11 pt-10 pb-24">
+        <div className="mx-auto max-w-[1180px] px-5 md:px-11 pt-10 pb-24">
           <div className="mb-7">
             <div className="mb-2 text-xs uppercase tracking-widest text-accent">Screen · 投稿</div>
             <h1 className="font-display text-[30px]">投稿已送出</h1>
@@ -110,7 +110,7 @@ export function SubmitForm({ options }: { options: RoundOption[] }) {
   return (
     <div>
       <SiteHeader authed active="submit" />
-      <div className="mx-auto max-w-[1180px] px-11 pt-10 pb-24">
+      <div className="mx-auto max-w-[1180px] px-5 md:px-11 pt-10 pb-24">
         <div className="mb-7">
           <div className="mb-2 text-xs uppercase tracking-widest text-accent">Screen · 投稿</div>
           <h1 className="font-display text-[30px]">投稿本輪作品</h1>
@@ -119,7 +119,7 @@ export function SubmitForm({ options }: { options: RoundOption[] }) {
           </p>
         </div>
 
-        <div className="grid grid-cols-[1fr_300px] items-start gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-[1fr_300px] items-start gap-6">
           <div>
             <div className="mb-5">
               <label className="mb-1.5 block text-[12.5px] font-semibold text-ink-dim">所屬賽制 / 比賽場次</label>

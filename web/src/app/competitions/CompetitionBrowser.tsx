@@ -90,7 +90,7 @@ export function CompetitionBrowser({
   return (
     <div>
       <SiteHeader authed={authed} active="competitions" />
-      <div className="mx-auto max-w-[1180px] px-11 pt-10 pb-24">
+      <div className="mx-auto max-w-[1180px] px-5 md:px-11 pt-10 pb-24">
         <div className="mb-7">
           <div className="mb-2 text-xs uppercase tracking-widest text-accent">Screen · 比賽</div>
           <h1 className="font-display text-[30px]">{competitionName}</h1>

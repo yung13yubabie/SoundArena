@@ -42,7 +42,7 @@ export function FeedbackForm() {
     return (
       <div>
         <SiteHeader authed />
-        <div className="mx-auto max-w-[1180px] px-11 pt-10 pb-24">
+        <div className="mx-auto max-w-[1180px] px-5 md:px-11 pt-10 pb-24">
           <h1 className="font-display text-[30px]">意見回饋</h1>
           <div className="glass mt-7 max-w-[560px] p-7">
             <div className="flex items-center gap-2.5 rounded-[10px] border border-ok/30 bg-ok/10 p-3.5 text-[12.5px] text-ok">
@@ -67,7 +67,7 @@ export function FeedbackForm() {
   return (
     <div>
       <SiteHeader authed />
-      <div className="mx-auto max-w-[1180px] px-11 pt-10 pb-24">
+      <div className="mx-auto max-w-[1180px] px-5 md:px-11 pt-10 pb-24">
         <div className="mb-7">
           <div className="mb-2 text-xs uppercase tracking-widest text-accent">意見回饋</div>
           <h1 className="font-display text-[30px]">告訴我們你的想法</h1>

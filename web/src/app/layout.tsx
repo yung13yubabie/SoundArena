@@ -10,6 +10,7 @@ const newsreader = Newsreader({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://web-mocha-xi-12.vercel.app"),
   title: "聲擂 SoundArena",
   description: "音樂比賽投票網站",
 };

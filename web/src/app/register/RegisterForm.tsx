@@ -63,7 +63,7 @@ export function RegisterForm({ competitionId, competitionName, existing, registr
     return (
       <div>
         <SiteHeader authed active="events" />
-        <div className="mx-auto max-w-[1180px] px-11 pt-10 pb-24">
+        <div className="mx-auto max-w-[1180px] px-5 md:px-11 pt-10 pb-24">
           <h1 className="font-display text-[30px]">報名完成</h1>
           <div className="glass mt-7 max-w-[560px] p-7">
             <div className="flex items-center gap-2.5 rounded-[10px] border border-ok/30 bg-ok/10 p-3.5 text-[12.5px] text-ok">
@@ -87,7 +87,7 @@ export function RegisterForm({ competitionId, competitionName, existing, registr
     return (
       <div>
         <SiteHeader authed active="events" />
-        <div className="mx-auto max-w-[1180px] px-11 pt-10 pb-24">
+        <div className="mx-auto max-w-[1180px] px-5 md:px-11 pt-10 pb-24">
           <h1 className="font-display text-[30px]">報名審核中</h1>
           <div className="glass mt-7 max-w-[560px] p-7">
             <div className="flex items-center gap-2.5 rounded-[10px] border border-warn/30 bg-warn/10 p-3.5 text-[12.5px] text-warn">
@@ -104,7 +104,7 @@ export function RegisterForm({ competitionId, competitionName, existing, registr
     return (
       <div>
         <SiteHeader authed active="events" />
-        <div className="mx-auto max-w-[1180px] px-11 pt-10 pb-24">
+        <div className="mx-auto max-w-[1180px] px-5 md:px-11 pt-10 pb-24">
           <h1 className="font-display text-[30px]">{competitionName}</h1>
           <div className="glass mt-7 max-w-[560px] p-3.5 text-[12.5px] text-bad">報名已截止，無法再報名這場比賽。</div>
         </div>
@@ -115,7 +115,7 @@ export function RegisterForm({ competitionId, competitionName, existing, registr
   return (
     <div>
       <SiteHeader authed active="events" />
-      <div className="mx-auto max-w-[1180px] px-11 pt-10 pb-24">
+      <div className="mx-auto max-w-[1180px] px-5 md:px-11 pt-10 pb-24">
         <div className="mb-7">
           <div className="mb-2 text-xs uppercase tracking-widest text-accent">Screen · 報名</div>
           <h1 className="font-display text-[30px]">報名參賽 — {competitionName}</h1>
@@ -204,7 +204,7 @@ function ResubmitForm({
     return (
       <div>
         <SiteHeader authed active="events" />
-        <div className="mx-auto max-w-[1180px] px-11 pt-10 pb-24">
+        <div className="mx-auto max-w-[1180px] px-5 md:px-11 pt-10 pb-24">
           <h1 className="font-display text-[30px]">報名審核中</h1>
           <div className="glass mt-7 max-w-[560px] p-7">
             <div className="flex items-center gap-2.5 rounded-[10px] border border-warn/30 bg-warn/10 p-3.5 text-[12.5px] text-warn">
@@ -220,7 +220,7 @@ function ResubmitForm({
   return (
     <div>
       <SiteHeader authed active="events" />
-      <div className="mx-auto max-w-[1180px] px-11 pt-10 pb-24">
+      <div className="mx-auto max-w-[1180px] px-5 md:px-11 pt-10 pb-24">
         <div className="mb-7">
           <div className="mb-2 text-xs uppercase tracking-widest text-accent">Screen · 報名</div>
           <h1 className="font-display text-[30px]">報名被退回 — {competitionName}</h1>

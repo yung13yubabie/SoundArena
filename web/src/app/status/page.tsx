@@ -108,7 +108,7 @@ export default async function StatusPage() {
   return (
     <div>
       <SiteHeader authed active="status" />
-      <div className="mx-auto max-w-[1180px] px-11 pt-10 pb-24">
+      <div className="mx-auto max-w-[1180px] px-5 md:px-11 pt-10 pb-24">
         <div className="mb-7">
           <div className="mb-2 text-xs uppercase tracking-widest text-accent">Screen · 個人投稿狀態</div>
           <h1 className="font-display text-[30px]">我的投稿</h1>

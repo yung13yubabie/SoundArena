@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { SiteHeader } from "@/components/SiteHeader";
 import { Icon } from "@/lib/icons";
 import { Switch } from "@/components/Switch";
-import { MOCK_ALL_COMPETITIONS_PLATFORM } from "@/lib/mockData";
+import { EmptyState } from "@/components/EmptyState";
+import { createClient } from "@/lib/supabase/client";
 
 type Section = "review" | "format" | "schedule" | "profile" | "judge" | "collaborators" | "platform-competitions";
 
@@ -14,14 +15,36 @@ interface AdminCompetitionOption {
   name: string;
 }
 
+interface PlatformCompetitionRow {
+  id: string;
+  name: string;
+  registration_opens_at: string | null;
+  organizer: { display_name: string | null } | { display_name: string | null }[] | null;
+  rounds: { voting_closes_at: string | null }[];
+}
+
+function organizerName(row: PlatformCompetitionRow): string {
+  const o = Array.isArray(row.organizer) ? row.organizer[0] : row.organizer;
+  return o?.display_name ?? "（未命名）";
+}
+
+function competitionStatus(row: PlatformCompetitionRow): "進行中" | "即將開始" | "已結束" {
+  const now = Date.now();
+  const votingCloseTimes = row.rounds
+    .map((r) => r.voting_closes_at)
+    .filter((d): d is string => d != null)
+    .map((d) => new Date(d).getTime());
+  if (votingCloseTimes.length > 0 && Math.max(...votingCloseTimes) < now) return "已結束";
+  if (row.registration_opens_at && new Date(row.registration_opens_at).getTime() > now) return "即將開始";
+  return "進行中";
+}
+
 interface AdminShellProps {
   active: "review" | "format" | "schedule" | "profile" | "judge" | "collaborators";
   children: ReactNode;
   competitions?: AdminCompetitionOption[];
   activeCompetitionId?: string;
-  // PlatformAdmin 視角(全站比賽)目前是 MOCK_ALL_COMPETITIONS_PLATFORM 假資料——沒有真的
-  // 全站查詢。不是 Organizer/Collaborator 該看到的東西,預設 false,只有呼叫端查過
-  // profiles.is_platform_admin 為 true 才會顯示切換開關。
+  // 只有呼叫端查過 profiles.is_platform_admin 為 true,才會顯示 PlatformAdmin 視角切換開關。
   isPlatformAdmin?: boolean;
 }
 
@@ -58,6 +81,24 @@ export function AdminShell({
   const [viewpoint, setViewpointState] = useState<"organizer" | "platform">("organizer");
   const setViewpoint = (v: "organizer" | "platform") => setViewpointState(isPlatformAdmin ? v : "organizer");
   const [section, setSection] = useState<Section>(active);
+  const [platformCompetitions, setPlatformCompetitions] = useState<PlatformCompetitionRow[] | null>(null);
+  const [platformError, setPlatformError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isPlatformAdmin || viewpoint !== "platform" || platformCompetitions !== null) return;
+    const supabase = createClient();
+    supabase
+      .from("competitions")
+      .select("id, name, registration_opens_at, organizer:profiles!organizer_id(display_name), rounds(voting_closes_at)")
+      .order("created_at", { ascending: false })
+      .then(({ data, error }) => {
+        if (error) {
+          setPlatformError(error.message);
+          return;
+        }
+        setPlatformCompetitions((data ?? []) as unknown as PlatformCompetitionRow[]);
+      });
+  }, [isPlatformAdmin, viewpoint, platformCompetitions]);
 
   function goTo(key: AdminShellProps["active"]) {
     const suffix = activeCompetitionId ? `?c=${activeCompetitionId}` : "";
@@ -76,7 +117,7 @@ export function AdminShell({
           <button
             onClick={() => setCollapsed(!collapsed)}
             title={collapsed ? "展開側欄" : "收合側欄"}
-            className="mb-4 flex w-full justify-center rounded-[9px] border border-panel-border bg-white/[0.04] p-2 text-ink-dim"
+            className="focus-ring mb-4 flex w-full justify-center rounded-[9px] border border-panel-border bg-white/[0.04] p-2 text-ink-dim transition-colors hover:text-ink"
           >
             <Icon name="chevron" size={13} className={collapsed ? "" : "rotate-90"} />
           </button>
@@ -117,7 +158,7 @@ export function AdminShell({
               <button
                 key={it.key}
                 onClick={() => goTo(it.key)}
-                className={`mb-1 flex w-full items-center gap-2.5 rounded-[9px] px-2.5 py-2.25 text-left text-[13px] whitespace-nowrap ${
+                className={`focus-ring mb-1 flex w-full items-center gap-2.5 rounded-[9px] px-2.5 py-2.25 text-left text-[13px] whitespace-nowrap ${
                   active === it.key
                     ? "border border-accent/28 bg-accent/12 text-ink"
                     : "border border-transparent text-ink-dim hover:bg-white/[0.04] hover:text-ink"
@@ -132,7 +173,7 @@ export function AdminShell({
               <button
                 key={it.key}
                 onClick={() => setSection(it.key)}
-                className={`mb-1 flex w-full items-center gap-2.5 rounded-[9px] px-2.5 py-2.25 text-left text-[13px] whitespace-nowrap ${
+                className={`focus-ring mb-1 flex w-full items-center gap-2.5 rounded-[9px] px-2.5 py-2.25 text-left text-[13px] whitespace-nowrap ${
                   section === it.key
                     ? "border border-accent/28 bg-accent/12 text-ink"
                     : "border border-transparent text-ink-dim hover:bg-white/[0.04] hover:text-ink"
@@ -144,7 +185,7 @@ export function AdminShell({
             ))}
         </aside>
 
-        <main className="min-w-0 flex-1 px-10 pt-9 pb-25">
+        <main className="min-w-0 flex-1 px-4 pt-9 pb-25 md:px-10">
           {(!isPlatformAdmin || viewpoint === "organizer") && children}
 
           {isPlatformAdmin && viewpoint === "platform" && section === "platform-competitions" && (
@@ -156,34 +197,47 @@ export function AdminShell({
                   PlatformAdmin 看得到全站比賽，Organizer 只看得到自己建立的（見 SPEC.md 第 0 節角色分層）。
                 </p>
               </div>
-              <table className="w-full border-collapse text-[12.5px]">
-                <thead>
-                  <tr>
-                    <th className="border-b border-panel-border px-3.5 py-2.25 text-left text-[10.5px] font-semibold tracking-wide text-ink-faint uppercase">
-                      比賽名稱
-                    </th>
-                    <th className="border-b border-panel-border px-3.5 py-2.25 text-left text-[10.5px] font-semibold tracking-wide text-ink-faint uppercase">
-                      Organizer
-                    </th>
-                    <th className="border-b border-panel-border px-3.5 py-2.25 text-left text-[10.5px] font-semibold tracking-wide text-ink-faint uppercase">
-                      狀態
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {MOCK_ALL_COMPETITIONS_PLATFORM.map((c) => (
-                    <tr key={c.id}>
-                      <td className="border-b border-white/5 px-3.5 py-3 text-[13px]">{c.name}</td>
-                      <td className="border-b border-white/5 px-3.5 py-3">{c.organizer}</td>
-                      <td className="border-b border-white/5 px-3.5 py-3">
-                        <span className="rounded-full border border-accent/35 bg-accent/8 px-2.25 py-0.75 text-[11px] text-accent">
-                          {c.status === "active" ? "進行中" : "即將開始"}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              {platformError ? (
+                <div className="glass px-4 py-3 text-[12.5px] text-bad">全站比賽清單載入失敗：{platformError}</div>
+              ) : platformCompetitions === null ? (
+                <div className="flex items-center gap-2.5 py-6 text-[12.5px] text-ink-faint">
+                  <span className="spinner" />
+                  載入中…
+                </div>
+              ) : platformCompetitions.length === 0 ? (
+                <EmptyState icon="inbox" title="目前平台上還沒有任何比賽" sub="有 Organizer 建立比賽後會出現在這裡" />
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[480px] border-collapse text-[12.5px]">
+                    <thead>
+                      <tr>
+                        <th className="border-b border-panel-border px-3.5 py-2.25 text-left text-[10.5px] font-semibold tracking-wide text-ink-faint uppercase">
+                          比賽名稱
+                        </th>
+                        <th className="border-b border-panel-border px-3.5 py-2.25 text-left text-[10.5px] font-semibold tracking-wide text-ink-faint uppercase">
+                          Organizer
+                        </th>
+                        <th className="border-b border-panel-border px-3.5 py-2.25 text-left text-[10.5px] font-semibold tracking-wide text-ink-faint uppercase">
+                          狀態
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {platformCompetitions.map((c) => (
+                        <tr key={c.id}>
+                          <td className="border-b border-white/5 px-3.5 py-3 text-[13px]">{c.name}</td>
+                          <td className="border-b border-white/5 px-3.5 py-3">{organizerName(c)}</td>
+                          <td className="border-b border-white/5 px-3.5 py-3">
+                            <span className="rounded-full border border-accent/35 bg-accent/8 px-2.25 py-0.75 text-[11px] text-accent">
+                              {competitionStatus(c)}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           )}
         </main>

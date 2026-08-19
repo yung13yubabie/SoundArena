@@ -33,7 +33,7 @@ export default function LoginPage() {
   return (
     <div>
       <SiteHeader authed={false} />
-      <div className="mx-auto max-w-[1180px] px-11 pt-10 pb-24">
+      <div className="mx-auto max-w-[1180px] px-5 md:px-11 pt-10 pb-24">
         <div className="flex min-h-[calc(100vh-200px)] items-center justify-center">
           <div className="glass w-[420px] p-10 text-center">
             <div className="mx-auto mb-4.5 flex h-13 w-13 items-center justify-center rounded-2xl bg-gradient-to-br from-[#ff9457] via-accent to-accent-2 text-[22px]">

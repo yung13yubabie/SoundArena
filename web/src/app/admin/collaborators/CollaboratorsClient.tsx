@@ -208,7 +208,7 @@ function InviteForm({
       <button
         onClick={invite}
         disabled={isPending || !email.trim()}
-        className="rounded-[10px] bg-gradient-to-r from-[#ff9457] via-accent to-accent-2 px-4.5 py-2.5 text-[13.5px] font-semibold text-[#1a0e08] transition-opacity disabled:opacity-45"
+        className="focus-ring rounded-[10px] bg-gradient-to-r from-[#ff9457] via-accent to-accent-2 px-4.5 py-2.5 text-[13.5px] font-semibold text-[#1a0e08] transition hover:brightness-110 disabled:opacity-45"
       >
         {isPending ? "送出中…" : "送出邀請"}
       </button>

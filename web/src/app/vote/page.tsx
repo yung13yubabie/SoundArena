@@ -59,7 +59,7 @@ export default async function VotePage({
     return (
       <div>
         <SiteHeader authed active="vote" />
-        <div className="mx-auto max-w-[1180px] px-11 pt-10 pb-24">
+        <div className="mx-auto max-w-[1180px] px-5 md:px-11 pt-10 pb-24">
           <div className="mb-7">
             <div className="mb-2 text-xs uppercase tracking-widest text-accent">Screen · 投票</div>
             <h1 className="font-display text-[30px]">選擇要投票的場次</h1>
@@ -130,7 +130,7 @@ export default async function VotePage({
   return (
     <div>
       <SiteHeader authed active="vote" />
-      <div className="mx-auto max-w-[1180px] px-11 pt-10 pb-24">
+      <div className="mx-auto max-w-[1180px] px-5 md:px-11 pt-10 pb-24">
         <div className="mb-7">
           <div className="mb-2 text-xs uppercase tracking-widest text-accent">Screen · 投票</div>
           <h1 className="font-display text-[30px]">

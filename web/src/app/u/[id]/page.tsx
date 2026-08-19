@@ -102,7 +102,7 @@ export default async function PublicProfilePage({ params }: { params: Promise<{ 
   return (
     <div>
       <SiteHeader authed={authed} />
-      <div className="mx-auto max-w-[860px] px-11 pt-10 pb-24">
+      <div className="mx-auto max-w-[860px] px-5 md:px-11 pt-10 pb-24">
         <div className="glass mb-6 p-7">
           <div className="mb-4 flex items-center gap-4">
             <Avatar name={profile.display_name ?? "?"} avatarUrl={profile.avatar_url} size={64} />

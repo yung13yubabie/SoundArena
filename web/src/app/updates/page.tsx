@@ -12,7 +12,7 @@ export default async function UpdatesPage() {
   return (
     <div>
       <SiteHeader authed={!!claims?.claims} />
-      <div className="mx-auto max-w-[1180px] px-11 pt-10 pb-24">
+      <div className="mx-auto max-w-[1180px] px-5 md:px-11 pt-10 pb-24">
         <div className="mb-7">
           <div className="mb-2 text-xs uppercase tracking-widest text-accent">更新記錄</div>
           <h1 className="font-display text-[30px]">SoundArena 更新記錄</h1>

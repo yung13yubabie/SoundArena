@@ -42,14 +42,14 @@ export function RegistrationReviewQueue({ rows }: { rows: PendingRegistration[] 
                   setRejectingId(r.id);
                   setNote("");
                 }}
-                className="rounded-[10px] border border-panel-border bg-white/[0.04] px-3 py-1.5 text-[11.5px] font-semibold text-ink disabled:opacity-45"
+                className="focus-ring rounded-[10px] border border-panel-border bg-white/[0.04] px-3 py-1.5 text-[11.5px] font-semibold text-ink transition-colors hover:border-accent/40 disabled:opacity-45"
               >
                 退回
               </button>
               <button
                 disabled={isPending}
                 onClick={() => act(r.id, "approved")}
-                className="rounded-[10px] bg-gradient-to-r from-[#ff9457] via-accent to-accent-2 px-3 py-1.5 text-[11.5px] font-semibold text-[#1a0e08] disabled:opacity-45"
+                className="focus-ring rounded-[10px] bg-gradient-to-r from-[#ff9457] via-accent to-accent-2 px-3 py-1.5 text-[11.5px] font-semibold text-[#1a0e08] transition hover:brightness-110 disabled:opacity-45"
               >
                 通過
               </button>
@@ -68,14 +68,14 @@ export function RegistrationReviewQueue({ rows }: { rows: PendingRegistration[] 
               <button
                 disabled={isPending}
                 onClick={() => setRejectingId(null)}
-                className="rounded-[10px] border border-panel-border bg-white/[0.04] px-3 py-1.75 text-[11.5px] text-ink-dim disabled:opacity-45"
+                className="focus-ring rounded-[10px] border border-panel-border bg-white/[0.04] px-3 py-1.75 text-[11.5px] text-ink-dim transition-colors hover:border-accent/40 hover:text-ink disabled:opacity-45"
               >
                 取消
               </button>
               <button
                 disabled={isPending}
                 onClick={() => act(r.id, "rejected", note)}
-                className="rounded-[10px] bg-gradient-to-r from-[#ff9457] via-accent to-accent-2 px-3 py-1.75 text-[11.5px] font-semibold text-[#1a0e08] disabled:opacity-45"
+                className="focus-ring rounded-[10px] bg-gradient-to-r from-[#ff9457] via-accent to-accent-2 px-3 py-1.75 text-[11.5px] font-semibold text-[#1a0e08] transition hover:brightness-110 disabled:opacity-45"
               >
                 確認退回
               </button>

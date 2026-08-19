@@ -2,7 +2,6 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { Icon } from "@/lib/icons";
-import { PlayerBar } from "@/components/PlayerBar";
 import { computeRanking } from "@/lib/ranking";
 import { saveScore, setEliminated } from "./actions";
 
@@ -87,7 +86,8 @@ export function JudgeBoard({
               </button>
             </div>
 
-            <table className="w-full border-collapse text-[12.5px]">
+            <div className="overflow-x-auto">
+            <table className="w-full min-w-[520px] border-collapse text-[12.5px]">
               <thead>
                 <tr>
                   <th className="px-3.5 py-2.25 text-left text-[10.5px] font-semibold tracking-wide text-ink-faint uppercase">
@@ -141,6 +141,7 @@ export function JudgeBoard({
                   })}
               </tbody>
             </table>
+            </div>
 
             {scoreItems.some((i) => i.kind === "bonus") && (
               <div className="border-t border-panel-border px-4.5 py-3.5">
@@ -216,7 +217,6 @@ export function JudgeBoard({
           )}
         </div>
       )}
-      <PlayerBar />
     </div>
   );
 }
