@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Newsreader } from "next/font/google";
 import "./globals.css";
+import { HelpBubble } from "@/components/HelpBubble";
 
 const newsreader = Newsreader({
   variable: "--font-newsreader",
@@ -26,6 +27,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         style={SYSTEM_SANS_VARIABLE_STYLE}
       >
         {children}
+        <HelpBubble />
       </body>
     </html>
   );
