@@ -739,3 +739,55 @@ taste-skill 本身定位是「行銷頁/作品集」skill,明確聲明 dashboard
 `npx tsc --noEmit`、`npx eslint`(逐批次跑)、`npm run build` 全程乾淨,跑了兩次(mock/響應式那批一次,taste-skill 動畫那批一次)。**視覺驗證不完整**:響應式斷點用「注入 iframe 縮小成 390px 寬」的方式在瀏覽器裡實測過(SiteHeader 漢堡選單、`/competitions` 頁面都正常),但 taste-skill 這批動畫(stagger 淡入、手風琴展開)因為瀏覽器擴充功能中途斷線,**沒有真的點開來看過**——程式碼邏輯經過檢查、build 通過,但下次你登入時麻煩實際滾動 Discovery/投票頁、展開 `/competitions` 的輪次看一下動畫順不順。
 
 全部 commit(`9d76ce1`、`721c916`)、push、`vercel deploy --prod` 上線。
+
+## 08-19 第九輪:「深夜擂台 EP.04」真相大白 + 主辦資格撤除(ADR-0010)+ 全站文案改寫 + 公開主辦人名單/優勝榜
+
+使用者一次回報一長串問題:為什麼正式站還有「深夜擂台 EP.04」這個「mock」、比賽裡的兩首投稿也是假的、整體 UI 還是很醜、R2 要信用卡改用 Backblaze B2、找不到申請主辦人的地方、後台要不要加審核制、要主辦人列表、要各比賽優勝列表、前三名留檔案其餘淘汰後移除只留 Suno 連結、UI 說明欄太像工程文件、繼續跑 `/redesign-existing-projects`。範圍太大,先用 `AskUserQuestion` 問清楚三個會影響怎麼做的關鍵決定,再動手,不是每件事都塞一輪做完。
+
+### 1.「深夜擂台 EP.04」查證結果:不是程式碼 mock,是沒清掉的開發期真實測試資料
+
+直接查正式 Supabase 資料庫(不是猜),結果:這場比賽是使用者自己在 **2026-08-16 開發初期用真實 Google 帳號(linpcw@gmail.com)建立的測試比賽**,`organizer_id` 對應到使用者本人的 profile,底下兩筆報名一個是使用者自己(`display_name: 夜遊者`),一個是另一個真實測試帳號(`display_name: 測試選手二號`),兩首投稿的 `suno_share_url` 都是真的 Suno 連結,不是程式碼寫死的假資料。問題純粹是「開發期建立的測試資料一直留在正式資料庫裡沒清掉」,不是 bug。**使用者確認後已刪除**(比賽→輪次→報名→投稿隨 `on delete cascade` 一起清掉),正式站現在是乾淨的(目前 0 場比賽,這是真實狀態,不是壞掉)。**沒清的部分**:第二個測試帳號(`c8dcda55-5bee-40cf-8fe5-0ff498149b80`)還留著,只是不再關聯任何比賽,使用者沒明確要求刪帳號,先不動。
+
+### 2. 主辦資格撤除機制(ADR-0010)
+
+問清楚後使用者要的是:**自助成為主辦人的流程維持不變**(填完主辦人身分檔案就自動生效,不用改成審核制),但要新增「PlatformAdmin 可以撤除某人的主辦資格,撤除後對方不能自己重新申請恢復」。用 `mattpocock-skills:domain-modeling` 定案:新增 `profiles.host_revoked_at`(時間戳記,不是把 `host_setup_completed` 反轉——要區分「從沒設定過」跟「設定過但被撤除」兩種狀態,導向的畫面不一樣)。兩支 SECURITY DEFINER function(`revoke_organizer`/`reinstate_organizer`)限定 `is_platform_admin()` 才能寫入,這個欄位刻意不放進既有的 `grant update (...) on profiles to authenticated` 白名單,一般人完全碰不到。撤除範圍是**全部**管理權限(含既有比賽),不只擋新建;不影響本人以一般身份參賽,也不影響已建立比賽的公開內容(見 CONTEXT.md `OrganizerRevocation` 詞條)。
+
+- `AdminShell.tsx` 新增「主辦人管理」畫面(PlatformAdmin 視角底下),列出所有已完成設定的主辦人,可以撤除/重新賦予。
+- 6 個 Organizer 守門頁面(`/admin/profile`、`format`、`review`、`schedule`、`collaborators`、`/judge`)的守門條件從單純檢查 `host_setup_completed` 改成同時檢查 `host_revoked_at`。`/admin/profile` 被撤除的人會看到專門的說明畫面,不是重新顯示設定表單(否則等於自己填一次就恢復了,跟撤除的用意矛盾)。
+- **已知限制,寫進 ADR 了**:被撤除的主辦人如果比賽正在進行中,報名/投稿審核沒人處理,這輪沒做自動轉移機制,要真遇到再手動處理(例如 PlatformAdmin 自己加自己當 Collaborator)。
+
+### 3. 全站「工程文件感」文案清查——這可能是「還是很醜」最大的元凶
+
+逐頁掃 `SPEC.md`/`ADR-` 引用有沒有洩漏到實際渲染的 UI 文字裡(不是 code comment),抓到:
+- **全站 18 個檔案、28 處「Screen · XXX」小標籤**(例如首頁的「SCREEN · DISCOVERY(不需登入)」)——這是規格文件裡「畫面命名法」的內部用詞,直接原封不動出現在使用者看到的介面上,跟 taste-skill 稽核清單裡「eyebrow 太多、太像規格文件」的問題完全對上。**直接移除**,不是改寫成別的文字——H1 標題本身就夠清楚,不需要額外的分類小標籤(taste-skill 的建議做法)。
+- **3 處「(SPEC.md 第N節)」引用文字**混在真正給使用者看的說明文字裡(賽制建立頁的主題輪設定、曲風合規檢查說明,全站比賽列表的角色分層說明)——改寫成一般語氣,原本的資訊量保留,只是拿掉引用標記。
+
+### 4. 沒看到申請主辦人的地方 → Discovery 首頁加明顯入口
+
+技術上入口本來就存在(點「管理後台」,沒設定過會被導去 `/admin/profile`),但完全沒有標示、沒人會想點——「管理後台」這個詞聽起來像是給已經是主辦人的人用的,不是邀請新人加入。Discovery 首頁標題旁邊新增「想主辦自己的比賽？」按鈕,直接連到 `/admin/format`(會自動導去對的地方)。
+
+### 5. 公開主辦人名單 + 決賽優勝榜
+
+- 新增 `/organizers` 公開頁面,列出「已完成設定 **且至少主辦過一場比賽**」的主辦人(CONTEXT.md 對 Organizer 的定義本來就是「建立過至少一場 Competition」,不是「填過表單」就算,所以查詢刻意用 INNER JOIN 排除掛名但沒真的辦過比賽的人)。用一支新的 `list_public_organizers()` RPC——anon 對 `host_revoked_at` 沒有欄位讀取權(ADR-0010 刻意設計成只給本人看),不能讓前端自己下 anon 查詢再過濾,所以用 SECURITY DEFINER 在資料庫內部就把被撤除的主辦人濾掉,回傳的欄位本來就是公開安全的。Discovery 首頁加上「看看主辦人」連結。
+- `/results` 決賽(該比賽 `round_index` 最大的那一輪)的前三名,從純數字排名改成「冠軍/亞軍/季軍」徽章 + 皇冠圖示,其餘輪次維持原本的數字排名不變。
+
+### 6. 這輪沒做,原因各自不同
+
+- **前三名留音樂檔案、其餘淘汰後移除只留 Suno 連結**:問過使用者,確認時機是「等整場比賽完全結束才統一清」(不是每輪淘汰就馬上清)。但**完全沒動手**——現在連音檔上傳機制都還沒有(R2/B2 都還沒接上),沒有檔案可以清。等 B2 真的接上、有真實音檔之後才有東西可以照這個規則做。
+- **留言的自動審核/檢舉機制**:使用者提到「希望可以輸入但其他人看不到,系統掃描到不正當言論就標記給我判斷」——這其實是 CONTEXT.md 裡早就存在的 `_待確認_` 項目(留言要不要有審核機制,上一輪特意沒展開)。但這次的描述還是不夠具體到能動手(「輸入」是輸入什麼、「掃描」要怎麼掃、用關鍵字表還是要接 AI 判斷),沒有照著猜就硬做,留給下一輪問清楚再做。
+- **taste-skill 更深的視覺改版**(顏色、字級、版面這些,不只是文案):這輪的大宗心力放在「工程文件文案」跟新功能上,沒有再進一步做視覺調整。文案清理完後如果還是覺得醜,需要具體一點的回饋(比如是哪一頁、覺得哪裡不對),不然容易變成瞎猜第二輪。
+- **Cloudflare CLI 安裝**:使用者中途打斷訊息重打過,最後定案的完整版本裡沒有這個要求(第一版有,第二版拿掉了),照最後一版沒有動作。如果還是要裝,麻煩再說一次。
+
+### R2 → Backblaze B2(架構不變,S3 相容,只是換服務商)
+
+1. backblaze.com 註冊(免費方案通常不需要信用卡,但建議註冊時自己再確認一次,政策可能會變)。
+2. B2 Cloud Storage → Create a Bucket,取個名字(例如 `soundarena-audio`)。
+3. Account → App Keys → Add a New Application Key,權限範圍限定在剛剛那個 bucket(不要給 All 權限)。建立後立刻複製 **keyID** 跟 **applicationKey**(只顯示一次)。
+4. 該 bucket 的 Bucket Settings 裡可以看到 **S3-compatible endpoint**(格式類似 `s3.us-west-002.backblazeb2.com`,依你選的區域而定)。
+5. 給我:keyID、applicationKey、endpoint、bucket 名稱這四個值,S3-compatible API 呼叫方式跟 R2 幾乎一樣,不用重新設計。
+
+### 驗證方式
+
+`npx tsc --noEmit`、`npx eslint`、`npm run build` 全程乾淨,分三批做完(mock 清理+撤除機制+文案清查一批,公開名單+優勝榜一批)。**沒有做真人瀏覽器點擊驗證**——這輪牽涉真實資料庫刪除跟新的 RLS/RPC 權限設計,下次你登入時麻煩實際點過:①`/organizers` 頁面能不能正常顯示、②PlatformAdmin 視角的「主辦人管理」撤除/恢復按鈕、③Discovery 首頁的新入口按鈕、④確認全站真的看不到「Screen ·」那些標籤了。
+
+全部 commit(`e0f38fe`、`2b36d5a`)、push、`vercel deploy --prod` 上線。
