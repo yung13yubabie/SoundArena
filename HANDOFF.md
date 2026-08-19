@@ -679,3 +679,29 @@ C:\Users\LIN\Documents\github\SoundArena\
 - **Resend API Key**:使用者需要自己到 resend.com 註冊、建立 API Key(這步驟涉及建立帳號,依規範不能由我代為操作),拿到 key 之後才能把通知系統的後半段(真的寄出)接上。
 
 `npx tsc --noEmit`、`npm run build` 全程乾淨。已 commit(`2459d2a`)、push、`vercel deploy --prod` 上線。
+
+## 08-19 第七輪:UI/UX 全領域稽核(`redesign-existing-projects` skill,只稽核、沒動手改)
+
+使用者要求用 taste-skill(`design-taste-frontend`,已在 08-18 裝好)+ vigolium/skills 這批 skill(`brandkit`/`gpt-taste`/`high-end-visual-design`/`redesign-existing-projects` 等,同樣在 `.claude/skills` 底下,推測是同一批裝進來的)對全站做 UI/UX 掃描。用 `redesign-existing-projects` 當入口(它本來就是「稽核既有網站、抓通用 AI 感、不破壞功能」的設計),**這輪只出報告,沒有改任何程式碼**——使用者確認要改哪些之後才動手。
+
+稽核方式:讀 `globals.css`(design tokens)+ 抽查共用元件(`SiteHeader`/`PlayerBar`/`icons.tsx`)+ 對整個 `web/src` 做針對性 grep(`hover:`、`sm:`/`md:`/`lg:` 斷點、`focus:`、`window.alert`、`z-index`、`favicon`、`not-found.tsx`),不是逐頁人工看過一輪——共用元件的問題本來就是全站性的,grep 涵蓋率比人工翻頁更完整。
+
+### 高優先
+
+1. **`judge/JudgeBoard.tsx` 的 `<PlayerBar />` 是純裝飾,顯示假資料**——呼叫時沒傳任何 props,`PlayerBar` 的 `title` 預設值是硬編碼的「未命名作品 #2」,`playing` state 預設 `true`,`匿名` 也是寫死的。`JudgeBoard.tsx` 整份檔案完全沒有追蹤「評審目前在聽哪個投稿」這個狀態,所以這個播放列不可能是真的——評審打開評分頁就會看到一個看起來像正在播放、但其實跟他要評的作品毫無關係的假播放器。這不是「AI 感」問題,是會誤導使用者的假資料,跟這幾輪一直在抓的同一類 bug 同源,建議優先處理:要嘛接上真正的目前投稿資訊,要嘛先拿掉。
+2. **全站零個響應式斷點**——`sm:`/`md:`/`lg:`/`xl:` 在整個 `web/src` 搜尋 0 筆結果。`SiteHeader` 是 logo + 7 個 nav 項目 + 3 個右側控制項全部塞在同一條不換行的 `flex` row 裡,手機寬度下會直接爆版(擠壓變形或橫向捲動),不是「不夠精緻」,是手機上不能用。範圍最大的一項,牽動全站每個頁面,建議先確認要不要做、做到多少(至少 `SiteHeader` 要換成漢堡選單)再排進度,不要沒問就直接大改。
+3. **沒有自訂 404 頁**——`web/src/app/` 底下找不到 `not-found.tsx`,連錯連結會看到 Next.js 預設的白底英文錯誤頁,跟全站暗色調完全跳痛。
+4. **favicon 疑似還是 Next.js 內建預設圖示**——檔案存在(`favicon.ico`,約 26KB),但建立時間是 08-13,早於任何品牌視覺工作,檔案特徵符合 create-next-app 內建的預設圖示,不是 `SiteHeader` 裡實際在用的「◈」品牌標記。
+
+### 中優先
+
+5. **Focus ring 覆蓋不全**——全站只有 20 處用到 `focus:`/`focus-visible:`,幾乎集中在表單 `<input>`;`SiteHeader` 的 nav 連結、`LogoutButton`、`HelpBubble` 的圓球按鈕都沒有可見的鍵盤 focus 樣式,鍵盤操作者看不出目前 focus 停在哪一個元素上(可及性問題,不只是美觀)。
+6. **Hover 狀態覆蓋不均**——38 處分布在 19 個檔案,部分互動元件(尤其 `/admin` 系列的部分按鈕)沒有 hover 回饋,體感不一致。
+7. **雙 accent 色需要留一筆記錄**——`--color-accent`(橘 `#ff6a3d`)和 `--color-accent-2`(紅 `#c0392b`)一直成對出現在漸層裡。稽核清單裡「不要用超過一個 accent 色」這條,套在這裡不完全適用——這是刻意設計的雙色漸層,不是兩個互相打架的獨立 accent,先記錄下來,之後如果要建立更嚴謹的設計系統再一併決定要不要收斂成單一 accent。
+
+### 低優先(打磨,不影響功能)
+
+8. `.glass` 玻璃感目前只有 `backdrop-filter: blur(18px)` + 1px border,可以加一層內側高光(inset highlight)讓層次感更立體。
+9. 沒有設定 `og:image`/social share 預覽圖,分享連結到 LINE/Discord 時只有純文字標題,沒有預覽圖。
+
+**這份報告刻意沒有排進「哪些現在就做」——等使用者從上面 9 點裡選要做的範圍,再照 `redesign-existing-projects` skill 自己列的 Fix Priority(字體→色彩→互動狀態→版面→元件→狀態頁→字級打磨)排進度,不要自己猜優先序直接動手。**
