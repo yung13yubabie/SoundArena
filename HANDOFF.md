@@ -653,3 +653,29 @@ C:\Users\LIN\Documents\github\SoundArena\
 四項都個別驗證過:①冷卻機制——第一次重新送出成功,立刻再送第二次正確被擋(訊息含精確的剩餘秒數)。②路由保護——`has_any_competition_access()` 對組織者/協作者回傳 `true`,對一個全新建立、跟任何比賽都沒關係的帳號回傳 `false`。③通知系統——完整跑過「報名(pending,channel=email)→ 關閉訂閱後再觸發(skipped)→ 重新開啟訂閱後再觸發(pending)」三態,確認型別修正後正確運作。測試帳號跟資料事後都清理乾淨。`tsc --noEmit`、`next build` 全程乾淨。
 
 已 commit(`b856d37`)、push、`vercel deploy --prod` 上線。
+
+## 08-19 第六輪:再掃一次技術債、修登出按鈕真根因、加浮動操作說明小球、寄信方式定案
+
+### 1. 全領域 schema-only 掃描(第二次)
+
+逐一比對每份 migration 新增的 table/column/function,跟 `web/src` 是否有實際查詢/呼叫。結果:**只有一項真的是「只寫不讀」**——`competitions.promotion_starts_at` / `promotion_ends_at` / `announcement_starts_at` / `announcement_ends_at`(對應 CONTEXT.md 的 `SchedulePhase` 概念:宣傳→投稿→投票→公布)。Organizer 在 `/admin/schedule` 可以設定這四個時間,但**沒有任何頁面讀取顯示**——`/competitions`、Discovery 首頁都沒有「目前是宣傳期/投稿期/投票期」這種階段標示。其餘檢查過的(`is_public`/`set_registration_public`/`set_submission_public`、`get_registration_result_rounds`、`host_setup_completed`、`comment_endorsement` 計分)都已雙向接上,沒有發現新的假接口。**這輪沒有動手做,只回報——階段標示要嵌進哪裡(比賽卡片?比賽詳情?)還沒定案,先問過使用者再做。**
+
+### 2. 登出按鈕真根因(不是上輪修的 header 顯示邏輯)
+
+`LogoutButton.tsx` 原本是 `<button>` 包一個空的漸層圓形,沒有 `children`、沒有圖示、沒有文字,只有 `title` 屬性(滑鼠移上去才會出現 tooltip)。功能上按了會登出,但視覺上完全看不出這是可互動的登出鍵,跟旁邊的裝飾用圓形沒有區別——這才是使用者這輪回報「登入狀態下沒看到登出按鈕」的真正原因,跟上一輪修的「`authed=false` 時整條 nav 消失」是兩個不同的 bug。修法:加一個 `logout` icon(`icons.tsx` 新增)+「登出」文字,樣式比照旁邊「登入」連結。
+
+### 3. 浮動操作說明小球(新功能)
+
+`web/src/components/HelpBubble.tsx`,掛在 root layout(`layout.tsx`)裡,靠 `usePathname()` 判斷目前頁面對應哪組提示文字,**不需要逐頁加程式碼**。預設收合成右下角一顆小圓球,點開後顯示 2\~3 條該頁面的簡短操作說明,再點一次收合。目前涵蓋:首頁、比賽試聽、報名、投票、結果、投稿、我的狀態、公開檔案、意見回饋、更新記錄、評審後台、以及四個 `/admin/*` 子頁,`/login` 刻意不顯示。內容是我依照各頁實際功能寫的簡短說明,不是逐字照搬 UI 文案——**之後頁面功能有變動,這裡的文字要記得一起改,不會自動同步**。
+
+### 4. 寄信方式定案:Resend
+
+問過使用者「發 mail 由你帳戶交由我轉發」實際上想怎麼做,選項攤開後(用戶自己的 Gmail SMTP vs. 申請 Resend 免費方案 vs. 先不寄)**使用者選了 Resend 免費方案**。這輪只到「使用者要自己去註冊+建立 API Key」為止,還沒有寫任何寄信程式碼——`create_notification_event()` 寫入的事件依然停在 `pending`,拿到 Resend API key 之後才會接上「把 pending 事件送出、更新 `notification_events.status`」的背景動作(SDK 呼叫 + Vercel Cron 或類似排程觸發)。
+
+### 這輪仍卡在使用者手上、還沒解決的三件事
+
+- **Cloudflare R2**:目前完全沒開始寫程式(`CompetitionBrowser.tsx` 裡只有一句「音檔上傳(Cloudflare R2)還沒接上」的說明文字,連 stub 都沒有)。需要:Cloudflare 帳號建 bucket → 建一組有該 bucket 讀寫權限的 API Token,拿到 Account ID、Access Key ID、Secret Access Key、bucket 名稱這四個值。
+- **Discord Server 綁定**:`DISCORD_BOT_TOKEN` 已經設定好,但 `DISCORD_GUILD_ID` 是空的(確認過,0 字元)。需要使用者把 bot 邀進 SoundArena 的 Discord 伺服器,再提供 Server ID——`auth/callback/route.ts` 裡的 `joinDiscordGuild()` 已經寫好在等這個值。
+- **Resend API Key**:使用者需要自己到 resend.com 註冊、建立 API Key(這步驟涉及建立帳號,依規範不能由我代為操作),拿到 key 之後才能把通知系統的後半段(真的寄出)接上。
+
+`npx tsc --noEmit`、`npm run build` 全程乾淨。已 commit(`2459d2a`)、push、`vercel deploy --prod` 上線。
