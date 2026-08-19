@@ -8,7 +8,15 @@ import { Switch } from "@/components/Switch";
 import { EmptyState } from "@/components/EmptyState";
 import { createClient } from "@/lib/supabase/client";
 
-type Section = "review" | "format" | "schedule" | "profile" | "judge" | "collaborators" | "platform-competitions";
+type Section =
+  | "review"
+  | "format"
+  | "schedule"
+  | "profile"
+  | "judge"
+  | "collaborators"
+  | "platform-competitions"
+  | "platform-organizers";
 
 interface AdminCompetitionOption {
   id: string;
@@ -39,6 +47,12 @@ function competitionStatus(row: PlatformCompetitionRow): "進行中" | "即將�
   return "進行中";
 }
 
+interface PlatformOrganizerRow {
+  id: string;
+  display_name: string | null;
+  host_revoked_at: string | null;
+}
+
 interface AdminShellProps {
   active: "review" | "format" | "schedule" | "profile" | "judge" | "collaborators";
   children: ReactNode;
@@ -57,7 +71,10 @@ const ORG_ITEMS = [
   { key: "profile" as const, label: "主辦人身分", icon: "user" as const },
 ];
 
-const PLATFORM_ITEMS = [{ key: "platform-competitions" as const, label: "全站比賽", icon: "inbox" as const }];
+const PLATFORM_ITEMS = [
+  { key: "platform-competitions" as const, label: "全站比賽", icon: "inbox" as const },
+  { key: "platform-organizers" as const, label: "主辦人管理", icon: "users" as const },
+];
 
 const ORG_ROUTES: Record<AdminShellProps["active"], string> = {
   review: "/admin/review",
@@ -83,6 +100,9 @@ export function AdminShell({
   const [section, setSection] = useState<Section>(active);
   const [platformCompetitions, setPlatformCompetitions] = useState<PlatformCompetitionRow[] | null>(null);
   const [platformError, setPlatformError] = useState<string | null>(null);
+  const [platformOrganizers, setPlatformOrganizers] = useState<PlatformOrganizerRow[] | null>(null);
+  const [organizersError, setOrganizersError] = useState<string | null>(null);
+  const [revokingId, setRevokingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isPlatformAdmin || viewpoint !== "platform" || platformCompetitions !== null) return;
@@ -99,6 +119,36 @@ export function AdminShell({
         setPlatformCompetitions((data ?? []) as unknown as PlatformCompetitionRow[]);
       });
   }, [isPlatformAdmin, viewpoint, platformCompetitions]);
+
+  useEffect(() => {
+    if (!isPlatformAdmin || viewpoint !== "platform" || platformOrganizers !== null) return;
+    const supabase = createClient();
+    supabase
+      .from("profiles")
+      .select("id, display_name, host_revoked_at")
+      .eq("host_setup_completed", true)
+      .order("display_name")
+      .then(({ data, error }) => {
+        if (error) {
+          setOrganizersError(error.message);
+          return;
+        }
+        setPlatformOrganizers((data ?? []) as PlatformOrganizerRow[]);
+      });
+  }, [isPlatformAdmin, viewpoint, platformOrganizers]);
+
+  async function toggleOrganizerRevocation(row: PlatformOrganizerRow) {
+    setRevokingId(row.id);
+    const supabase = createClient();
+    const fn = row.host_revoked_at ? "reinstate_organizer" : "revoke_organizer";
+    const { error } = await supabase.rpc(fn, { p_profile_id: row.id });
+    if (!error) {
+      setPlatformOrganizers((prev) =>
+        (prev ?? []).map((o) => (o.id === row.id ? { ...o, host_revoked_at: row.host_revoked_at ? null : new Date().toISOString() } : o)),
+      );
+    }
+    setRevokingId(null);
+  }
 
   function goTo(key: AdminShellProps["active"]) {
     const suffix = activeCompetitionId ? `?c=${activeCompetitionId}` : "";
@@ -191,10 +241,9 @@ export function AdminShell({
           {isPlatformAdmin && viewpoint === "platform" && section === "platform-competitions" && (
             <div>
               <div className="mb-7">
-                <div className="mb-2 text-xs uppercase tracking-widest text-accent">PlatformAdmin · 全站比賽</div>
-                <h1 className="font-display text-[30px]">所有 Organizer 建立的比賽</h1>
+                <h1 className="font-display text-[30px]">所有主辦人建立的比賽</h1>
                 <p className="mt-1.5 max-w-[680px] text-sm leading-relaxed text-ink-dim">
-                  PlatformAdmin 看得到全站比賽，Organizer 只看得到自己建立的（見 SPEC.md 第 0 節角色分層）。
+                  作為平台管理員，這裡看得到全站所有比賽；一般主辦人只看得到自己建立的。
                 </p>
               </div>
               {platformError ? (
@@ -236,6 +285,53 @@ export function AdminShell({
                       ))}
                     </tbody>
                   </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {isPlatformAdmin && viewpoint === "platform" && section === "platform-organizers" && (
+            <div>
+              <div className="mb-7">
+                <h1 className="font-display text-[30px]">主辦人資格</h1>
+                <p className="mt-1.5 max-w-[680px] text-sm leading-relaxed text-ink-dim">
+                  撤除後對方所有比賽管理權限立即失效,且無法自行重新設定恢復,只能由你在這裡重新賦予。不影響對方以一般身份參賽,也不影響他已建立比賽的公開內容。
+                </p>
+              </div>
+              {organizersError ? (
+                <div className="glass px-4 py-3 text-[12.5px] text-bad">主辦人清單載入失敗：{organizersError}</div>
+              ) : platformOrganizers === null ? (
+                <div className="flex items-center gap-2.5 py-6 text-[12.5px] text-ink-faint">
+                  <span className="spinner" />
+                  載入中…
+                </div>
+              ) : platformOrganizers.length === 0 ? (
+                <EmptyState icon="users" title="目前平台上還沒有任何主辦人" sub="有使用者完成主辦人身分設定後會出現在這裡" />
+              ) : (
+                <div className="flex flex-col gap-1.5">
+                  {platformOrganizers.map((o) => (
+                    <div key={o.id} className="glass flex items-center justify-between px-4 py-3">
+                      <div className="flex items-center gap-2.5">
+                        <span className="text-[13.5px]">{o.display_name ?? "（未命名）"}</span>
+                        {o.host_revoked_at && (
+                          <span className="rounded-full border border-bad/35 bg-bad/8 px-2.25 py-0.75 text-[11px] text-bad">
+                            已撤除
+                          </span>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => toggleOrganizerRevocation(o)}
+                        disabled={revokingId === o.id}
+                        className={`focus-ring rounded-[10px] border px-3 py-1.5 text-[11.5px] font-semibold transition-colors disabled:opacity-45 ${
+                          o.host_revoked_at
+                            ? "border-panel-border bg-white/[0.04] text-ink hover:border-accent/40"
+                            : "border-bad/35 bg-bad/8 text-bad hover:bg-bad/14"
+                        }`}
+                      >
+                        {o.host_revoked_at ? "重新賦予" : "撤除資格"}
+                      </button>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>

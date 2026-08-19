@@ -43,10 +43,10 @@ export default async function JudgePage({
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("host_setup_completed, is_platform_admin")
+    .select("host_setup_completed, is_platform_admin, host_revoked_at")
     .eq("id", userId)
     .maybeSingle();
-  if (!profile?.host_setup_completed) redirect("/admin/profile");
+  if (!profile?.host_setup_completed || profile?.host_revoked_at) redirect("/admin/profile");
   const isPlatformAdmin = profile.is_platform_admin ?? false;
 
   const myCompetitions = await getManageableCompetitions(supabase, "judge");
@@ -61,7 +61,6 @@ export default async function JudgePage({
     return (
       <AdminShell active="judge" isPlatformAdmin={isPlatformAdmin}>
         <div className="mb-7">
-          <div className="mb-2 text-xs uppercase tracking-widest text-accent">Screen · 評審評分</div>
           <h1 className="font-display text-[30px]">還沒有比賽可以評分</h1>
           <p className="mt-1.5 max-w-[680px] text-sm leading-relaxed text-ink-dim">先到「賽制建立」頁建立比賽。</p>
         </div>
@@ -79,7 +78,6 @@ export default async function JudgePage({
 
   const header = (
     <div className="mb-6">
-      <div className="mb-2 text-xs uppercase tracking-widest text-accent">Screen · 評審評分</div>
       <h1 className="font-display text-[30px]">
         本輪待評分作品 — {competition.name}
       </h1>

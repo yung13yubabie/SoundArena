@@ -52,12 +52,19 @@ export function DiscoveryList({ competitions, authed }: { competitions: Competit
     <div>
       <SiteHeader authed={authed} active="events" />
       <div className="mx-auto max-w-[1180px] px-5 md:px-11 pt-10 pb-24">
-        <div className="mb-7">
-          <div className="mb-2 text-xs uppercase tracking-widest text-accent">Screen · Discovery（不需登入）</div>
-          <h1 className="font-display text-[30px]">探索比賽</h1>
-          <p className="mt-1.5 max-w-[680px] text-sm leading-relaxed text-ink-dim">
-            這裡列出全站主辦方建立的所有比賽。開放公開展示的作品可以直接試聽，不用登入。
-          </p>
+        <div className="mb-7 flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <h1 className="font-display text-[30px]">探索比賽</h1>
+            <p className="mt-1.5 max-w-[680px] text-sm leading-relaxed text-ink-dim">
+              看看現在有哪些比賽，公開展示的作品不用登入就能試聽。
+            </p>
+          </div>
+          <Link
+            href="/admin/format"
+            className="focus-ring flex-none rounded-[10px] border border-accent/35 bg-accent/8 px-4 py-2.25 text-[13px] font-semibold text-accent transition-colors hover:bg-accent/14"
+          >
+            想主辦自己的比賽？
+          </Link>
         </div>
 
         <div className="mb-5.5 flex flex-wrap gap-2">

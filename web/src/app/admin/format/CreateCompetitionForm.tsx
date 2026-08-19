@@ -22,7 +22,6 @@ export function CreateCompetitionForm({ isPlatformAdmin = false }: { isPlatformA
   return (
     <AdminShell active="format" isPlatformAdmin={isPlatformAdmin}>
       <div className="mb-7">
-        <div className="mb-2 text-xs uppercase tracking-widest text-accent">Screen · 賽制建立</div>
         <h1 className="font-display text-[30px]">建立你的第一場比賽</h1>
         <p className="mt-1.5 max-w-[680px] text-sm leading-relaxed text-ink-dim">
           填基本資料就會建立比賽，並自動生成初賽、決賽兩輪，之後可以再新增中間輪次、調整賽制。

@@ -61,7 +61,6 @@ export default async function VotePage({
         <SiteHeader authed active="vote" />
         <div className="mx-auto max-w-[1180px] px-5 md:px-11 pt-10 pb-24">
           <div className="mb-7">
-            <div className="mb-2 text-xs uppercase tracking-widest text-accent">Screen · 投票</div>
             <h1 className="font-display text-[30px]">選擇要投票的場次</h1>
             <p className="mt-1.5 max-w-[680px] text-sm leading-relaxed text-ink-dim">
               以下是目前開放投票中的輪次。
@@ -132,7 +131,6 @@ export default async function VotePage({
       <SiteHeader authed active="vote" />
       <div className="mx-auto max-w-[1180px] px-5 md:px-11 pt-10 pb-24">
         <div className="mb-7">
-          <div className="mb-2 text-xs uppercase tracking-widest text-accent">Screen · 投票</div>
           <h1 className="font-display text-[30px]">
             {round.name} — {competition.name}
           </h1>

@@ -119,7 +119,6 @@ export function ScheduleForm({
       isPlatformAdmin={isPlatformAdmin}
     >
       <div className="mb-7">
-        <div className="mb-2 text-xs uppercase tracking-widest text-accent">Screen · 時程設定</div>
         <h1 className="font-display text-[30px]">賽事時程 — {competitionName}</h1>
         <p className="mt-1.5 max-w-[680px] text-sm leading-relaxed text-ink-dim">
           設定宣傳、投稿、投票、公布四個階段的起訖日期，時間衝突會立即提示。投稿／投票期會套用到目前每一輪。

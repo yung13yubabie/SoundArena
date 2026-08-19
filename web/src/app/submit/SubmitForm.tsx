@@ -87,7 +87,6 @@ export function SubmitForm({ options }: { options: RoundOption[] }) {
         <SiteHeader authed active="submit" />
         <div className="mx-auto max-w-[1180px] px-5 md:px-11 pt-10 pb-24">
           <div className="mb-7">
-            <div className="mb-2 text-xs uppercase tracking-widest text-accent">Screen · 投稿</div>
             <h1 className="font-display text-[30px]">投稿已送出</h1>
           </div>
           <div className="glass max-w-[560px] p-7">
@@ -112,7 +111,6 @@ export function SubmitForm({ options }: { options: RoundOption[] }) {
       <SiteHeader authed active="submit" />
       <div className="mx-auto max-w-[1180px] px-5 md:px-11 pt-10 pb-24">
         <div className="mb-7">
-          <div className="mb-2 text-xs uppercase tracking-widest text-accent">Screen · 投稿</div>
           <h1 className="font-display text-[30px]">投稿本輪作品</h1>
           <p className="mt-1.5 max-w-[680px] text-sm leading-relaxed text-ink-dim">
             貼上 Suno 分享連結，系統會呼叫 Suno 公開 API 確認是不是你本人的作品；標題目前需要自己填寫（Suno 沒有公開的標題查詢端點）。

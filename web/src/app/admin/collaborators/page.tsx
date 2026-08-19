@@ -59,10 +59,10 @@ export default async function AdminCollaboratorsPage({
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("host_setup_completed, is_platform_admin")
+    .select("host_setup_completed, is_platform_admin, host_revoked_at")
     .eq("id", userId)
     .maybeSingle();
-  if (!profile?.host_setup_completed) redirect("/admin/profile");
+  if (!profile?.host_setup_completed || profile?.host_revoked_at) redirect("/admin/profile");
   const isPlatformAdmin = profile.is_platform_admin ?? false;
 
   const myCompetitions = await getManageableCompetitions(supabase, "invite");
@@ -76,7 +76,6 @@ export default async function AdminCollaboratorsPage({
     return (
       <AdminShell active="collaborators" isPlatformAdmin={isPlatformAdmin}>
         <div className="mb-7">
-          <div className="mb-2 text-xs uppercase tracking-widest text-accent">Screen · 協作者管理</div>
           <h1 className="font-display text-[30px]">還沒有比賽可以管理協作者</h1>
           <p className="mt-1.5 max-w-[680px] text-sm leading-relaxed text-ink-dim">
             先到「賽制建立」頁建立比賽，或者等別人邀請你成為協作者。
@@ -122,7 +121,6 @@ export default async function AdminCollaboratorsPage({
       isPlatformAdmin={isPlatformAdmin}
     >
       <div className="mb-7">
-        <div className="mb-2 text-xs uppercase tracking-widest text-accent">Screen · 協作者管理</div>
         <h1 className="font-display text-[30px]">協作者 — {competition.name}</h1>
         <p className="mt-1.5 max-w-[680px] text-sm leading-relaxed text-ink-dim">
           {competition.is_organizer

@@ -117,7 +117,6 @@ export function RegisterForm({ competitionId, competitionName, existing, registr
       <SiteHeader authed active="events" />
       <div className="mx-auto max-w-[1180px] px-5 md:px-11 pt-10 pb-24">
         <div className="mb-7">
-          <div className="mb-2 text-xs uppercase tracking-widest text-accent">Screen · 報名</div>
           <h1 className="font-display text-[30px]">報名參賽 — {competitionName}</h1>
           <p className="mt-1.5 max-w-[680px] text-sm leading-relaxed text-ink-dim">
             填寫基本資料並提供 Suno 帳號，送出後由主辦人審核，審核通過才能投稿。
@@ -222,7 +221,6 @@ function ResubmitForm({
       <SiteHeader authed active="events" />
       <div className="mx-auto max-w-[1180px] px-5 md:px-11 pt-10 pb-24">
         <div className="mb-7">
-          <div className="mb-2 text-xs uppercase tracking-widest text-accent">Screen · 報名</div>
           <h1 className="font-display text-[30px]">報名被退回 — {competitionName}</h1>
         </div>
 

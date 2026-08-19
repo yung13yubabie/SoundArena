@@ -21,10 +21,10 @@ export default async function AdminSchedulePage({
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("host_setup_completed, is_platform_admin")
+    .select("host_setup_completed, is_platform_admin, host_revoked_at")
     .eq("id", userId)
     .maybeSingle();
-  if (!profile?.host_setup_completed) redirect("/admin/profile");
+  if (!profile?.host_setup_completed || profile?.host_revoked_at) redirect("/admin/profile");
   const isPlatformAdmin = profile.is_platform_admin ?? false;
 
   const myCompetitions = await getManageableCompetitions(supabase, "schedule");
@@ -39,7 +39,6 @@ export default async function AdminSchedulePage({
     return (
       <AdminShell active="schedule" isPlatformAdmin={isPlatformAdmin}>
         <div className="mb-7">
-          <div className="mb-2 text-xs uppercase tracking-widest text-accent">Screen · 時程設定</div>
           <h1 className="font-display text-[30px]">還沒有比賽可以設定時程</h1>
           <p className="mt-1.5 max-w-[680px] text-sm leading-relaxed text-ink-dim">
             先到「賽制建立」頁建立比賽，才能回來設定時程。
@@ -61,7 +60,6 @@ export default async function AdminSchedulePage({
     return (
       <AdminShell active="schedule" isPlatformAdmin={isPlatformAdmin}>
         <div className="mb-7">
-          <div className="mb-2 text-xs uppercase tracking-widest text-accent">Screen · 時程設定</div>
           <h1 className="font-display text-[30px]">還沒有比賽可以設定時程</h1>
           <p className="mt-1.5 max-w-[680px] text-sm leading-relaxed text-ink-dim">
             先到「賽制建立」頁建立比賽，才能回來設定時程。

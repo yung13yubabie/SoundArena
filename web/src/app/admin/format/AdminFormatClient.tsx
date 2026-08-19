@@ -234,7 +234,7 @@ function ThemedRoundConfigPanel({ roundId, initial }: { roundId: string; initial
 
   return (
     <div className="glass mt-2 mb-3.5 px-4 py-3.5">
-      <div className="mb-2.5 text-[11.5px] text-ink-faint">限定主題輪設定——比賽規則會公開顯示這個主題(SPEC.md 第7節)</div>
+      <div className="mb-2.5 text-[11.5px] text-ink-faint">設定這一輪的限定主題，比賽規則頁會公開顯示給所有人看</div>
       <div className="mb-2.5 flex gap-1.75">
         <button
           onClick={() => {
@@ -283,7 +283,7 @@ function ThemedRoundConfigPanel({ roundId, initial }: { roundId: string; initial
       </div>
       {themeType === "genre" && (
         <div className="mt-2 text-[11px] leading-relaxed text-ink-faint">
-          曲風合規檢查目前走人工審核判斷,還沒有自動比對(SPEC.md 第7節——自動化資料來源待驗證)。
+          投稿是否符合這個曲風，目前由你在審核時人工判斷，還沒有系統自動比對。
         </div>
       )}
     </div>
@@ -536,7 +536,6 @@ export function AdminFormatClient({
       isPlatformAdmin={isPlatformAdmin}
     >
       <div className="mb-7">
-        <div className="mb-2 text-xs uppercase tracking-widest text-accent">Screen · 賽制建立</div>
         <h1 className="font-display text-[30px]">建立比賽</h1>
         <p className="mt-1.5 max-w-[680px] text-sm leading-relaxed text-ink-dim">
           先填比賽的基本資料，再逐輪決定賽制怎麼組合。評分規則預設整場共用，只有需要的輪次才個別調整。

@@ -38,10 +38,10 @@ export default async function AdminReviewPage({
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("host_setup_completed, is_platform_admin")
+    .select("host_setup_completed, is_platform_admin, host_revoked_at")
     .eq("id", userId)
     .maybeSingle();
-  if (!profile?.host_setup_completed) redirect("/admin/profile");
+  if (!profile?.host_setup_completed || profile?.host_revoked_at) redirect("/admin/profile");
   const isPlatformAdmin = profile.is_platform_admin ?? false;
 
   const myCompetitions = await getManageableCompetitions(supabase, "review");
@@ -56,7 +56,6 @@ export default async function AdminReviewPage({
     return (
       <AdminShell active="review" isPlatformAdmin={isPlatformAdmin}>
         <div className="mb-7">
-          <div className="mb-2 text-xs uppercase tracking-widest text-accent">Screen · 審核後台</div>
           <h1 className="font-display text-[30px]">還沒有比賽可以審核</h1>
           <p className="mt-1.5 max-w-[680px] text-sm leading-relaxed text-ink-dim">
             先到「賽制建立」頁建立比賽，投稿送進來後才會出現在這裡。
@@ -110,7 +109,6 @@ export default async function AdminReviewPage({
       isPlatformAdmin={isPlatformAdmin}
     >
       <div className="mb-7">
-        <div className="mb-2 text-xs uppercase tracking-widest text-accent">Screen · 審核後台</div>
         <h1 className="font-display text-[30px]">審核後台 — {competition.name}</h1>
         <p className="mt-1.5 max-w-[680px] text-sm leading-relaxed text-ink-dim">
           報名審核用來防範惡意/灌水報名；投稿審核的身份比對由系統自動判定，比對不通過時可以人工放行。

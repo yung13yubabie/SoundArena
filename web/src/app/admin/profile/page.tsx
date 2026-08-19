@@ -11,7 +11,7 @@ export default async function AdminProfilePage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("display_name, bio, social_link, featured_track_url, host_setup_completed, is_platform_admin")
+    .select("display_name, bio, social_link, featured_track_url, host_setup_completed, is_platform_admin, host_revoked_at")
     .eq("id", userId)
     .maybeSingle();
 
@@ -20,10 +20,22 @@ export default async function AdminProfilePage() {
     .select("id", { count: "exact", head: true })
     .eq("organizer_id", userId);
 
+  if (profile?.host_revoked_at) {
+    return (
+      <AdminShell active="profile" isPlatformAdmin={profile?.is_platform_admin ?? false}>
+        <div className="mb-7">
+          <h1 className="font-display text-[30px]">你的主辦資格已被移除</h1>
+          <p className="mt-1.5 max-w-[680px] text-sm leading-relaxed text-ink-dim">
+            平台管理員撤除了你的主辦人管理權限，無法自行重新設定恢復。這不影響你以一般身份報名、投稿、投票其他比賽，也不會移除你已建立比賽的公開內容。如果認為這是誤判，請透過「意見回饋」頁聯繫平台管理員。
+          </p>
+        </div>
+      </AdminShell>
+    );
+  }
+
   return (
     <AdminShell active="profile" isPlatformAdmin={profile?.is_platform_admin ?? false}>
       <div className="mb-7">
-        <div className="mb-2 text-xs uppercase tracking-widest text-accent">Screen · 主辦人身分</div>
         <h1 className="font-display text-[30px]">設定你的主持人檔案</h1>
         <p className="mt-1.5 max-w-[680px] text-sm leading-relaxed text-ink-dim">
           這是你以主辦人身分公開露出的檔案，參賽者報名前會看到。第一次要先完成這裡才能進入賽制建立／時程設定／審核後台。

@@ -61,10 +61,10 @@ export default async function AdminFormatPage({
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("host_setup_completed, is_platform_admin")
+    .select("host_setup_completed, is_platform_admin, host_revoked_at")
     .eq("id", userId)
     .maybeSingle();
-  if (!profile?.host_setup_completed) redirect("/admin/profile");
+  if (!profile?.host_setup_completed || profile?.host_revoked_at) redirect("/admin/profile");
   const isPlatformAdmin = profile.is_platform_admin ?? false;
 
   const myCompetitions = await getManageableCompetitions(supabase, "format");

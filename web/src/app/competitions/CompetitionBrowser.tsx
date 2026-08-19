@@ -104,7 +104,6 @@ export function CompetitionBrowser({
       <SiteHeader authed={authed} active="competitions" />
       <div className="mx-auto max-w-[1180px] px-5 md:px-11 pt-10 pb-24">
         <div className="mb-7">
-          <div className="mb-2 text-xs uppercase tracking-widest text-accent">Screen · 比賽</div>
           <h1 className="font-display text-[30px]">{competitionName}</h1>
           <p className="mt-1.5 max-w-[680px] text-sm leading-relaxed text-ink-dim">
             點選任一首開始播放，同一時間只會有一首在播。歌曲依輪次分組，點開輪次就能看到清單。音檔上傳（Cloudflare

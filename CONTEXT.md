@@ -9,8 +9,12 @@
 _Avoid_: 賽制(這個詞專指 FormatBlock 組合,不是比賽本身;混用會搞不清楚「建立一場賽事」跟「設定一輪賽制」是兩件事)
 
 **Organizer(主辦者)**:
-建立了至少一場 Competition 的使用者,是該 Competition 的擁有者(ownership),對自己建立的 Competition(們)有完整管理權限(審核投稿、設定賽制、設定時程、評審評分、邀請 Collaborator),權限範圍僅限於自己建立的 Competition,看不到、也管不到其他 Organizer 的比賽。任何登入使用者建立第一場 Competition 的當下就自動成為 Organizer,沒有額外的申請或審核步驟(唯一的前置動作是完成一次性的主辦人身分檔案設定,自助完成,不用等誰核准)。一場 Competition 永遠只有一位 Organizer,ownership 目前不可轉讓(見 Collaborator)。個人檔案頁的「主辦過 N 場比賽」只計算 Organizer 身分,不計 Collaborator。
+建立了至少一場 Competition 的使用者,是該 Competition 的擁有者(ownership),對自己建立的 Competition(們)有完整管理權限(審核投稿、設定賽制、設定時程、評審評分、邀請 Collaborator),權限範圍僅限於自己建立的 Competition,看不到、也管不到其他 Organizer 的比賽。任何登入使用者建立第一場 Competition 的當下就自動成為 Organizer,沒有額外的申請或審核步驟(唯一的前置動作是完成一次性的主辦人身分檔案設定,自助完成,不用等誰核准)——這個自助流程本身沒有改變,見下方 OrganizerRevocation 是額外的事後把關機制,不是把自助流程換成審核制。一場 Competition 永遠只有一位 Organizer,ownership 目前不可轉讓(見 Collaborator)。個人檔案頁的「主辦過 N 場比賽」只計算 Organizer 身分,不計 Collaborator。
 _Avoid_: 管理員(不夠精確,容易跟 PlatformAdmin 搞混,兩者權限範圍完全不同)
+
+**OrganizerRevocation(主辦資格撤除,ADR-0010)**:
+PlatformAdmin 對某位 Organizer 執行的事後處置,撤除後此人**所有** Competition 管理權限(含既有比賽,不只是不能再建新的)立即失效,且無法透過重新完成主辦人身分檔案設定來自助恢復——只有 PlatformAdmin 能重新賦予。用一個時間戳記(而不是把 `host_setup_completed` 反轉回 false)表示,因為要區分兩種不同狀態:「從沒完成過主辦人身分檔案設定」(該去 `/admin/profile` 走一次自助流程)跟「完成過、但被撤除」(自助流程對他無效,畫面要說明原因並導向 PlatformAdmin,不是重新顯示設定表單)。撤除**不影響**這個人以一般使用者身份繼續報名/投稿/投票其他比賽,也不影響他已建立的 Competition 對外的公開內容(已公開的比賽、結果、作品照常可見)——只有他自己的管理入口被關閉。
+_Avoid_: 停權、封鎖(這兩個詞常見於整個帳號層級的封禁,容易誤會成這個人完全不能用 SoundArena 了——OrganizerRevocation 範圍窄得多,只收回 Organizer 角色底下的管理權限)
 
 **Collaborator(協作者)**:
 被某場 Competition 的 Organizer 邀請、協助管理該場比賽的使用者(見 ADR-0003)。Collaborator 不是 Organizer,不擁有比賽,只被授予 Organizer 個別勾選的權限子集(審核投稿 / 賽制建立 / 時程設定 / 評審評分 / 邀請其他 Collaborator 這五項,各自獨立開關,不是全有或全無)。「邀請其他 Collaborator」本身也是一項可授予的權限,預設只有 Organizer 擁有。

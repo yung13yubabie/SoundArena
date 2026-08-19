@@ -32,7 +32,6 @@ export default async function CompetitionsPage({
         <SiteHeader authed={authed} active="competitions" />
         <div className="mx-auto max-w-[1180px] px-5 md:px-11 pt-10 pb-24">
           <div className="mb-7">
-            <div className="mb-2 text-xs uppercase tracking-widest text-accent">Screen · 比賽</div>
             <h1 className="font-display text-[30px]">選一場比賽瀏覽作品</h1>
             <p className="mt-1.5 max-w-[680px] text-sm leading-relaxed text-ink-dim">
               從活動頁點「試聽作品」會直接帶到這裡；也可以在下面直接選。

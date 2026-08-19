@@ -110,7 +110,6 @@ export default async function StatusPage() {
       <SiteHeader authed active="status" />
       <div className="mx-auto max-w-[1180px] px-5 md:px-11 pt-10 pb-24">
         <div className="mb-7">
-          <div className="mb-2 text-xs uppercase tracking-widest text-accent">Screen · 個人投稿狀態</div>
           <h1 className="font-display text-[30px]">我的投稿</h1>
           <p className="mt-1.5 max-w-[680px] text-sm leading-relaxed text-ink-dim">
             查看你在每場比賽、每一輪的投稿進度。已被淘汰的話，後續輪次只能投票，不能再投稿。
