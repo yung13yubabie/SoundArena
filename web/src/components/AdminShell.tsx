@@ -16,7 +16,8 @@ type Section =
   | "judge"
   | "collaborators"
   | "platform-competitions"
-  | "platform-organizers";
+  | "platform-organizers"
+  | "platform-feedback";
 
 interface AdminCompetitionOption {
   id: string;
@@ -53,6 +54,18 @@ interface PlatformOrganizerRow {
   host_revoked_at: string | null;
 }
 
+interface PlatformFeedbackRow {
+  id: string;
+  message: string;
+  created_at: string;
+  profiles: { display_name: string | null } | { display_name: string | null }[] | null;
+}
+
+function feedbackAuthorName(row: PlatformFeedbackRow): string {
+  const p = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles;
+  return p?.display_name ?? "（未命名）";
+}
+
 interface AdminShellProps {
   active: "review" | "format" | "schedule" | "profile" | "judge" | "collaborators";
   children: ReactNode;
@@ -74,6 +87,7 @@ const ORG_ITEMS = [
 const PLATFORM_ITEMS = [
   { key: "platform-competitions" as const, label: "全站比賽", icon: "inbox" as const },
   { key: "platform-organizers" as const, label: "主辦人管理", icon: "users" as const },
+  { key: "platform-feedback" as const, label: "使用者回饋", icon: "comment" as const },
 ];
 
 const ORG_ROUTES: Record<AdminShellProps["active"], string> = {
@@ -103,6 +117,8 @@ export function AdminShell({
   const [platformOrganizers, setPlatformOrganizers] = useState<PlatformOrganizerRow[] | null>(null);
   const [organizersError, setOrganizersError] = useState<string | null>(null);
   const [revokingId, setRevokingId] = useState<string | null>(null);
+  const [platformFeedback, setPlatformFeedback] = useState<PlatformFeedbackRow[] | null>(null);
+  const [feedbackError, setFeedbackError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isPlatformAdmin || viewpoint !== "platform" || platformCompetitions !== null) return;
@@ -136,6 +152,22 @@ export function AdminShell({
         setPlatformOrganizers((data ?? []) as PlatformOrganizerRow[]);
       });
   }, [isPlatformAdmin, viewpoint, platformOrganizers]);
+
+  useEffect(() => {
+    if (!isPlatformAdmin || viewpoint !== "platform" || platformFeedback !== null) return;
+    const supabase = createClient();
+    supabase
+      .from("feedback")
+      .select("id, message, created_at, profiles(display_name)")
+      .order("created_at", { ascending: false })
+      .then(({ data, error }) => {
+        if (error) {
+          setFeedbackError(error.message);
+          return;
+        }
+        setPlatformFeedback((data ?? []) as unknown as PlatformFeedbackRow[]);
+      });
+  }, [isPlatformAdmin, viewpoint, platformFeedback]);
 
   async function toggleOrganizerRevocation(row: PlatformOrganizerRow) {
     setRevokingId(row.id);
@@ -330,6 +362,39 @@ export function AdminShell({
                       >
                         {o.host_revoked_at ? "重新賦予" : "撤除資格"}
                       </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {isPlatformAdmin && viewpoint === "platform" && section === "platform-feedback" && (
+            <div>
+              <div className="mb-7">
+                <h1 className="font-display text-[30px]">使用者回饋</h1>
+                <p className="mt-1.5 max-w-[680px] text-sm leading-relaxed text-ink-dim">
+                  全站「意見回饋」頁送出的訊息，只有平台管理員看得到，寄件人不會知道你有沒有看過或回覆。
+                </p>
+              </div>
+              {feedbackError ? (
+                <div className="glass px-4 py-3 text-[12.5px] text-bad">回饋清單載入失敗：{feedbackError}</div>
+              ) : platformFeedback === null ? (
+                <div className="flex items-center gap-2.5 py-6 text-[12.5px] text-ink-faint">
+                  <span className="spinner" />
+                  載入中…
+                </div>
+              ) : platformFeedback.length === 0 ? (
+                <EmptyState icon="comment" title="目前還沒有任何回饋" sub="有人送出意見回饋後會出現在這裡" />
+              ) : (
+                <div className="flex flex-col gap-2">
+                  {platformFeedback.map((f) => (
+                    <div key={f.id} className="glass px-4 py-3.5">
+                      <div className="mb-1.5 flex items-center justify-between text-[11.5px] text-ink-faint">
+                        <span>{feedbackAuthorName(f)}</span>
+                        <span>{new Date(f.created_at).toLocaleString("zh-TW")}</span>
+                      </div>
+                      <p className="text-[13px] leading-relaxed whitespace-pre-wrap">{f.message}</p>
                     </div>
                   ))}
                 </div>
