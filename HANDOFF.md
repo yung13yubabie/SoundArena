@@ -705,3 +705,37 @@ C:\Users\LIN\Documents\github\SoundArena\
 9. 沒有設定 `og:image`/social share 預覽圖,分享連結到 LINE/Discord 時只有純文字標題,沒有預覽圖。
 
 **這份報告刻意沒有排進「哪些現在就做」——等使用者從上面 9 點裡選要做的範圍,再照 `redesign-existing-projects` skill 自己列的 Fix Priority(字體→色彩→互動狀態→版面→元件→狀態頁→字級打磨)排進度,不要自己猜優先序直接動手。**
+
+## 08-19 第八輪:上面的稽核報告全部動手做(使用者說「可以動手改!」)+ taste-skill 視覺/互動打磨
+
+使用者這輪一次核准:①再掃一次 mock 資料、②高優先全部、③中優先、④低優先、⑤額外要求用 taste-skill 做 icon 細節 + 滑動/捲動微互動打磨。分兩個 commit 做完(`9d76ce1` 稽核修復,`721c916` taste-skill 動畫)。
+
+### 1. Mock 資料複掃,抓到第二個真實的假資料 bug
+
+上一輪只查了 schema 層(migration 有沒有被前端讀),這輪換個角度查「元件層是不是還在顯示假資料」:
+- **`judge/JudgeBoard.tsx` 的 `<PlayerBar />`**——呼叫時零 props,顯示寫死的「未命名作品 #2」「播放中」「匿名」,而整個 JudgeBoard 完全沒有追蹤「目前在聽哪個投稿」這個概念(沒有 suno_share_url、沒有 currentSubmission state)。這不是能修的 bug,是壓根沒有機制可以接——**直接移除**這個純裝飾用的播放列,連同 `PlayerBar` 的 `title` prop 從「有假預設值的 optional prop」改成「required prop」,避免以後又有人不小心裸調用它重蹈覆轍。
+- **`AdminShell.tsx` 的「全站比賽」表格**——PlatformAdmin 視角看到的一直是 `MOCK_ALL_COMPETITIONS_PLATFORM`(三筆寫死的假比賽),程式碼裡甚至留了註解承認這件事。改成 `AdminShell` 內部用 client-side Supabase 查詢(切到 PlatformAdmin 視角時才 fetch,不是每次進管理後台都查),真查 `competitions` 表(已經有 `is_platform_admin()` 的 RLS policy,不用新 migration)+ join 主辦人名字 + 從 `rounds.voting_closes_at` 推算「進行中/即將開始/已結束」狀態,補上 loading/empty/error 三態。
+- `mockData.ts` 順手清掉 `MOCK_COMPETITION`/`MOCK_MY_SUBMISSIONS`/`MOCK_REVIEW_QUEUE`/`MOCK_ALL_COMPETITIONS_PLATFORM` 這幾個沒有任何地方在用的死碼匯出(`SUBMISSION_STATE_META`/`STATE_PILL_CLASS` 還在用,保留)。
+
+### 2. 高優先四項
+
+- **全站零響應式斷點** → `SiteHeader` 改成手機版漢堡選單(獨立 client component,靠 `usePathname` 之外的 `md:` 斷點切換,原本 7 個 nav 項目擠一行的問題解決)。全站 18 個檔案裡重複出現的 `px-11`(頁面外距)用 `sed` 批次改成 `px-5 md:px-11`;`PlayerBar` 固定寬度區塊也做了響應式收窄;`/submit`、`/admin/profile` 的 `[1fr_300px]` 雙欄表單在手機版改成單欄堆疊;`/vote` 的雙欄卡片網格在手機版收成單欄;三個 `<table>`(AdminShell 全站比賽、JudgeBoard 評分表、results 分數表)都包了 `overflow-x-auto`,超寬時只有表格本身橫向捲動、不會把整頁撐爆。**刻意沒做**:`/admin/*` 系列的側邊欄(`AdminShell` 的 `w-52` 固定寬 aside)跟賽制建立頁的多欄評分表格editor——這些是主辦人專用的桌面工具,手機版會擠但不會整頁爆版(側欄本來就有手動收合按鈕),範圍留給之後有真的需求再做。
+- **沒有 404 頁** → 新增 `web/src/app/not-found.tsx`,樣式比照全站暗色調,有「回首頁」按鈕。
+- **favicon 是 Next.js 預設圖示** → 新增 `web/src/app/icon.svg`(SiteHeader 那個「◈」品牌標記的向量版,漸層背景+菱形圖案),Next.js 會自動接手當 favicon。
+- (低優先一起做了)**沒有 og:image** → 新增 `web/src/app/opengraph-image.tsx`,用 `next/og` 的 `ImageResponse` 產生分享預覽圖。**踩到一個真實的 build-time bug**:一開始直接把「◈」文字字元放進 ImageResponse,build 時噴 `Failed to download dynamic font. Status: 400`——satori(ImageResponse 底層渲染引擎)找不到含這個生僻符號的字型,線上動態抓字型失敗,結果那個位置變成缺字方框。改成用純向量 `<svg>` 畫菱形圖案(跟 icon.svg 同一招),不依賴任何字型渲染,問題消失。順手把 `layout.tsx` 補上 `metadataBase`(修掉一個「用 localhost:3000 解析社群分享圖網址」的既有警告)。
+
+### 3. 中優先:focus ring + hover 狀態
+
+`globals.css` 新增 `.focus-ring` 共用 class(`focus-visible` 才顯示 outline,滑鼠點擊不會出現)。套用在:SiteHeader 的 nav 連結跟登入/登出按鈕、HelpBubble、PlayerBar 的三個控制鈕、AdminShell 的側欄按鈕、審核佇列(`ReviewQueue`/`RegistrationReviewQueue`,兩個檔案八顆按鈕原本完全沒有 hover/focus 回饋)、協作者邀請按鈕。雙 accent 色那條維持上一輪的結論(刻意設計的雙色漸層,不是 bug),沒有改程式碼。
+
+### 4. taste-skill(`design-taste-frontend`)視覺/互動打磨
+
+taste-skill 本身定位是「行銷頁/作品集」skill,明確聲明 dashboard/多步驟產品 UI 不是它的守備範圍——**沒有整套照搬**,只挑跟 SoundArena(產品型網站)相容的兩塊:
+- **icon**:skill 建議別手繪 SVG、改用 Phosphor 之類的圖示庫。問過使用者,**維持手繪**(現有風格已一致,換套件要逐個比對有風險,不值得)。
+- **滑動/捲動微互動**:新增 `motion`(原 framer-motion)套件。Discovery 首頁跟投票頁的卡片網格加上進場時的 stagger 淡入位移動畫(`whileInView`,捲到才觸發,不是一次全部跳出來);`/competitions` 的輪次手風琴原本是生硬的 DOM 直接顯示/隱藏,改用 `AnimatePresence` 做平滑的高度+透明度展開收合。全部用 `useReducedMotion()` 擋 `prefers-reduced-motion`(使用者關掉動態效果的話會直接跳過,不是硬做完再隱藏)。**沒有做** GSAP 那種捲動綁架/視差/pin 的重量級效果——taste-skill 自己的文件也說那是行銷頁的招式,SoundArena 是清單/表單為主的產品介面,硬套會不協調。
+
+### 驗證方式
+
+`npx tsc --noEmit`、`npx eslint`(逐批次跑)、`npm run build` 全程乾淨,跑了兩次(mock/響應式那批一次,taste-skill 動畫那批一次)。**視覺驗證不完整**:響應式斷點用「注入 iframe 縮小成 390px 寬」的方式在瀏覽器裡實測過(SiteHeader 漢堡選單、`/competitions` 頁面都正常),但 taste-skill 這批動畫(stagger 淡入、手風琴展開)因為瀏覽器擴充功能中途斷線,**沒有真的點開來看過**——程式碼邏輯經過檢查、build 通過,但下次你登入時麻煩實際滾動 Discovery/投票頁、展開 `/competitions` 的輪次看一下動畫順不順。
+
+全部 commit(`9d76ce1`、`721c916`)、push、`vercel deploy --prod` 上線。
