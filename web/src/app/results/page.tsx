@@ -2,7 +2,15 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { SiteHeader } from "@/components/SiteHeader";
 import { EmptyState } from "@/components/EmptyState";
+import { Icon } from "@/lib/icons";
 import { getRoundResults, rankOf } from "@/lib/roundResults";
+
+const WINNER_LABEL: Record<number, string> = { 1: "冠軍", 2: "亞軍", 3: "季軍" };
+const WINNER_BADGE_CLASS: Record<number, string> = {
+  1: "border-accent/50 bg-accent/14 text-accent",
+  2: "border-ink-dim/40 bg-white/[0.06] text-ink",
+  3: "border-[#c98a4e]/45 bg-[#c98a4e]/12 text-[#e0a468]",
+};
 
 interface RoundPickerRow {
   id: string;
@@ -66,11 +74,17 @@ export default async function ResultsPage({
 
   const { data: round } = await supabase
     .from("rounds")
-    .select("id, name, voting_closes_at, competitions(id, name, is_public)")
+    .select("id, name, round_index, voting_closes_at, competitions(id, name, is_public)")
     .eq("id", roundId)
     .maybeSingle();
 
   const competition = round ? one(round.competitions) : null;
+
+  const { data: siblingRounds } = competition
+    ? await supabase.from("rounds").select("round_index").eq("competition_id", competition.id)
+    : { data: [] as { round_index: number }[] };
+  const isFinalRound =
+    !!round && (siblingRounds ?? []).length > 0 && round.round_index === Math.max(...(siblingRounds ?? []).map((r) => r.round_index));
   const resultsAvailable =
     !!round && !!competition?.is_public && !!round.voting_closes_at && round.voting_closes_at <= nowIso;
 
@@ -100,12 +114,22 @@ export default async function ResultsPage({
             {sorted.map((s, idx) => {
               const total = ranking.find((r) => r.id === s.submission_id)!;
               const rank = rankOf(s.submission_id, ranking);
+              const isWinner = isFinalRound && rank <= 3;
               return (
-                <div key={s.submission_id} className="glass mb-3.5 pt-1.5">
+                <div key={s.submission_id} className={`glass mb-3.5 pt-1.5 ${isWinner ? "border-accent/25" : ""}`}>
                   <div className="flex items-center gap-2.5 px-3.5 pt-2.5">
-                    <span className="flex h-6 w-6 items-center justify-center rounded-full border border-panel-border text-[11px] text-ink-dim">
-                      {rank}
-                    </span>
+                    {isWinner ? (
+                      <span
+                        className={`flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${WINNER_BADGE_CLASS[rank]}`}
+                      >
+                        <Icon name="crown" size={12} />
+                        {WINNER_LABEL[rank]}
+                      </span>
+                    ) : (
+                      <span className="flex h-6 w-6 items-center justify-center rounded-full border border-panel-border text-[11px] text-ink-dim">
+                        {rank}
+                      </span>
+                    )}
                     {s.display_name ? (
                       <>
                         <span className="text-[14px] font-semibold">{s.title ?? "未命名作品"}</span>

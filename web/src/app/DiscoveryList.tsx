@@ -59,12 +59,17 @@ export function DiscoveryList({ competitions, authed }: { competitions: Competit
               看看現在有哪些比賽，公開展示的作品不用登入就能試聽。
             </p>
           </div>
-          <Link
-            href="/admin/format"
-            className="focus-ring flex-none rounded-[10px] border border-accent/35 bg-accent/8 px-4 py-2.25 text-[13px] font-semibold text-accent transition-colors hover:bg-accent/14"
-          >
-            想主辦自己的比賽？
-          </Link>
+          <div className="flex flex-none items-center gap-3">
+            <Link href="/organizers" className="focus-ring text-[12.5px] text-ink-faint transition-colors hover:text-ink">
+              看看主辦人
+            </Link>
+            <Link
+              href="/admin/format"
+              className="focus-ring rounded-[10px] border border-accent/35 bg-accent/8 px-4 py-2.25 text-[13px] font-semibold text-accent transition-colors hover:bg-accent/14"
+            >
+              想主辦自己的比賽？
+            </Link>
+          </div>
         </div>
 
         <div className="mb-5.5 flex flex-wrap gap-2">
