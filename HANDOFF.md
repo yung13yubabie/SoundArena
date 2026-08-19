@@ -791,3 +791,36 @@ taste-skill 本身定位是「行銷頁/作品集」skill,明確聲明 dashboard
 `npx tsc --noEmit`、`npx eslint`、`npm run build` 全程乾淨,分三批做完(mock 清理+撤除機制+文案清查一批,公開名單+優勝榜一批)。**沒有做真人瀏覽器點擊驗證**——這輪牽涉真實資料庫刪除跟新的 RLS/RPC 權限設計,下次你登入時麻煩實際點過:①`/organizers` 頁面能不能正常顯示、②PlatformAdmin 視角的「主辦人管理」撤除/恢復按鈕、③Discovery 首頁的新入口按鈕、④確認全站真的看不到「Screen ·」那些標籤了。
 
 全部 commit(`e0f38fe`、`2b36d5a`)、push、`vercel deploy --prod` 上線。
+
+## 08-19 第十輪:B2 真的接上並驗證跑通 + 意見回饋補上讀取路徑 + 使用者變成 platform admin
+
+### 1. Backblaze B2 接上,真實憑證跑過完整迴圈
+
+使用者給了真的 B2 憑證(keyID/applicationKey/endpoint/bucket),存進 `.env.local`(不進版控)+ 同步設定到 Vercel production 環境變數。新增 `web/src/lib/storage.ts`(server-only):`uploadAudioObject`/`getPlaybackUrl`(presigned URL)/`deleteAudioObject` 三個函式,分別對應之後「投稿存音檔」「播放」「淘汰後清除音檔只留 Suno 連結」三個用途。**用真實憑證實際跑過一次 HeadBucket → PutObject → 簽章下載(內容比對相符)→ DeleteObject 的完整迴圈,全部成功**,不是只憑猜測宣稱能動。
+
+**這輪只接上儲存層基礎設施,還沒有任何使用者看得到的介面**——投稿現在仍然只能貼 Suno 連結,上傳元件跟站內播放器是下一步,不在這輪範圍。
+
+### 2. 意見回饋補上讀取路徑,過程中一度誤判成 bug、後來排查發現不是
+
+使用者問「意見回饋這條線接得上,你收得到嗎」,查證後發現:寫入路徑完全正常(真實資料表 + RLS insert policy),但**讀取路徑原本完全沒接**——`feedback` 表從建立起就刻意設計成「只能寫入,不能透過 API 讀回來,只能靠 Supabase dashboard 或 service_role 查」,而且全站沒有任何畫面顯示過 feedback 內容,等於收了等於沒收。也藉這個機會明確跟使用者說清楚:**我(Claude)沒有任何即時/推播管道會收到意見回饋**,唯一的管道是使用者之後開新 session 主動叫我去查資料庫——這點不能讓使用者誤會成有自動通知機制。
+
+新增 SELECT policy(限 `is_platform_admin()`)+ AdminShell 新增「使用者回饋」畫面。**排查過程中一度誤判寫入路徑本身壞掉**(用真實 token 測試寫入回報 RLS 42501 錯誤)——後來查明是診斷腳本自己多帶了 `Prefer: return=representation`,觸發 PostgREST 隱含的 SELECT-back,被(那時候還沒開放的)SELECT policy 擋下來,不是 INSERT 本身的問題。`FeedbackForm.tsx` 原本的呼叫方式(沒有要求 return=representation)從頭到尾都是通的,沒有真的壞過。這個排查過程用了 3 個一次性診斷 migration(`diag_list_feedback_policies`/`diag_list_feedback_grants`),查完立刻用第 4 個 migration 清掉,沒有留在正式 schema 裡。
+
+**額外發現**:排查時翻到一筆 2026-08-16 的舊 feedback,是使用者自己當時測試用的訊息(「測試意見回饋功能是否正常寫進資料庫」),不影響任何功能,先留著沒動,使用者自己決定要不要清。
+
+### 3. 使用者帳號設成 platform admin
+
+查出**目前沒有任何帳號有 `is_platform_admin = true`**,包括使用者自己——這代表這幾輪做的「主辦人管理」「全站比賽」「使用者回饋」這三個平台管理員專屬畫面,誰都看不到,包括使用者本人。已經用 service_role 把使用者自己的帳號(`ec330b2f-...`,linpcw@gmail.com)設成 platform admin,現在登入後 AdminShell 左側會出現 PlatformAdmin 視角切換開關。
+
+### 4. 順手建了一場真實的「好友測試賽」
+
+用使用者自己真實登入的瀏覽器 session,實際走過「建立比賽」這一步(不是我用 service_role 塞測試資料進去,這次是走真的 UI 流程,避免重蹈「深夜擂台 EP.04」的覆轍)。用 DB 直接查證確實成功:公開狀態、自動生成初賽+決賽兩輪、沒設報名截止日(所以現在就是開放報名狀態)。報名連結:
+`https://web-mocha-xi-12.vercel.app/register?competition=f9612b38-d8f6-4ead-88a1-09cca105a5c4`
+
+**已知小 bug,還沒修**:Discovery 首頁的狀態徽章邏輯把「沒設截止日」誤標成「籌備中」而非「報名中」,不影響能不能實際報名(`/register` 頁自己的判斷邏輯是對的),只是首頁徽章文字不準。
+
+### 驗證方式
+
+B2 迴圈、feedback RLS(非管理員讀不到/管理員讀得到)都用真實 access token 實測過並附上輸出。**沒有走完整條「好友測試賽」的報名→投稿→審核→投票→結果瀏覽器 UI**,只驗證到「建立比賽」這一步。`npx tsc --noEmit`、`npx eslint`、`npm run build` 全程乾淨。
+
+全部 commit(`835076a`、`61a2f38`)、push、`vercel deploy --prod` 上線。
