@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { motion, useReducedMotion } from "motion/react";
 import { SiteHeader } from "@/components/SiteHeader";
 import { EmptyState } from "@/components/EmptyState";
 
@@ -40,6 +41,7 @@ function organizerName(organizer: Competition["organizer"]): string {
 
 export function DiscoveryList({ competitions, authed }: { competitions: Competition[]; authed: boolean }) {
   const [filter, setFilter] = useState<"all" | Status>("all");
+  const reduceMotion = useReducedMotion();
 
   const filtered = useMemo(() => {
     if (filter === "all") return competitions;
@@ -82,11 +84,18 @@ export function DiscoveryList({ competitions, authed }: { competitions: Competit
           />
         ) : (
           <div className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-4">
-            {filtered.map((c) => {
+            {filtered.map((c, i) => {
               const status = competitionStatus(c.registration_closes_at);
               const meta = STATUS_META[status];
               return (
-                <div key={c.id} className="glass p-4.5">
+                <motion.div
+                  key={c.id}
+                  className="glass p-4.5"
+                  initial={reduceMotion ? false : { opacity: 0, y: 16 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true, amount: 0.3 }}
+                  transition={{ duration: 0.4, delay: Math.min(i, 8) * 0.05, ease: [0.16, 1, 0.3, 1] }}
+                >
                   <div className="mb-2.5 flex items-start justify-between">
                     <span className={`rounded-full border px-2.25 py-0.75 text-[11px] ${meta.className}`}>{meta.label}</span>
                   </div>
@@ -112,7 +121,7 @@ export function DiscoveryList({ competitions, authed }: { competitions: Competit
                       試聽作品
                     </Link>
                   </div>
-                </div>
+                </motion.div>
               );
             })}
           </div>

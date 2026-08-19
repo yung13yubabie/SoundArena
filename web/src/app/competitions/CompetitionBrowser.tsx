@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { SiteHeader } from "@/components/SiteHeader";
 import { Icon } from "@/lib/icons";
 import { EmptyState } from "@/components/EmptyState";
@@ -29,45 +30,56 @@ function RoundGroup({
   onPlay: (id: string) => void;
 }) {
   const [open, setOpen] = useState(defaultOpen);
+  const reduceMotion = useReducedMotion();
   return (
     <div className="mb-2.5 rounded-xl">
       <button
         onClick={() => setOpen(!open)}
-        className="flex w-full items-center gap-2.5 rounded-xl border border-panel-border bg-white/[0.03] px-4 py-3.25 hover:bg-white/[0.05]"
+        className="focus-ring flex w-full items-center gap-2.5 rounded-xl border border-panel-border bg-white/[0.03] px-4 py-3.25 hover:bg-white/[0.05]"
       >
         <Icon name="chevron" size={14} className={`transition-transform ${open ? "rotate-90" : ""}`} />
         <span className="flex-1 text-left text-[12.5px] tracking-wide text-accent uppercase">{round.name}</span>
         <span className="text-[11px] text-ink-faint">{round.tracks.length} 首</span>
       </button>
-      {open && (
-        <div className="flex flex-col gap-1.5 px-1 pt-2 pb-3.5">
-          {round.tracks.length === 0 ? (
-            <EmptyState icon="inbox" title="這輪還沒有公開展示的作品" sub="投稿者審核通過後，可以在「隱私設定」開啟公開試聽" />
-          ) : (
-            round.tracks.map((t) => (
-              <div
-                key={t.id}
-                onClick={() => onPlay(t.id)}
-                className={`flex cursor-pointer items-center gap-3.5 rounded-[11px] border px-3.5 py-2.5 ${
-                  nowPlaying === t.id ? "border-accent/25 bg-accent/9" : "border-transparent hover:bg-white/[0.03]"
-                }`}
-              >
-                <div
-                  className={`flex h-7 w-7 flex-none items-center justify-center rounded-full border ${
-                    nowPlaying === t.id
-                      ? "border-transparent bg-gradient-to-r from-[#ff9457] via-accent to-accent-2"
-                      : "border-panel-border bg-white/[0.06]"
-                  }`}
-                >
-                  <Icon name={nowPlaying === t.id ? "pause" : "play"} size={13} />
-                </div>
-                <div className="h-10 w-10 flex-none rounded-lg border border-panel-border bg-gradient-to-br from-[#2a1712] to-[#1a0f0c]" />
-                <div className="min-w-0 flex-1 truncate text-[13.5px]">{t.title}</div>
-              </div>
-            ))
-          )}
-        </div>
-      )}
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            initial={reduceMotion ? false : { height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={reduceMotion ? undefined : { height: 0, opacity: 0 }}
+            transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+            className="overflow-hidden"
+          >
+            <div className="flex flex-col gap-1.5 px-1 pt-2 pb-3.5">
+              {round.tracks.length === 0 ? (
+                <EmptyState icon="inbox" title="這輪還沒有公開展示的作品" sub="投稿者審核通過後，可以在「隱私設定」開啟公開試聽" />
+              ) : (
+                round.tracks.map((t) => (
+                  <div
+                    key={t.id}
+                    onClick={() => onPlay(t.id)}
+                    className={`flex cursor-pointer items-center gap-3.5 rounded-[11px] border px-3.5 py-2.5 transition-colors ${
+                      nowPlaying === t.id ? "border-accent/25 bg-accent/9" : "border-transparent hover:bg-white/[0.03]"
+                    }`}
+                  >
+                    <div
+                      className={`flex h-7 w-7 flex-none items-center justify-center rounded-full border transition-colors ${
+                        nowPlaying === t.id
+                          ? "border-transparent bg-gradient-to-r from-[#ff9457] via-accent to-accent-2"
+                          : "border-panel-border bg-white/[0.06]"
+                      }`}
+                    >
+                      <Icon name={nowPlaying === t.id ? "pause" : "play"} size={13} />
+                    </div>
+                    <div className="h-10 w-10 flex-none rounded-lg border border-panel-border bg-gradient-to-br from-[#2a1712] to-[#1a0f0c]" />
+                    <div className="min-w-0 flex-1 truncate text-[13.5px]">{t.title}</div>
+                  </div>
+                ))
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
