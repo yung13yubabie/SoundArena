@@ -824,3 +824,55 @@ taste-skill 本身定位是「行銷頁/作品集」skill,明確聲明 dashboard
 B2 迴圈、feedback RLS(非管理員讀不到/管理員讀得到)都用真實 access token 實測過並附上輸出。**沒有走完整條「好友測試賽」的報名→投稿→審核→投票→結果瀏覽器 UI**,只驗證到「建立比賽」這一步。`npx tsc --noEmit`、`npx eslint`、`npm run build` 全程乾淨。
 
 全部 commit(`835076a`、`61a2f38`)、push、`vercel deploy --prod` 上線。
+
+## 08-20:資安複查(用 `/mattpocock-skills:diagnosing-bugs` 對另一份 AI 報告逐項打真實 PoC)+ 補上暱稱編輯
+
+使用者貼了一份很長的資安審計報告(另一個 AI 產生的),點名 8 個 P0/P1 等級的漏洞 + 幾個 P2 硬化項目,還額外提了「註冊後沒有地方設定暱稱」。**這輪的原則是:不採信報告文字,每一項都用真實測試帳號 + 真實 access token 直接打 PostgREST 驗證,採信/推翻都要有實測輸出。**
+
+### 逐項驗證結果(全部有真實 PoC 輸出,不是紙上推論)
+
+| # | 報告聲稱 | 驗證結果 |
+|---|---|---|
+| 1 | 撤除 Organizer 不是真的撤權 | **確認**——`is_competition_organizer()` 從沒檢查 `host_revoked_at`,撤權後直接打 API 仍能改/建比賽 |
+| 2 | 報名可自我核准 | **確認**——INSERT payload 夾帶 `review_status=approved` 直接成功,service_role 複查真的寫進去了 |
+| 3 | 投稿可繞過 Suno 驗證 | **確認**——`submitEntry()` 註解自己承認「身份比對已經在呼叫這個 action 之前跑完」,完全信任 client 傳的 sharerHandle |
+| 4 | 投稿可自我核准 | **確認**——跟 #2 同一招,INSERT 夾帶 `status=approved` 直接成功,且這筆偽造資料會被公開結果頁當真 |
+| 5 | Collaborator 權限列級太寬 | **確認**——`saveSchedule()` 只想改 5 個欄位,RLS 卻放行整個 competitions row |
+| 6 | 投票 IP/時間窗可繞過 | **部分確認**——時間窗/審核狀態檢查確實沒做(已修);IP 偽造問題**確認存在且這輪沒解決**(見下方已知限制) |
+| 7 | email 可以拿來查誰註冊過 | **確認**——`find_profile_by_email()` 對任何登入者開放,無任何權限檢查 |
+| 8 | 可以冒充幫別人建立通知 | **確認**(用 provider=google 的假帳號重測才抓到——第一次用 email-provider 帳號測試,函式因為 provider 分支提早 return,誤判成「安全」,後來才發現是測試帳號選錯) |
+
+**八項全部屬實。** 這不是報告誇大,是真的漏洞,而且 #2/#3/#4 三個合在一起(自我核准報名 + 跳過身份驗證 + 自我核准投稿)是同一個根源:`registrations`/`submissions` 的 RLS 一直只有 row-level(「這筆是不是你的」),從來沒有 column-level 限制——Server Action 只是「app 通常會這樣呼叫」,不是資料庫真的擋住別的呼叫方式。
+
+### 修復方式(照專案既有的 `revoke + column GRANT 白名單` 慣例,這次因為需要跨表驗證邏輯,改用 RPC-only)
+
+- `is_competition_organizer()` 補上 `host_revoked_at is null`,一次修好所有走 `can_manage_competition()` 的地方(rounds/scoring/registrations 審核/submissions 審核都經過這條)。`competitions` 的 INSERT policy 額外補 `is_non_revoked_self()`。
+- `registrations`/`submissions` 的 INSERT/UPDATE 全面 `revoke ... from authenticated`,只能透過新的 SECURITY DEFINER function 寫入:`submit_entry()`(內部強制 `status='pending_review'`,比對 sharer_handle 是否等於報名時的 suno_handle)、`review_submission()`、`set_registration_eliminated()`(原本 judge 頁的 `setEliminated` 是直接 UPDATE,一併修掉)。
+- `submitEntry()` Server Action 本身也改了:不再信任 client 傳來的 `sharerHandle`,伺服器端重新呼叫一次 `verifySunoSharer()`,拿真正驗證過的 handle 才送進 RPC——這是應用層跟資料庫層兩道防線疊加,不是只修一邊。
+- `competitions` 的 UPDATE 全面 revoke,`saveSchedule()` 改走新的 `save_competition_schedule()` RPC,只碰它原本就想碰的 5 個欄位。
+- `find_profile_by_email()` 加 `p_competition_id` 參數,函式一開始就檢查 `can_manage_competition(..., 'invite')`。
+- `create_notification_event()` 加 `auth.uid() = p_user_id OR can_manage_competition(..., 'review')` 檢查。
+- `check_vote_validity()` 補齊投票時間窗、投稿審核狀態、報名存活狀態三項檢查。**修復過程中自己抓到一個新 bug**:trigger 原本(以及我第一版加強版)都是 SECURITY INVOKER,投票人對「被投的人的報名資料」通常沒有 RLS 可見度(`registrations` 的公開讀取政策是 `is_public=true`,那是投稿者自己的隱私設定,跟這場投票有沒有效完全是兩件事)——第一次重跑迴歸測試時發現連合法投票都被一起擋下來,查出原因後把這個 trigger 改成 SECURITY DEFINER 才解決,順便也修掉了原本「不能投自己」那個檢查的同一個潛在可見度問題。
+
+### 迴歸測試(全部重跑,附輸出,不是「應該修好了」)
+
+- 修復前的 8 支 PoC 攻擊腳本,修復後重跑全部回傳 `403 permission denied` 或 RPC 明確的權限錯誤(`insufficient permission to ...`)。
+- 完整合法流程重跑一次:報名(不夾帶多餘欄位)→ 主辦審核通過(`review_registration` RPC)→ 投稿(`submit_entry` RPC,身份比對通過)→ 主辦審核投稿通過(`review_submission` RPC),全部正常,資料庫複查狀態正確。
+- 投票:未審核通過的作品被擋、投票時間未到被擋、正常投票(已核准+在時間窗內)成功。
+
+### 這輪誠實記錄、沒有解決的部分(寫進 ADR-0011)
+
+- **`votes.voter_ip` 仍可被偽造**——繞過 Next.js Server Action 直接打 API,依然可以自己指定 IP,「同網路只能投一票」這個防灌票機制對「直接打 API 的攻擊者」沒有硬保護,只對「用網站正常操作的人」有效。要真的解決需要換成不直接暴露 PostgREST、所有寫入強制經過 Route Handler 的架構,是比較大的改動。`unique(round_id, voter_id)` 這個防重複依然完全有效(voter_id 來自 auth.uid())。
+- `rounds`/`scoring_rules` 等賽制相關表格的欄位寬度問題(format collaborator 理論上能碰到非賽制欄位)沒有處理,優先度較低。
+- Feedback/Comment 的 rate limit 沒做。
+
+### P2 順手做掉的
+
+- root `.gitignore` 補 `**/.env*` 防護(原本只有 `web/.gitignore` 有擋,repo 根目錄沒擋)。
+- `next.config.ts` 補上 CSP + `X-Content-Type-Options`/`Referrer-Policy`/`Permissions-Policy` 基準線(原本完全空白)。**這是合理基準線,不是完整 nonce-based CSP**,`script-src`/`style-src` 還是用 `unsafe-inline`,要做到更嚴格需要 Next.js middleware 產生逐請求 nonce,這輪沒做到那麼深。
+
+### 使用者額外提的「註冊後沒有地方設定暱稱」
+
+**查證屬實**——`display_name` 從 OAuth 登入時自動帶入(Google 全名/Discord 使用者名稱)後,全站真的沒有任何地方能改,連 `/admin/profile` 都只是把它當純文字顯示,不是輸入框。已修:`/status` 頁(所有登入使用者都會到的頁面,不像 `/admin/profile` 要先變成主辦人才看得到)新增暱稱編輯器,`display_name` 欄位本來就已經在 `profiles` 的自助更新白名單裡(之前做 `host_setup_completed` 那輪順便開的),不需要新的資料庫權限異動。
+
+`npx tsc --noEmit`、`npx eslint`、`npm run build` 全程乾淨。已 commit(`e79cfae`)、push、`vercel deploy --prod` 上線。
