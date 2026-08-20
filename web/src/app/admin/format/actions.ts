@@ -69,10 +69,10 @@ export async function createCompetition(formData: FormData): Promise<ActionResul
     .single();
   if (competitionError || !competition) return { error: competitionError?.message ?? "建立比賽失敗" };
 
-  const { error: roundsError } = await supabase.from("rounds").insert([
-    { competition_id: competition.id, round_index: 1, name: "初賽", is_anonymous: defaultAnonymous },
-    { competition_id: competition.id, round_index: 2, name: "決賽", is_anonymous: defaultAnonymous },
-  ]);
+  const { error: roundsError } = await supabase.rpc("create_initial_rounds", {
+    p_competition_id: competition.id,
+    p_default_anonymous: defaultAnonymous,
+  });
   if (roundsError) return { error: roundsError.message };
 
   const { data: scoringRule, error: scoringError } = await supabase
@@ -91,7 +91,7 @@ export async function createCompetition(formData: FormData): Promise<ActionResul
 
 export async function updateCompetitionMeta(competitionId: string, name: string): Promise<ActionResult> {
   const supabase = await createClient();
-  const { error } = await supabase.from("competitions").update({ name }).eq("id", competitionId);
+  const { error } = await supabase.rpc("update_competition_name", { p_competition_id: competitionId, p_name: name });
   if (error) return { error: error.message };
   revalidatePath("/admin/format");
   return { success: true };
@@ -99,7 +99,7 @@ export async function updateCompetitionMeta(competitionId: string, name: string)
 
 export async function setRoundAnonymity(roundId: string, isAnonymous: boolean): Promise<ActionResult> {
   const supabase = await createClient();
-  const { error } = await supabase.from("rounds").update({ is_anonymous: isAnonymous }).eq("id", roundId);
+  const { error } = await supabase.rpc("set_round_anonymity", { p_round_id: roundId, p_is_anonymous: isAnonymous });
   if (error) return { error: error.message };
   revalidatePath("/admin/format");
   return { success: true };
@@ -107,10 +107,10 @@ export async function setRoundAnonymity(roundId: string, isAnonymous: boolean): 
 
 export async function setAllRoundsAnonymity(competitionId: string, isAnonymous: boolean): Promise<ActionResult> {
   const supabase = await createClient();
-  const { error } = await supabase
-    .from("rounds")
-    .update({ is_anonymous: isAnonymous })
-    .eq("competition_id", competitionId);
+  const { error } = await supabase.rpc("set_all_rounds_anonymity", {
+    p_competition_id: competitionId,
+    p_is_anonymous: isAnonymous,
+  });
   if (error) return { error: error.message };
   revalidatePath("/admin/format");
   return { success: true };
@@ -195,56 +195,16 @@ export async function saveFormatBlockConfig(
 
 export async function addRound(competitionId: string): Promise<ActionResult> {
   const supabase = await createClient();
-  const { data: rounds } = await supabase
-    .from("rounds")
-    .select("id, round_index")
-    .eq("competition_id", competitionId)
-    .order("round_index", { ascending: false });
-  if (!rounds || rounds.length === 0) return { error: "找不到比賽" };
-
-  const finalRound = rounds[0];
-  const newIndex = finalRound.round_index;
-
-  const { error: shiftError } = await supabase
-    .from("rounds")
-    .update({ round_index: newIndex + 1 })
-    .eq("id", finalRound.id);
-  if (shiftError) return { error: shiftError.message };
-
-  const { error: insertError } = await supabase.from("rounds").insert({
-    competition_id: competitionId,
-    round_index: newIndex,
-    name: `第 ${newIndex} 輪 · 新輪次`,
-  });
-  if (insertError) return { error: insertError.message };
-
+  const { error } = await supabase.rpc("add_round", { p_competition_id: competitionId });
+  if (error) return { error: error.message };
   revalidatePath("/admin/format");
   return { success: true };
 }
 
 export async function removeRound(roundId: string): Promise<ActionResult> {
   const supabase = await createClient();
-  const { data: round } = await supabase
-    .from("rounds")
-    .select("id, competition_id, round_index")
-    .eq("id", roundId)
-    .single();
-  if (!round) return { error: "找不到輪次" };
-
-  const { data: siblings } = await supabase
-    .from("rounds")
-    .select("round_index")
-    .eq("competition_id", round.competition_id);
-  const indices = (siblings ?? []).map((r) => r.round_index);
-  const minIdx = Math.min(...indices);
-  const maxIdx = Math.max(...indices);
-  if (round.round_index === minIdx || round.round_index === maxIdx) {
-    return { error: "初賽與決賽不可移除" };
-  }
-
-  const { error } = await supabase.from("rounds").delete().eq("id", roundId);
+  const { error } = await supabase.rpc("remove_round", { p_round_id: roundId });
   if (error) return { error: error.message };
-
   revalidatePath("/admin/format");
   return { success: true };
 }

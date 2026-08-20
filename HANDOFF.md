@@ -879,12 +879,18 @@ B2 迴圈、feedback RLS(非管理員讀不到/管理員讀得到)都用真實 a
 
 ---
 
-## 下一步(新 session 從這裡接手)
+## 08-20 稍晚:ADR-0011 三項已知限制全部處理完畢
 
-使用者明確指示:compact 後**直接繼續處理 ADR-0011 記錄的已知限制**,不用重新確認要不要做。三項按 ADR-0011 原文的優先順序:
+延續上面那輪,同一天內把三項遺留項都做完,一樣是「PoC 先確認漏洞存在 → 修 → 重跑 PoC 確認被擋 → 重跑合法流程確認沒壞掉」的流程,細節都寫進 [ADR-0011 的 Update 段落](docs/adr/0011-rls-column-lockdown-and-rpc-only-mutation.md)跟新的 [ADR-0012](docs/adr/0012-votes-service-role-write.md)。這裡只記重點跟過程中額外抓到的東西。
 
-1. **`votes.voter_ip` 可被偽造**(P1,ADR-0011 點名的主要遺留項)——繞過 Next.js Server Action 直接打 PostgREST,仍可自己指定 `voter_ip`,「同網路一票」防灌票對直接打 API 的攻擊者沒有硬保護。要真的解決,方向是「不再讓瀏覽器直接打 Supabase PostgREST 寫 votes,改成全部經過 Next.js Route Handler/Server Action,由 Next.js 這層讀 Vercel 提供的可信 client IP 後,用 service_role 或某種簽章方式寫入」——這是架構層改動,動手前建議先用 `mattpocock-skills:domain-modeling` 或至少跟使用者過一次方案,不要直接猜著做。`unique(round_id, voter_id)` 這個防重複本身沒問題,不用重修。
-2. **`rounds`/`scoring_rules` 等賽制表格欄位過寬**(P1,優先度較低)——format-only collaborator 理論上能透過現有 RLS 碰到非賽制欄位(round_index/name 等)。修法比照 ADR-0011 這輪的 RPC-only 模式(可能是 `save_round_format()` 之類),範圍要先盤點 `AdminFormatClient.tsx`/`admin/format/actions.ts` 實際有哪些直接 `.insert()`/`.update()` 呼叫。
-3. **Feedback/Comment 沒有 rate limit**(P2)——工程量最小,但目前完全沒有,惡意使用者可以灌爆。
+1. **`votes.voter_ip` 偽造**——沒有照原本猜測的方向(Route Handler)硬做,先寫了一支暫時的 SECURITY DEFINER 診斷 function 打 PostgREST 實測,發現 Supabase 前面的 Cloudflare 有不可偽造的 `cf-connecting-ip`,但這個發現本身沒用:合法流程是「瀏覽器→Vercel→Supabase」,Supabase 那一層看到的連線來源永遠是 Vercel 的 IP,不是真正投票的人。如果直接拿 `cf-connecting-ip` 當 `voter_ip`,會讓所有正常投票的人 IP 都撞在一起、互相擋票——比原漏洞更糟。最後決定:`votes` INSERT 對 `authenticated` 全面收回,`castVote()` 改用 `service_role` 寫入(新檔 `web/src/lib/supabase/service.ts`,全專案第一次在應用程式路徑用 service_role)。用真實帳號 PoC 驗證:繞過 Next.js 直打 PostgREST → `403 permission denied`;service_role 走合法路徑 → 投票成功;自己投自己 → 依然被 trigger 擋下(service_role 不繞過 trigger,只繞過 RLS)。
+2. **`rounds`/`competitions` 欄位過寬**——盤點 `admin/format/actions.ts`/`admin/schedule/actions.ts` 時額外抓到一個**真的壞掉的迴歸**:上一輪 `competitions` UPDATE 已經被 revoke 光,但 `updateCompetitionMeta()`(改比賽名稱)當時沒有一併改成 RPC,一直是壞的。已修,順便把 `rounds` 的 INSERT/UPDATE/DELETE 也全面收回,依 format/schedule 兩種權限拆成 6 支 RPC。用一個 format-only 帳號 + 一個 schedule-only 帳號實測:各自能做自己權限內的事、被擋在對方權限外、繞過 RPC 直打 PostgREST 一律 `403`。`scoring_rules`/`score_items`/`round_format_blocks` 檢查後發現本來就只認單一 `'format'` 權限(沒有 format-or-schedule 的 OR),不存在同樣的洩漏,沒有動它們。
+3. **Feedback/Comment rate limit**——加了兩支 `BEFORE INSERT` trigger(feedback 20 秒一次、comment 3 秒一次),兩支都刻意標 `SECURITY DEFINER`,直接繞開上一輪 `check_vote_validity()` 踩過的「trigger 預設 SECURITY INVOKER,內部查詢被呼叫者自己的 RLS 擋住看不到資料」那類坑。PoC 驗證:連續送兩次 → 第二次被擋(`please wait a moment...`);等冷卻時間過了 → 又能送。
 
-**開始前** 先讀 `docs/adr/0011-rls-column-lockdown-and-rpc-only-mutation.md` 全文跟 CONTEXT.md,不要只看這裡的摘要。**修完每一項照這輪的模式**:真實測試帳號 + 真實 access token 打 PoC 先確認漏洞存在 → 修 → 重跑 PoC 確認被擋 → 重跑合法流程確認沒壞掉 → 才算完成,不要只憑程式碼看起來對就宣稱修好了(這輪至少抓到一次「看起來修好了但其實把合法流程也一起擋掉」的真實案例,教訓寫在上面 votes 那段)。
+### 迴歸測試 / 建置狀態
+
+`npx tsc --noEmit`、`npx eslint`、`npm run build` 全程乾淨(warning 只有兩個跟這輪改動無關的既有項目)。所有 PoC 腳本都是用 Admin API 建立的拋棄式帳號,測完即刪,沒有殘留測試資料;所有結果都用獨立的 service_role SELECT 覆核過,不是只信 PoC 自己的回應。**尚未 commit / push / 部署**——下一步是提交這批 migration + 程式碼變更。
+
+### 下一步
+
+ADR-0011 全部項目已完成,沒有已知遺留的資安限制。接下來若要繼續,是回到更早清單裡「還沒做」的部分:B2 實際上傳/播放 UI(`storage.ts` 基礎設施已就緒但零使用者介面)、好友測試賽的完整端對端點擊驗證、留言審核/不當言論掃描功能(使用者提過但規格不夠明確,需要先釐清)、Discord Server ID / Resend API key(待使用者提供才能真的送出通知)。

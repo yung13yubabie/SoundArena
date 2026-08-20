@@ -41,15 +41,14 @@ export async function saveSchedule(input: ScheduleInput): Promise<ActionResult> 
   // Applied uniformly to every round for now — the schedule screen doesn't yet
   // support per-round submission/voting windows (see SPEC.md 第2節 "僅開放特定
   // 輪次投稿", which is a real, separate feature this doesn't build).
-  const { error: roundsError } = await supabase
-    .from("rounds")
-    .update({
-      submission_opens_at: orNull(input.submissionStart),
-      submission_closes_at: orNull(input.submissionEnd),
-      voting_opens_at: orNull(input.votingStart),
-      voting_closes_at: orNull(input.votingEnd),
-    })
-    .in("id", input.roundIds);
+  const { error: roundsError } = await supabase.rpc("set_round_schedule_windows", {
+    p_competition_id: input.competitionId,
+    p_round_ids: input.roundIds,
+    p_submission_opens_at: orNull(input.submissionStart),
+    p_submission_closes_at: orNull(input.submissionEnd),
+    p_voting_opens_at: orNull(input.votingStart),
+    p_voting_closes_at: orNull(input.votingEnd),
+  });
   if (roundsError) return { error: roundsError.message };
 
   revalidatePath("/admin/schedule");

@@ -1,0 +1,24 @@
+-- ADR-0011 記錄的已知限制:votes.voter_ip 可被繞過 Next.js、直接打 PostgREST 的人偽造。
+--
+-- 這裡先用 diag_show_request_headers() 實測 Supabase PostgREST 收到的 request header——
+-- 結果發現 Supabase 前面的 Cloudflare 會把「真實連線來源 IP」寫進 cf-connecting-ip,
+-- 這個值不能被 client 端的 X-Forwarded-For 偽造(Cloudflare 一律用自己量到的連線 IP
+-- 覆寫/附加,不採信 client 自報的值)。
+--
+-- 但這個發現對這個場景沒有幫助:合法流程本來就是「瀏覽器 → Vercel(Next.js Server
+-- Action)→ Supabase PostgREST」,對 Supabase 而言,打這支 API 的「連線來源」永遠是
+-- Vercel 的 serverless egress IP,不是真正投票的使用者瀏覽器 IP。如果改成在 Postgres
+-- 這一層讀 cf-connecting-ip 當 voter_ip,會變成所有人透過正常網站投票時 voter_ip 都
+-- 幾乎相同(都是 Vercel 那端的 IP),反而讓 unique(round_id, voter_ip) 這個防重複機制
+-- 誤傷不同使用者的正常投票——比原本的漏洞還糟。
+--
+-- 真正的問題根源是:voter_ip 這個值只有「瀏覽器 → Vercel」這一段(Next.js Server
+-- Action 用 headers() 讀 x-forwarded-for)量得到,Supabase 這一層完全看不到。既然
+-- 信任邊界只能落在 Next.js,乾脆讓 votes 的寫入完全不對 authenticated 開放,只能
+-- 透過這支 Server Action 用 service_role 寫入——繞過 Next.js 直接打 PostgREST 的人,
+-- 不管填什麼 voter_ip,都會先被「沒有 INSERT 權限」擋下,連嘗試偽造的機會都沒有。
+--
+-- 這是目前整個專案第一次在應用程式執行路徑(不只是測試腳本)使用 service_role,
+-- 記錄在 docs/adr/0012-votes-service-role-write.md。
+
+revoke insert on votes from authenticated;
