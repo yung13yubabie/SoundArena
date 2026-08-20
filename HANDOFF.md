@@ -889,7 +889,7 @@ B2 迴圈、feedback RLS(非管理員讀不到/管理員讀得到)都用真實 a
 
 ### 迴歸測試 / 建置狀態
 
-`npx tsc --noEmit`、`npx eslint`、`npm run build` 全程乾淨(warning 只有兩個跟這輪改動無關的既有項目)。所有 PoC 腳本都是用 Admin API 建立的拋棄式帳號,測完即刪,沒有殘留測試資料;所有結果都用獨立的 service_role SELECT 覆核過,不是只信 PoC 自己的回應。**尚未 commit / push / 部署**——下一步是提交這批 migration + 程式碼變更。
+`npx tsc --noEmit`、`npx eslint`、`npm run build` 全程乾淨(warning 只有兩個跟這輪改動無關的既有項目)。所有 PoC 腳本都是用 Admin API 建立的拋棄式帳號,測完即刪,沒有殘留測試資料;所有結果都用獨立的 service_role SELECT 覆核過,不是只信 PoC 自己的回應。已 commit(`dbe6f0d`)、push、`vercel deploy --prod` 上線。
 
 ### 下一步
 
