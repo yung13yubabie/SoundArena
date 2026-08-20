@@ -876,3 +876,15 @@ B2 迴圈、feedback RLS(非管理員讀不到/管理員讀得到)都用真實 a
 **查證屬實**——`display_name` 從 OAuth 登入時自動帶入(Google 全名/Discord 使用者名稱)後,全站真的沒有任何地方能改,連 `/admin/profile` 都只是把它當純文字顯示,不是輸入框。已修:`/status` 頁(所有登入使用者都會到的頁面,不像 `/admin/profile` 要先變成主辦人才看得到)新增暱稱編輯器,`display_name` 欄位本來就已經在 `profiles` 的自助更新白名單裡(之前做 `host_setup_completed` 那輪順便開的),不需要新的資料庫權限異動。
 
 `npx tsc --noEmit`、`npx eslint`、`npm run build` 全程乾淨。已 commit(`e79cfae`)、push、`vercel deploy --prod` 上線。
+
+---
+
+## 下一步(新 session 從這裡接手)
+
+使用者明確指示:compact 後**直接繼續處理 ADR-0011 記錄的已知限制**,不用重新確認要不要做。三項按 ADR-0011 原文的優先順序:
+
+1. **`votes.voter_ip` 可被偽造**(P1,ADR-0011 點名的主要遺留項)——繞過 Next.js Server Action 直接打 PostgREST,仍可自己指定 `voter_ip`,「同網路一票」防灌票對直接打 API 的攻擊者沒有硬保護。要真的解決,方向是「不再讓瀏覽器直接打 Supabase PostgREST 寫 votes,改成全部經過 Next.js Route Handler/Server Action,由 Next.js 這層讀 Vercel 提供的可信 client IP 後,用 service_role 或某種簽章方式寫入」——這是架構層改動,動手前建議先用 `mattpocock-skills:domain-modeling` 或至少跟使用者過一次方案,不要直接猜著做。`unique(round_id, voter_id)` 這個防重複本身沒問題,不用重修。
+2. **`rounds`/`scoring_rules` 等賽制表格欄位過寬**(P1,優先度較低)——format-only collaborator 理論上能透過現有 RLS 碰到非賽制欄位(round_index/name 等)。修法比照 ADR-0011 這輪的 RPC-only 模式(可能是 `save_round_format()` 之類),範圍要先盤點 `AdminFormatClient.tsx`/`admin/format/actions.ts` 實際有哪些直接 `.insert()`/`.update()` 呼叫。
+3. **Feedback/Comment 沒有 rate limit**(P2)——工程量最小,但目前完全沒有,惡意使用者可以灌爆。
+
+**開始前** 先讀 `docs/adr/0011-rls-column-lockdown-and-rpc-only-mutation.md` 全文跟 CONTEXT.md,不要只看這裡的摘要。**修完每一項照這輪的模式**:真實測試帳號 + 真實 access token 打 PoC 先確認漏洞存在 → 修 → 重跑 PoC 確認被擋 → 重跑合法流程確認沒壞掉 → 才算完成,不要只憑程式碼看起來對就宣稱修好了(這輪至少抓到一次「看起來修好了但其實把合法流程也一起擋掉」的真實案例,教訓寫在上面 votes 那段)。
