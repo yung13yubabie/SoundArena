@@ -212,6 +212,24 @@ export async function removeRound(roundId: string): Promise<ActionResult> {
   return { success: true };
 }
 
+export async function deleteCompetition(competitionId: string): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("delete_competition", { p_competition_id: competitionId });
+  if (error) {
+    return {
+      error: toFriendlyError(error, [
+        {
+          test: (m) => m.includes("already has real registrations"),
+          friendly: "這場比賽已經有真實報名紀錄，無法自助刪除——請透過「意見回饋」聯繫平台管理員協助刪除",
+        },
+      ]),
+    };
+  }
+  revalidatePath("/admin/format");
+  revalidatePath("/");
+  return { success: true };
+}
+
 export async function toggleScoringOverride(
   roundId: string,
   competitionId: string,

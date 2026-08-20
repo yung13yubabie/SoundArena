@@ -38,10 +38,12 @@ export default async function AdminReviewPage({
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("host_setup_completed, is_platform_admin, host_revoked_at")
+    .select("host_setup_completed, is_platform_admin, host_revoked_at, host_approved_at")
     .eq("id", userId)
     .maybeSingle();
-  if (!profile?.host_setup_completed || profile?.host_revoked_at) redirect("/admin/profile");
+  if (!profile?.is_platform_admin && (!profile?.host_setup_completed || !profile?.host_approved_at || profile?.host_revoked_at)) {
+    redirect("/admin/profile");
+  }
   const isPlatformAdmin = profile.is_platform_admin ?? false;
 
   const myCompetitions = await getManageableCompetitions(supabase, "review");

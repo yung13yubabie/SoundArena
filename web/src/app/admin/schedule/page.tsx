@@ -21,10 +21,14 @@ export default async function AdminSchedulePage({
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("host_setup_completed, is_platform_admin, host_revoked_at")
+    .select("host_setup_completed, is_platform_admin, host_revoked_at, host_approved_at")
     .eq("id", userId)
     .maybeSingle();
-  if (!profile?.host_setup_completed || profile?.host_revoked_at) redirect("/admin/profile");
+  // Platform admin 一律放行——不然他們自己的主辦資格一旦處於待審核，就沒有任何人
+  // 能進到這個 shell 去核准任何人的申請（含自己），會變成死鎖。
+  if (!profile?.is_platform_admin && (!profile?.host_setup_completed || !profile?.host_approved_at || profile?.host_revoked_at)) {
+    redirect("/admin/profile");
+  }
   const isPlatformAdmin = profile.is_platform_admin ?? false;
 
   const myCompetitions = await getManageableCompetitions(supabase, "schedule");

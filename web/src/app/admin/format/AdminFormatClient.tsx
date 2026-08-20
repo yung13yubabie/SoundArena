@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { AdminShell } from "@/components/AdminShell";
 import { EmptyState } from "@/components/EmptyState";
 import { Switch } from "@/components/Switch";
@@ -16,6 +17,7 @@ import {
   addScoreItem,
   setRoundAnonymity,
   setAllRoundsAnonymity,
+  deleteCompetition,
 } from "./actions";
 
 export interface ScoreItemData {
@@ -412,7 +414,7 @@ function RoundFormatCard({
 
       <div className="mt-3.5 flex items-center gap-2.5 border-t border-panel-border pt-2.5">
         <Switch on={!!round.scoringRule} onClick={toggleOverride} />
-        <span className="text-[12.5px]">此輪使用 ScoringRuleOverride（不勾選則沿用 Competition 預設評分規則）</span>
+        <span className="text-[12.5px]">此輪使用獨立評分規則（不勾選則沿用比賽預設評分規則）</span>
       </div>
       {round.scoringRule && (
         <ScoreEditor
@@ -434,10 +436,14 @@ function RoundFormatCard({
 }
 
 function CompetitionMetaForm({ competition }: { competition: CompetitionData }) {
+  const router = useRouter();
   const [name, setName] = useState(competition.name);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   async function handleSave() {
     setSaving(true);
@@ -446,10 +452,23 @@ function CompetitionMetaForm({ competition }: { competition: CompetitionData }) 
     setSaved(true);
   }
 
+  async function handleDelete() {
+    setDeleting(true);
+    setDeleteError(null);
+    const result = await deleteCompetition(competition.id);
+    setDeleting(false);
+    if ("error" in result) {
+      setDeleteError(result.error);
+      setConfirmingDelete(false);
+      return;
+    }
+    router.push("/admin/format");
+  }
+
   return (
     <div className="mb-7">
       <div className="mb-5">
-        <label className="mb-1.5 block text-[12.5px] font-semibold text-ink-dim">Competition 名稱</label>
+        <label className="mb-1.5 block text-[12.5px] font-semibold text-ink-dim">比賽名稱</label>
         <div className="flex gap-2.5">
           <input
             value={name}
@@ -471,7 +490,7 @@ function CompetitionMetaForm({ competition }: { competition: CompetitionData }) 
 
       <div>
         <label className="mb-1.5 block text-[12.5px] font-semibold text-ink-dim">
-          匿名揭露(AnonymityMode)— 逐輪設定,以下是套用到全部輪次的快捷
+          匿名揭露設定 — 逐輪設定,以下是套用到全部輪次的快捷
         </label>
         <div className="flex gap-1.75">
           <button
@@ -500,6 +519,42 @@ function CompetitionMetaForm({ competition }: { competition: CompetitionData }) 
         <div className="mt-1.5 text-[11.5px] leading-relaxed text-ink-faint">
           匿名的輪次投票截止後才公開作者身份;公開的輪次從一開始就看得到是誰投稿。每輪下方可個別覆寫。
         </div>
+      </div>
+
+      <div className="mt-7 border-t border-panel-border pt-5">
+        <label className="mb-1.5 block text-[12.5px] font-semibold text-bad">刪除這場比賽</label>
+        <p className="mb-2.5 text-[11.5px] leading-relaxed text-ink-faint">
+          還沒有任何人報名時可以直接刪除;一旦有真實報名紀錄，就需要請平台管理員協助刪除。這個動作無法復原。
+        </p>
+        {deleteError && (
+          <p className="mb-2.5 rounded-[10px] border border-bad/30 bg-bad/10 p-2.5 text-[12px] text-bad">{deleteError}</p>
+        )}
+        {confirmingDelete ? (
+          <div className="flex items-center gap-2.5">
+            <span className="text-[12px] text-bad">確定要刪除「{competition.name}」嗎？</span>
+            <button
+              onClick={handleDelete}
+              disabled={deleting}
+              className="rounded-[10px] border border-bad/35 bg-bad/8 px-3.5 py-1.5 text-[12px] font-semibold text-bad transition-colors hover:bg-bad/14 disabled:opacity-45"
+            >
+              {deleting ? "刪除中…" : "確定刪除"}
+            </button>
+            <button
+              onClick={() => setConfirmingDelete(false)}
+              disabled={deleting}
+              className="rounded-[10px] border border-panel-border px-3.5 py-1.5 text-[12px] text-ink-dim disabled:opacity-45"
+            >
+              取消
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => setConfirmingDelete(true)}
+            className="rounded-[10px] border border-bad/35 bg-bad/8 px-3.5 py-1.5 text-[12px] font-semibold text-bad transition-colors hover:bg-bad/14"
+          >
+            刪除比賽
+          </button>
+        )}
       </div>
     </div>
   );
@@ -546,12 +601,12 @@ export function AdminFormatClient({
 
       {defaultScoringRuleId && (
         <div className="mb-5">
-          <label className="mb-1.5 block text-[12.5px] font-semibold text-ink-dim">Competition 預設 ScoringRule</label>
+          <label className="mb-1.5 block text-[12.5px] font-semibold text-ink-dim">比賽預設評分規則</label>
           <div className="mb-2.5 text-[11.5px] leading-relaxed text-ink-faint">套用到所有未個別覆寫的輪次。</div>
           <ScoreEditor
             scoringRuleId={defaultScoringRuleId}
             initialItems={defaultScoreItems}
-            context="Competition 預設規則"
+            context="比賽預設規則"
             catalog={scoreItemTemplates}
           />
         </div>

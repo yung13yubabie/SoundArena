@@ -11,7 +11,9 @@ export default async function AdminProfilePage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("display_name, bio, social_link, featured_track_url, host_setup_completed, is_platform_admin, host_revoked_at")
+    .select(
+      "display_name, bio, social_link, featured_track_url, host_setup_completed, is_platform_admin, host_revoked_at, host_approved_at",
+    )
     .eq("id", userId)
     .maybeSingle();
 
@@ -24,9 +26,24 @@ export default async function AdminProfilePage() {
     return (
       <AdminShell active="profile" isPlatformAdmin={profile?.is_platform_admin ?? false}>
         <div className="mb-7">
-          <h1 className="font-display text-[30px]">你的主辦資格已被移除</h1>
+          <h1 className="font-display text-[30px]">{profile.host_approved_at ? "你的主辦資格已被移除" : "你的主辦人申請已被駁回"}</h1>
           <p className="mt-1.5 max-w-[680px] text-sm leading-relaxed text-ink-dim">
-            平台管理員撤除了你的主辦人管理權限，無法自行重新設定恢復。這不影響你以一般身份報名、投稿、投票其他比賽，也不會移除你已建立比賽的公開內容。如果認為這是誤判，請透過「意見回饋」頁聯繫平台管理員。
+            {profile.host_approved_at
+              ? "平台管理員撤除了你的主辦人管理權限，無法自行重新設定恢復。這不影響你以一般身份報名、投稿、投票其他比賽，也不會移除你已建立比賽的公開內容。如果認為這是誤判，請透過「意見回饋」頁聯繫平台管理員。"
+              : "平台管理員審核後決定不核准這次的主辦人申請。如果認為這是誤判，請透過「意見回饋」頁聯繫平台管理員。"}
+          </p>
+        </div>
+      </AdminShell>
+    );
+  }
+
+  if (profile?.host_setup_completed && !profile?.host_approved_at) {
+    return (
+      <AdminShell active="profile" isPlatformAdmin={profile?.is_platform_admin ?? false}>
+        <div className="mb-7">
+          <h1 className="font-display text-[30px]">主辦人申請審核中</h1>
+          <p className="mt-1.5 max-w-[680px] text-sm leading-relaxed text-ink-dim">
+            已收到你的主辦人申請，平台管理員審核通過後才能進入賽制建立／時程設定／審核後台。
           </p>
         </div>
       </AdminShell>

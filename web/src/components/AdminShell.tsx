@@ -52,6 +52,7 @@ interface PlatformOrganizerRow {
   id: string;
   display_name: string | null;
   host_revoked_at: string | null;
+  host_approved_at: string | null;
 }
 
 interface PlatformFeedbackRow {
@@ -119,6 +120,8 @@ export function AdminShell({
   const [revokingId, setRevokingId] = useState<string | null>(null);
   const [platformFeedback, setPlatformFeedback] = useState<PlatformFeedbackRow[] | null>(null);
   const [feedbackError, setFeedbackError] = useState<string | null>(null);
+  const [deletingCompetitionId, setDeletingCompetitionId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isPlatformAdmin || viewpoint !== "platform" || platformCompetitions !== null) return;
@@ -141,7 +144,7 @@ export function AdminShell({
     const supabase = createClient();
     supabase
       .from("profiles")
-      .select("id, display_name, host_revoked_at")
+      .select("id, display_name, host_revoked_at, host_approved_at")
       .eq("host_setup_completed", true)
       .order("display_name")
       .then(({ data, error }) => {
@@ -177,6 +180,41 @@ export function AdminShell({
     if (!error) {
       setPlatformOrganizers((prev) =>
         (prev ?? []).map((o) => (o.id === row.id ? { ...o, host_revoked_at: row.host_revoked_at ? null : new Date().toISOString() } : o)),
+      );
+    }
+    setRevokingId(null);
+  }
+
+  async function deletePlatformCompetition(id: string) {
+    setDeletingCompetitionId(id);
+    const supabase = createClient();
+    const { error } = await supabase.rpc("delete_competition", { p_competition_id: id });
+    if (!error) {
+      setPlatformCompetitions((prev) => (prev ?? []).filter((c) => c.id !== id));
+    }
+    setConfirmDeleteId(null);
+    setDeletingCompetitionId(null);
+  }
+
+  async function approveOrganizer(row: PlatformOrganizerRow) {
+    setRevokingId(row.id);
+    const supabase = createClient();
+    const { error } = await supabase.rpc("approve_organizer_application", { p_profile_id: row.id });
+    if (!error) {
+      setPlatformOrganizers((prev) =>
+        (prev ?? []).map((o) => (o.id === row.id ? { ...o, host_approved_at: new Date().toISOString() } : o)),
+      );
+    }
+    setRevokingId(null);
+  }
+
+  async function rejectOrganizer(row: PlatformOrganizerRow) {
+    setRevokingId(row.id);
+    const supabase = createClient();
+    const { error } = await supabase.rpc("revoke_organizer", { p_profile_id: row.id });
+    if (!error) {
+      setPlatformOrganizers((prev) =>
+        (prev ?? []).map((o) => (o.id === row.id ? { ...o, host_revoked_at: new Date().toISOString() } : o)),
       );
     }
     setRevokingId(null);
@@ -286,7 +324,7 @@ export function AdminShell({
                   載入中…
                 </div>
               ) : platformCompetitions.length === 0 ? (
-                <EmptyState icon="inbox" title="目前平台上還沒有任何比賽" sub="有 Organizer 建立比賽後會出現在這裡" />
+                <EmptyState icon="inbox" title="目前平台上還沒有任何比賽" sub="有人建立比賽後會出現在這裡" />
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full min-w-[480px] border-collapse text-[12.5px]">
@@ -296,11 +334,12 @@ export function AdminShell({
                           比賽名稱
                         </th>
                         <th className="border-b border-panel-border px-3.5 py-2.25 text-left text-[10.5px] font-semibold tracking-wide text-ink-faint uppercase">
-                          Organizer
+                          主辦人
                         </th>
                         <th className="border-b border-panel-border px-3.5 py-2.25 text-left text-[10.5px] font-semibold tracking-wide text-ink-faint uppercase">
                           狀態
                         </th>
+                        <th className="border-b border-panel-border px-3.5 py-2.25 text-left text-[10.5px] font-semibold tracking-wide text-ink-faint uppercase" />
                       </tr>
                     </thead>
                     <tbody>
@@ -312,6 +351,33 @@ export function AdminShell({
                             <span className="rounded-full border border-accent/35 bg-accent/8 px-2.25 py-0.75 text-[11px] text-accent">
                               {competitionStatus(c)}
                             </span>
+                          </td>
+                          <td className="border-b border-white/5 px-3.5 py-3 text-right">
+                            {confirmDeleteId === c.id ? (
+                              <div className="flex items-center justify-end gap-1.5">
+                                <button
+                                  onClick={() => deletePlatformCompetition(c.id)}
+                                  disabled={deletingCompetitionId === c.id}
+                                  className="rounded-[8px] border border-bad/35 bg-bad/8 px-2.5 py-1 text-[11px] font-semibold text-bad disabled:opacity-45"
+                                >
+                                  {deletingCompetitionId === c.id ? "刪除中…" : "確定刪除"}
+                                </button>
+                                <button
+                                  onClick={() => setConfirmDeleteId(null)}
+                                  disabled={deletingCompetitionId === c.id}
+                                  className="rounded-[8px] border border-panel-border px-2.5 py-1 text-[11px] text-ink-dim disabled:opacity-45"
+                                >
+                                  取消
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => setConfirmDeleteId(c.id)}
+                                className="rounded-[8px] border border-panel-border px-2.5 py-1 text-[11px] text-bad hover:border-bad/40"
+                              >
+                                刪除
+                              </button>
+                            )}
                           </td>
                         </tr>
                       ))}
@@ -327,7 +393,7 @@ export function AdminShell({
               <div className="mb-7">
                 <h1 className="font-display text-[30px]">主辦人資格</h1>
                 <p className="mt-1.5 max-w-[680px] text-sm leading-relaxed text-ink-dim">
-                  撤除後對方所有比賽管理權限立即失效,且無法自行重新設定恢復,只能由你在這裡重新賦予。不影響對方以一般身份參賽,也不影響他已建立比賽的公開內容。
+                  主辦人申請需要你核准才能生效。核准後如需撤除,對方所有比賽管理權限立即失效,且無法自行重新設定恢復,只能由你在這裡重新賦予。不影響對方以一般身份參賽,也不影響他已建立比賽的公開內容。
                 </p>
               </div>
               {organizersError ? (
@@ -340,31 +406,90 @@ export function AdminShell({
               ) : platformOrganizers.length === 0 ? (
                 <EmptyState icon="users" title="目前平台上還沒有任何主辦人" sub="有使用者完成主辦人身分設定後會出現在這裡" />
               ) : (
-                <div className="flex flex-col gap-1.5">
-                  {platformOrganizers.map((o) => (
-                    <div key={o.id} className="glass flex items-center justify-between px-4 py-3">
-                      <div className="flex items-center gap-2.5">
-                        <span className="text-[13.5px]">{o.display_name ?? "（未命名）"}</span>
-                        {o.host_revoked_at && (
-                          <span className="rounded-full border border-bad/35 bg-bad/8 px-2.25 py-0.75 text-[11px] text-bad">
-                            已撤除
-                          </span>
+                (() => {
+                  const pending = platformOrganizers.filter((o) => !o.host_approved_at && !o.host_revoked_at);
+                  const approved = platformOrganizers.filter((o) => o.host_approved_at && !o.host_revoked_at);
+                  const rejectedOrRevoked = platformOrganizers.filter((o) => o.host_revoked_at);
+                  return (
+                    <div className="flex flex-col gap-8">
+                      {pending.length > 0 && (
+                        <div>
+                          <h2 className="mb-2.5 text-[13px] font-semibold text-warn">待審核（{pending.length}）</h2>
+                          <div className="flex flex-col gap-1.5">
+                            {pending.map((o) => (
+                              <div key={o.id} className="glass flex items-center justify-between px-4 py-3">
+                                <span className="text-[13.5px]">{o.display_name ?? "（未命名）"}</span>
+                                <div className="flex gap-2">
+                                  <button
+                                    onClick={() => approveOrganizer(o)}
+                                    disabled={revokingId === o.id}
+                                    className="focus-ring rounded-[10px] border border-ok/35 bg-ok/8 px-3 py-1.5 text-[11.5px] font-semibold text-ok transition-colors hover:bg-ok/14 disabled:opacity-45"
+                                  >
+                                    核准
+                                  </button>
+                                  <button
+                                    onClick={() => rejectOrganizer(o)}
+                                    disabled={revokingId === o.id}
+                                    className="focus-ring rounded-[10px] border border-bad/35 bg-bad/8 px-3 py-1.5 text-[11.5px] font-semibold text-bad transition-colors hover:bg-bad/14 disabled:opacity-45"
+                                  >
+                                    駁回
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      <div>
+                        <h2 className="mb-2.5 text-[13px] font-semibold text-ink-dim">已核准（{approved.length}）</h2>
+                        {approved.length === 0 ? (
+                          <p className="text-[12.5px] text-ink-faint">目前沒有已核准的主辦人</p>
+                        ) : (
+                          <div className="flex flex-col gap-1.5">
+                            {approved.map((o) => (
+                              <div key={o.id} className="glass flex items-center justify-between px-4 py-3">
+                                <span className="text-[13.5px]">{o.display_name ?? "（未命名）"}</span>
+                                <button
+                                  onClick={() => toggleOrganizerRevocation(o)}
+                                  disabled={revokingId === o.id}
+                                  className="focus-ring rounded-[10px] border border-bad/35 bg-bad/8 px-3 py-1.5 text-[11.5px] font-semibold text-bad transition-colors hover:bg-bad/14 disabled:opacity-45"
+                                >
+                                  撤除資格
+                                </button>
+                              </div>
+                            ))}
+                          </div>
                         )}
                       </div>
-                      <button
-                        onClick={() => toggleOrganizerRevocation(o)}
-                        disabled={revokingId === o.id}
-                        className={`focus-ring rounded-[10px] border px-3 py-1.5 text-[11.5px] font-semibold transition-colors disabled:opacity-45 ${
-                          o.host_revoked_at
-                            ? "border-panel-border bg-white/[0.04] text-ink hover:border-accent/40"
-                            : "border-bad/35 bg-bad/8 text-bad hover:bg-bad/14"
-                        }`}
-                      >
-                        {o.host_revoked_at ? "重新賦予" : "撤除資格"}
-                      </button>
+
+                      {rejectedOrRevoked.length > 0 && (
+                        <div>
+                          <h2 className="mb-2.5 text-[13px] font-semibold text-ink-dim">已駁回／已撤除（{rejectedOrRevoked.length}）</h2>
+                          <div className="flex flex-col gap-1.5">
+                            {rejectedOrRevoked.map((o) => (
+                              <div key={o.id} className="glass flex items-center justify-between px-4 py-3">
+                                <div className="flex items-center gap-2.5">
+                                  <span className="text-[13.5px]">{o.display_name ?? "（未命名）"}</span>
+                                  <span className="rounded-full border border-bad/35 bg-bad/8 px-2.25 py-0.75 text-[11px] text-bad">
+                                    {o.host_approved_at ? "已撤除" : "已駁回"}
+                                  </span>
+                                </div>
+                                <button
+                                  onClick={() => toggleOrganizerRevocation(o)}
+                                  disabled={revokingId === o.id}
+                                  className="focus-ring rounded-[10px] border border-panel-border bg-white/[0.04] px-3 py-1.5 text-[11.5px] font-semibold text-ink transition-colors hover:border-accent/40 disabled:opacity-45"
+                                >
+                                  重新賦予
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  ))}
-                </div>
+                  );
+                })()
               )}
             </div>
           )}

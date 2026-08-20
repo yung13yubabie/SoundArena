@@ -907,6 +907,20 @@ B2 迴圈、feedback RLS(非管理員讀不到/管理員讀得到)都用真實 a
 
 **這輪誠實記錄、還沒處理的部分**(細節見 ADR-0013 結尾):主辦資格「審核制」(使用者想反轉 ADR-0010 的自助通過設計,需要先確認既有主辦人要不要一併重新送審)、比賽刪除功能(目前完全沒有任何刪除路徑)、Discord OAuth consent 文案與實際 scope 行為矛盾(需要拆成兩段式 OAuth,是 auth 流程改動)、CSP 仍是 `unsafe-inline` 基礎版沒有 nonce 化。
 
+## 08-21 稍晚:主辦審核制 + 比賽刪除功能
+
+使用者確認兩個設計決定:既有主辦人全部重新送審(不是只套用未來新申請)、刪除比賽採草稿期自助刪(還沒有人報名可以自己刪,一旦有報名就只能平台管理員刪)。細節與部署時抓到的死鎖(平台管理員自己的主辦資格也被重置成待審核,導致連 `/admin` 都進不去、沒人能核准任何人)寫在 [ADR-0014](docs/adr/0014-organizer-approval-gate-and-competition-deletion.md)。已修:5 個 `/admin/*` 守門頁面補上「平台管理員一律放行」的例外。
+
+同一輪也把 `AdminFormatClient.tsx` 裡幾個殘留的原始英文 class 名稱user-facing 文案清掉(「Competition 名稱」→「比賽名稱」、「ScoringRuleOverride」→「獨立評分規則」、「AnonymityMode」→「匿名揭露設定」等),以及 `AdminShell.tsx` 兩處「Organizer」英文字面文案。
+
+全部用真實測試帳號 PoC 驗證過(待審核主辦人被擋、核准後恢復、草稿期自助刪成功、有報名的比賽自助刪被擋但平台管理員能刪),`tsc`/`eslint`/`build` 全程乾淨。已 commit、push、`vercel deploy --prod` 上線(commit hash 見下方或用 `git log` 查最新)。
+
+**使用者本人的主辦人帳號(`ec330b2f-...`,同時是平台管理員)跟另一個既有主辦人帳號,部署後都會變成「待審核」狀態**——這是「全部重新送審」的預期結果,不是 bug。平台管理員自己不受守門邏輯影響仍可進入 `/admin`,只要進到「主辦人管理」畫面把自己核准掉,就能恢復對既有比賽的管理權限。
+
+## 目前還沒處理的部分
+
+Discord OAuth consent 文案與實際 scope 行為矛盾(需要拆成兩段式 OAuth,是 auth 流程改動)、CSP 仍是 `unsafe-inline` 基礎版沒有 nonce 化、CSP 缺 COOP/CORP(HSTS/Permissions-Policy/Referrer-Policy/X-Content-Type-Options 已確認正式環境有送出)。這些都是純工程量或需要先跟使用者確認範圍的項目,還沒動手。
+
 ### 下一步
 
-前三項(組織審核制、比賽刪除、Discord OAuth 重新設計)都需要先跟使用者確認設計細節,不是可以直接猜著做的範圍——下一個 session 如果使用者已經回覆,直接照當時的回覆內容實作;如果還沒回覆,先問清楚再動手。CSP nonce 化跟 B2 上傳/播放 UI 是純工程量的部分,隨時可以直接開工。
+Discord OAuth 重新設計需要先跟使用者確認範圍(兩段式 OAuth 是比較大的 auth 流程改動)才動手。CSP nonce 化跟 B2 上傳/播放 UI 是純工程量的部分,隨時可以直接開工。
