@@ -3,7 +3,9 @@
 import { useState } from "react";
 import { SiteHeader } from "@/components/SiteHeader";
 import { Icon } from "@/lib/icons";
-import { createClient } from "@/lib/supabase/client";
+import { submitFeedback } from "./actions";
+
+const MAX_MESSAGE_LENGTH = 3000;
 
 export function FeedbackForm() {
   const [message, setMessage] = useState("");
@@ -14,24 +16,10 @@ export function FeedbackForm() {
     setStatus("sending");
     setError(null);
 
-    const supabase = createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
+    const result = await submitFeedback(message);
+    if ("error" in result) {
       setStatus("error");
-      setError("登入狀態已過期，請重新登入");
-      return;
-    }
-
-    const { error: insertError } = await supabase
-      .from("feedback")
-      .insert({ user_id: user.id, message: message.trim() });
-
-    if (insertError) {
-      setStatus("error");
-      setError(insertError.message);
+      setError(result.error);
       return;
     }
 
@@ -81,8 +69,12 @@ export function FeedbackForm() {
             className="min-h-40 w-full resize-y rounded-[10px] border border-panel-border bg-black/25 px-3.5 py-2.5 text-[13.5px] leading-relaxed text-ink outline-none focus:border-accent/50"
             placeholder="想說什麼都可以"
             value={message}
+            maxLength={MAX_MESSAGE_LENGTH}
             onChange={(e) => setMessage(e.target.value)}
           />
+          <p className="mt-1 text-right text-[11px] text-ink-faint">
+            {message.length} / {MAX_MESSAGE_LENGTH}
+          </p>
 
           {status === "error" && (
             <p className="mt-2.5 rounded-[10px] border border-bad/30 bg-bad/10 p-2.5 text-[12px] text-bad">

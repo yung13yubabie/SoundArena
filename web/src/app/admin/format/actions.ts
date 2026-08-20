@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { toFriendlyError } from "@/lib/actionError";
 
 type ActionResult = { success: true } | { error: string };
 
@@ -56,6 +57,7 @@ export async function createCompetition(formData: FormData): Promise<ActionResul
   const name = String(formData.get("name") ?? "").trim();
   const defaultAnonymous = formData.get("default_anonymous") !== "off";
   if (!name) return { error: "請填寫比賽名稱" };
+  if (name.length > 200) return { error: "比賽名稱最長 200 字" };
 
   const { data: competition, error: competitionError } = await supabase
     .from("competitions")
@@ -67,20 +69,20 @@ export async function createCompetition(formData: FormData): Promise<ActionResul
     })
     .select("id")
     .single();
-  if (competitionError || !competition) return { error: competitionError?.message ?? "建立比賽失敗" };
+  if (competitionError || !competition) return { error: toFriendlyError(competitionError ?? { message: "建立比賽失敗" }) };
 
   const { error: roundsError } = await supabase.rpc("create_initial_rounds", {
     p_competition_id: competition.id,
     p_default_anonymous: defaultAnonymous,
   });
-  if (roundsError) return { error: roundsError.message };
+  if (roundsError) return { error: toFriendlyError(roundsError) };
 
   const { data: scoringRule, error: scoringError } = await supabase
     .from("scoring_rules")
     .insert({ competition_id: competition.id, round_id: null })
     .select("id")
     .single();
-  if (scoringError || !scoringRule) return { error: scoringError?.message ?? "建立評分規則失敗" };
+  if (scoringError || !scoringRule) return { error: toFriendlyError(scoringError ?? { message: "建立評分規則失敗" }) };
 
   await insertDefaultScoreItems(supabase, scoringRule.id);
 
@@ -91,8 +93,9 @@ export async function createCompetition(formData: FormData): Promise<ActionResul
 
 export async function updateCompetitionMeta(competitionId: string, name: string): Promise<ActionResult> {
   const supabase = await createClient();
+  if (name.trim().length > 200) return { error: "比賽名稱最長 200 字" };
   const { error } = await supabase.rpc("update_competition_name", { p_competition_id: competitionId, p_name: name });
-  if (error) return { error: error.message };
+  if (error) return { error: toFriendlyError(error) };
   revalidatePath("/admin/format");
   return { success: true };
 }
@@ -100,7 +103,7 @@ export async function updateCompetitionMeta(competitionId: string, name: string)
 export async function setRoundAnonymity(roundId: string, isAnonymous: boolean): Promise<ActionResult> {
   const supabase = await createClient();
   const { error } = await supabase.rpc("set_round_anonymity", { p_round_id: roundId, p_is_anonymous: isAnonymous });
-  if (error) return { error: error.message };
+  if (error) return { error: toFriendlyError(error) };
   revalidatePath("/admin/format");
   return { success: true };
 }
@@ -111,7 +114,7 @@ export async function setAllRoundsAnonymity(competitionId: string, isAnonymous: 
     p_competition_id: competitionId,
     p_is_anonymous: isAnonymous,
   });
-  if (error) return { error: error.message };
+  if (error) return { error: toFriendlyError(error) };
   revalidatePath("/admin/format");
   return { success: true };
 }
@@ -140,12 +143,12 @@ export async function toggleFormatBlock(
 
     if (existing) {
       const { error } = await supabase.from("round_format_blocks").delete().eq("id", existing.id);
-      if (error) return { error: error.message };
+      if (error) return { error: toFriendlyError(error) };
     } else {
       const { error } = await supabase
         .from("round_format_blocks")
         .insert({ round_id: roundId, format_block_id: block.id });
-      if (error) return { error: error.message };
+      if (error) return { error: toFriendlyError(error) };
     }
   } else {
     const { data: categoryBlocks } = await supabase.from("format_blocks").select("id").eq("category", category);
@@ -156,12 +159,12 @@ export async function toggleFormatBlock(
         .delete()
         .eq("round_id", roundId)
         .in("format_block_id", ids);
-      if (error) return { error: error.message };
+      if (error) return { error: toFriendlyError(error) };
     }
     const { error } = await supabase
       .from("round_format_blocks")
       .insert({ round_id: roundId, format_block_id: block.id });
-    if (error) return { error: error.message };
+    if (error) return { error: toFriendlyError(error) };
   }
 
   revalidatePath("/admin/format");
@@ -187,7 +190,7 @@ export async function saveFormatBlockConfig(
     .update({ config })
     .eq("round_id", roundId)
     .eq("format_block_id", block.id);
-  if (error) return { error: error.message };
+  if (error) return { error: toFriendlyError(error) };
 
   revalidatePath("/admin/format");
   return { success: true };
@@ -196,7 +199,7 @@ export async function saveFormatBlockConfig(
 export async function addRound(competitionId: string): Promise<ActionResult> {
   const supabase = await createClient();
   const { error } = await supabase.rpc("add_round", { p_competition_id: competitionId });
-  if (error) return { error: error.message };
+  if (error) return { error: toFriendlyError(error) };
   revalidatePath("/admin/format");
   return { success: true };
 }
@@ -204,7 +207,7 @@ export async function addRound(competitionId: string): Promise<ActionResult> {
 export async function removeRound(roundId: string): Promise<ActionResult> {
   const supabase = await createClient();
   const { error } = await supabase.rpc("remove_round", { p_round_id: roundId });
-  if (error) return { error: error.message };
+  if (error) return { error: toFriendlyError(error) };
   revalidatePath("/admin/format");
   return { success: true };
 }
@@ -226,7 +229,7 @@ export async function toggleScoringOverride(
     await insertDefaultScoreItems(supabase, rule.id);
   } else {
     const { error } = await supabase.from("scoring_rules").delete().eq("round_id", roundId);
-    if (error) return { error: error.message };
+    if (error) return { error: toFriendlyError(error) };
   }
 
   revalidatePath("/admin/format");
@@ -242,7 +245,7 @@ export async function saveScoreItems(
     p_scoring_rule_id: scoringRuleId,
     p_items: items,
   });
-  if (error) return { error: error.message };
+  if (error) return { error: toFriendlyError(error) };
   revalidatePath("/admin/format");
   return { success: true };
 }
@@ -256,7 +259,7 @@ export async function addScoreItem(
     p_scoring_rule_id: scoringRuleId,
     p_template_key: templateKey,
   });
-  if (error) return { error: error.message };
+  if (error) return { error: toFriendlyError(error) };
   revalidatePath("/admin/format");
   return { success: true, id: data as string };
 }

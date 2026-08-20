@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
+import { toFriendlyError } from "@/lib/actionError";
 
 type ActionResult = { success: true } | { error: string };
 
@@ -36,16 +37,18 @@ export async function castVote(roundId: string, submissionId: string): Promise<A
   });
 
   if (error) {
-    if (error.code === "23505") {
-      if (error.message.includes("voter_ip")) {
-        return { error: "這個網路連線本輪已經投過票了(同網路只能投一票,避免灌票)" };
-      }
-      return { error: "你這輪已經投過票了" };
-    }
-    if (error.message.includes("cannot vote for your own submission")) {
-      return { error: "不能投給自己的作品" };
-    }
-    return { error: error.message };
+    return {
+      error: toFriendlyError(error, [
+        { test: (_m, c) => c === "23505", friendly: (error.message.includes("voter_ip")
+          ? "這個網路連線本輪已經投過票了（同網路只能投一票，避免灌票）"
+          : "你這輪已經投過票了") },
+        { test: (m) => m.includes("cannot vote for your own submission"), friendly: "不能投給自己的作品" },
+        { test: (m) => m.includes("not approved for voting"), friendly: "這個作品還沒有審核通過，不能投票" },
+        { test: (m) => m.includes("has been eliminated"), friendly: "這位參賽者已被淘汰，不能再投票" },
+        { test: (m) => m.includes("voting has not opened"), friendly: "這一輪投票還沒開始" },
+        { test: (m) => m.includes("voting has closed"), friendly: "這一輪投票已經結束" },
+      ]),
+    };
   }
 
   revalidatePath("/vote");

@@ -1,8 +1,11 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { toFriendlyError } from "@/lib/actionError";
 
 type ActionResult = { success: true } | { error: string };
+
+const MAX_COMMENT_LENGTH = 2000;
 
 export interface CommentRow {
   id: string;
@@ -27,7 +30,7 @@ interface RawCommentRow {
 export async function fetchSubmissionComments(submissionId: string): Promise<CommentRow[] | { error: string }> {
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("get_submission_comments", { p_submission_id: submissionId });
-  if (error) return { error: error.message };
+  if (error) return { error: toFriendlyError(error) };
 
   return ((data ?? []) as unknown as RawCommentRow[]).map((r) => ({
     id: r.comment_id,
@@ -49,6 +52,7 @@ export async function submitComment(submissionId: string, body: string): Promise
 
   const trimmed = body.trim();
   if (!trimmed) return { error: "留言不能是空的" };
+  if (trimmed.length > MAX_COMMENT_LENGTH) return { error: `留言最長 ${MAX_COMMENT_LENGTH} 字` };
 
   // 不能用預設 .select() 帶回結果——commenter_id 誰都不給讀,PostgREST 的
   // Prefer: return=representation 會連那個欄位一起要,直接 403(見 HANDOFF 踩坑記錄)。
@@ -59,10 +63,12 @@ export async function submitComment(submissionId: string, body: string): Promise
   });
 
   if (error) {
-    if (error.message.includes("cannot comment on your own submission")) {
-      return { error: "不能留言給自己的作品" };
-    }
-    return { error: error.message };
+    return {
+      error: toFriendlyError(error, [
+        { test: (m) => m.includes("cannot comment on your own submission"), friendly: "不能留言給自己的作品" },
+        { test: (m) => m.includes("wait a moment before commenting again"), friendly: "留言太頻繁，請稍等一下再送" },
+      ]),
+    };
   }
 
   return { success: true };
@@ -77,6 +83,6 @@ export async function endorseComment(commentId: string, percent: number): Promis
     .update({ endorsement_percent: clamped, endorsed_at: new Date().toISOString() })
     .eq("id", commentId);
 
-  if (error) return { error: error.message };
+  if (error) return { error: toFriendlyError(error) };
   return { success: true };
 }

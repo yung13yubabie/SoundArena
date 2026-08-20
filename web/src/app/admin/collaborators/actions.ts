@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { toFriendlyError } from "@/lib/actionError";
 
 type ActionResult = { success: true } | { error: string };
 
@@ -36,7 +37,7 @@ export async function inviteCollaboratorByEmail(
   const { data: foundRaw, error: lookupError } = await supabase
     .rpc("find_profile_by_email", { p_competition_id: competitionId, p_email: trimmed })
     .maybeSingle();
-  if (lookupError) return { error: lookupError.message };
+  if (lookupError) return { error: toFriendlyError(lookupError) };
   const found = foundRaw as unknown as FoundProfile | null;
   if (!found) return { error: "找不到用這個 email 註冊的帳號——對方需要先用這個 email 登入過 SoundArena 一次" };
   if (found.id === user.id) return { error: "不能邀請自己" };
@@ -53,9 +54,12 @@ export async function inviteCollaboratorByEmail(
   });
 
   if (error) {
-    if (error.code === "23505") return { error: "這個人已經是協作者了" };
-    if (error.code === "42501") return { error: "你的權限不足——只能給出你自己也有的權限" };
-    return { error: error.message };
+    return {
+      error: toFriendlyError(error, [
+        { test: (_m, c) => c === "23505", friendly: "這個人已經是協作者了" },
+        { test: (_m, c) => c === "42501", friendly: "你的權限不足——只能給出你自己也有的權限" },
+      ]),
+    };
   }
 
   revalidatePath("/admin/collaborators");
@@ -77,7 +81,7 @@ export async function updateCollaboratorPermissions(
       can_invite: permissions.canInvite,
     })
     .eq("id", collaboratorId);
-  if (error) return { error: error.message };
+  if (error) return { error: toFriendlyError(error) };
   revalidatePath("/admin/collaborators");
   return { success: true };
 }
@@ -85,7 +89,7 @@ export async function updateCollaboratorPermissions(
 export async function removeCollaborator(collaboratorId: string): Promise<ActionResult> {
   const supabase = await createClient();
   const { error } = await supabase.from("competition_collaborators").delete().eq("id", collaboratorId);
-  if (error) return { error: error.message };
+  if (error) return { error: toFriendlyError(error) };
   revalidatePath("/admin/collaborators");
   return { success: true };
 }

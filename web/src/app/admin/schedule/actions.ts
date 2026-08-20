@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { toFriendlyError } from "@/lib/actionError";
 
 type ActionResult = { success: true } | { error: string };
 
@@ -36,7 +37,7 @@ export async function saveSchedule(input: ScheduleInput): Promise<ActionResult> 
     p_announcement_ends_at: orNull(input.announcementEnd),
     p_registration_closes_at: orNull(input.registrationDeadline),
   });
-  if (competitionError) return { error: competitionError.message };
+  if (competitionError) return { error: toFriendlyError(competitionError) };
 
   // Applied uniformly to every round for now — the schedule screen doesn't yet
   // support per-round submission/voting windows (see SPEC.md 第2節 "僅開放特定
@@ -49,7 +50,7 @@ export async function saveSchedule(input: ScheduleInput): Promise<ActionResult> 
     p_voting_opens_at: orNull(input.votingStart),
     p_voting_closes_at: orNull(input.votingEnd),
   });
-  if (roundsError) return { error: roundsError.message };
+  if (roundsError) return { error: toFriendlyError(roundsError) };
 
   revalidatePath("/admin/schedule");
   return { success: true };

@@ -2,8 +2,12 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { toFriendlyError } from "@/lib/actionError";
 
 type ActionResult = { success: true } | { error: string };
+
+const MAX_TITLE_LENGTH = 200;
+const MAX_LYRICS_LENGTH = 30000;
 
 export interface SunoShareInfo {
   sharerHandle: string;
@@ -22,6 +26,15 @@ export type VerifySunoResult =
 // 公開的「用 content_id 查標題」端點(這輪試過 /api/clip/、studio-api.suno.ai 等常見路徑
 // 都不通),所以標題改成使用者自己輸入,不再假裝能自動帶出。
 export async function verifySunoSharer(url: string): Promise<VerifySunoResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { kind: "error", message: "請先登入" };
+
+  const { error: rateLimitError } = await supabase.rpc("check_suno_verify_rate_limit");
+  if (rateLimitError) return { kind: "error", message: "請求太頻繁，請稍等一下再試" };
+
   const code = (url.match(/\/s\/([A-Za-z0-9]+)/) || url.match(/[?&]sh=([A-Za-z0-9]+)/) || [])[1];
   if (!code) return { kind: "invalid" };
 
@@ -74,6 +87,10 @@ export async function submitEntry(input: SubmitEntryInput): Promise<ActionResult
   } = await supabase.auth.getUser();
   if (!user) return { error: "請先登入" };
 
+  const trimmedTitle = input.title.trim();
+  if (trimmedTitle.length > MAX_TITLE_LENGTH) return { error: `標題最長 ${MAX_TITLE_LENGTH} 字` };
+  if (input.lyrics.length > MAX_LYRICS_LENGTH) return { error: `歌詞最長 ${MAX_LYRICS_LENGTH} 字` };
+
   // 不信任 client 傳來的 sharerHandle——資安複查發現舊版直接相信 client,攻擊者可以
   // 跳過 verifySunoSharer() 帶假身份送出投稿。這裡在伺服器端重新呼叫 Suno API 驗證一次。
   const verify = await verifySunoSharer(input.sunoShareUrl);
@@ -100,8 +117,9 @@ export async function submitEntry(input: SubmitEntryInput): Promise<ActionResult
   });
 
   if (error) {
-    if (error.code === "23505") return { error: "這個輪次你已經投稿過了" };
-    return { error: error.message };
+    return {
+      error: toFriendlyError(error, [{ test: (_m, c) => c === "23505", friendly: "這個輪次你已經投稿過了" }]),
+    };
   }
 
   // 通知事件是附加動作,失敗不該讓投稿本身失敗(見 register/actions.ts 同樣的慣例)。

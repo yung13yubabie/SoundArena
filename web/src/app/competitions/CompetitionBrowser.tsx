@@ -106,8 +106,7 @@ export function CompetitionBrowser({
         <div className="mb-7">
           <h1 className="font-display text-[30px]">{competitionName}</h1>
           <p className="mt-1.5 max-w-[680px] text-sm leading-relaxed text-ink-dim">
-            點選任一首開始播放，同一時間只會有一首在播。歌曲依輪次分組，點開輪次就能看到清單。音檔上傳（Cloudflare
-            R2）還沒接上，這裡先看得到清單，播放功能之後補上。
+            點選任一首開始播放，同一時間只會有一首在播。歌曲依輪次分組，點開輪次就能看到清單。線上播放功能還沒開放，這裡先看得到清單，之後補上。
           </p>
         </div>
 

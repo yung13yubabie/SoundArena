@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { SiteHeader } from "@/components/SiteHeader";
 import { Icon } from "@/lib/icons";
+import { parseSunoHandle } from "@/lib/suno";
 import { registerForCompetition, resubmitRegistration } from "./actions";
 
 type ReviewStatus = "pending_review" | "approved" | "rejected";
@@ -32,6 +33,11 @@ export function RegisterForm({ competitionId, competitionName, existing, registr
   const canSubmit = nickname.trim() !== "" && sunoHandle.trim() !== "";
 
   async function handleSubmit() {
+    const parsed = parseSunoHandle(sunoHandle);
+    if (!parsed.ok) {
+      setError(parsed.error);
+      return;
+    }
     setPending(true);
     setError(null);
     const formData = new FormData();
@@ -188,6 +194,11 @@ function ResubmitForm({
   const canSubmit = nickname.trim() !== "" && sunoHandle.trim() !== "";
 
   async function handleResubmit() {
+    const parsed = parseSunoHandle(sunoHandle);
+    if (!parsed.ok) {
+      setError(parsed.error);
+      return;
+    }
     setPending(true);
     setError(null);
     const result = await resubmitRegistration(registrationId, nickname, sunoHandle);

@@ -113,7 +113,7 @@ export function SubmitForm({ options }: { options: RoundOption[] }) {
         <div className="mb-7">
           <h1 className="font-display text-[30px]">投稿本輪作品</h1>
           <p className="mt-1.5 max-w-[680px] text-sm leading-relaxed text-ink-dim">
-            貼上 Suno 分享連結，系統會呼叫 Suno 公開 API 確認是不是你本人的作品；標題目前需要自己填寫（Suno 沒有公開的標題查詢端點）。
+            貼上 Suno 分享連結，我們會自動確認是不是你本人的作品；標題目前 Suno 那邊查不到，需要自己填寫。
           </p>
         </div>
 
@@ -165,7 +165,7 @@ export function SubmitForm({ options }: { options: RoundOption[] }) {
               />
               {state === "loading" && (
                 <div className="mt-2.5 flex items-center gap-2.5 rounded-[10px] border border-panel-border bg-white/[0.04] px-3.5 py-3 text-[12.5px] text-ink-dim">
-                  <span className="spinner" /> 呼叫 Suno API 中，正在比對投稿者身份…
+                  <span className="spinner" /> 驗證中，正在比對投稿者身份…
                 </div>
               )}
               {state === "invalid" && (
@@ -201,20 +201,15 @@ export function SubmitForm({ options }: { options: RoundOption[] }) {
                 className="w-full rounded-[10px] border border-panel-border bg-black/25 px-3.5 py-2.5 text-[13.5px] text-ink outline-none focus:border-accent/50"
                 placeholder="填寫這首作品的標題"
                 value={title}
+                maxLength={200}
                 onChange={(e) => setTitle(e.target.value)}
               />
             </div>
 
             <div className="mb-5">
               <label className="mb-1.5 block text-[12.5px] font-semibold text-ink-dim">上傳音檔案（播放用）</label>
-              <div className="rounded-[12px] border-1.5 border-dashed border-panel-border px-6.5 py-6.5 text-center text-[12.5px] text-ink-faint">
-                <Icon name="upload" className="inline-block" />
-                <br />
-                拖曳音檔到此，或點擊選擇檔案
-              </div>
-              <div className="mt-1.5 text-[11.5px] leading-relaxed text-ink-faint">
-                從 Suno 下載後上傳的原始檔案，將存放於私有儲存空間，播放時由系統動態簽發短效網址。實際上傳到
-                Cloudflare R2 的功能還沒接，這裡先只記錄投稿本身。
+              <div className="rounded-[12px] border border-panel-border bg-white/[0.03] px-4.5 py-4 text-[12.5px] text-ink-faint">
+                這個功能還沒開放，目前投稿只會記錄你貼的 Suno 連結，播放請直接點連結到 Suno 上聽。
               </div>
             </div>
 
@@ -224,6 +219,7 @@ export function SubmitForm({ options }: { options: RoundOption[] }) {
                 className="min-h-37.5 w-full resize-y rounded-[10px] border border-panel-border bg-black/25 px-3.5 py-2.5 text-[13.5px] leading-relaxed text-ink outline-none focus:border-accent/50"
                 placeholder="請貼上完整歌詞（此欄位無法自動抓取，需自行提供）"
                 value={lyrics}
+                maxLength={30000}
                 onChange={(e) => setLyrics(e.target.value)}
               />
             </div>
@@ -269,7 +265,7 @@ export function SubmitForm({ options }: { options: RoundOption[] }) {
             </div>
             <div className="flex justify-between border-t border-panel-border py-1.75 text-[11.5px] text-ink-faint">
               <span>資料來源</span>
-              <span>Suno 公開分享 API</span>
+              <span>Suno 官方資料</span>
             </div>
             <div className="flex justify-between border-t border-panel-border py-1.75 text-[11.5px] text-ink-faint">
               <span>身份比對</span>

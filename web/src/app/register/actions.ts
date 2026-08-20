@@ -2,8 +2,12 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { parseSunoHandle } from "@/lib/suno";
+import { toFriendlyError } from "@/lib/actionError";
 
 type ActionResult = { success: true } | { error: string };
+
+const MAX_DISPLAY_NAME_LENGTH = 60;
 
 export async function registerForCompetition(formData: FormData): Promise<ActionResult> {
   const supabase = await createClient();
@@ -14,19 +18,24 @@ export async function registerForCompetition(formData: FormData): Promise<Action
 
   const competitionId = String(formData.get("competition_id") ?? "");
   const displayName = String(formData.get("display_name") ?? "").trim();
-  const sunoHandle = String(formData.get("suno_handle") ?? "").trim();
+  const rawSunoHandle = String(formData.get("suno_handle") ?? "");
   if (!competitionId) return { error: "找不到要報名的比賽" };
-  if (!displayName || !sunoHandle) return { error: "請填寫暱稱與 Suno 帳號" };
+  if (!displayName) return { error: "請填寫暱稱" };
+  if (displayName.length > MAX_DISPLAY_NAME_LENGTH) return { error: `暱稱最長 ${MAX_DISPLAY_NAME_LENGTH} 字` };
+
+  const parsed = parseSunoHandle(rawSunoHandle);
+  if (!parsed.ok) return { error: parsed.error };
 
   const { error } = await supabase.from("registrations").insert({
     competition_id: competitionId,
     user_id: user.id,
     display_name: displayName,
-    suno_handle: sunoHandle,
+    suno_handle: parsed.handle,
   });
   if (error) {
-    if (error.code === "23505") return { error: "你已經報名過這場比賽了" };
-    return { error: error.message };
+    return {
+      error: toFriendlyError(error, [{ test: (_m, c) => c === "23505", friendly: "你已經報名過這場比賽了" }]),
+    };
   }
 
   // 通知事件是報名成功之後的附加動作,失敗不該讓整個報名動作失敗(跟
@@ -55,7 +64,7 @@ export async function setRegistrationNotifications(registrationId: string, enabl
     p_registration_id: registrationId,
     p_enabled: enabled,
   });
-  if (error) return { error: error.message };
+  if (error) return { error: toFriendlyError(error) };
   revalidatePath("/status");
   return { success: true };
 }
@@ -67,21 +76,30 @@ export async function resubmitRegistration(
 ): Promise<ActionResult> {
   const supabase = await createClient();
   const trimmedName = displayName.trim();
-  const trimmedHandle = sunoHandle.trim();
-  if (!trimmedName || !trimmedHandle) return { error: "請填寫暱稱與 Suno 帳號" };
+  if (!trimmedName) return { error: "請填寫暱稱" };
+  if (trimmedName.length > MAX_DISPLAY_NAME_LENGTH) return { error: `暱稱最長 ${MAX_DISPLAY_NAME_LENGTH} 字` };
+
+  const parsed = parseSunoHandle(sunoHandle);
+  if (!parsed.ok) return { error: parsed.error };
 
   const { error } = await supabase.rpc("resubmit_registration", {
     p_registration_id: registrationId,
     p_display_name: trimmedName,
-    p_suno_handle: trimmedHandle,
+    p_suno_handle: parsed.handle,
   });
   if (error) {
-    const cooldownMatch = error.message.match(/resubmit cooldown: wait (\d+) seconds/);
-    if (cooldownMatch) {
-      const minutes = Math.ceil(Number(cooldownMatch[1]) / 60);
-      return { error: `送出太頻繁，請等約 ${minutes} 分鐘後再重新送出` };
-    }
-    return { error: error.message };
+    return {
+      error: toFriendlyError(error, [
+        {
+          test: (m) => /resubmit cooldown: wait (\d+) seconds/.test(m),
+          friendly: (() => {
+            const match = error.message.match(/resubmit cooldown: wait (\d+) seconds/);
+            const minutes = match ? Math.ceil(Number(match[1]) / 60) : 1;
+            return `送出太頻繁，請等約 ${minutes} 分鐘後再重新送出`;
+          })(),
+        },
+      ]),
+    };
   }
 
   revalidatePath("/register");

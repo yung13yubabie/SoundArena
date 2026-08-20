@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { toFriendlyError } from "@/lib/actionError";
 
 type ActionResult = { success: true } | { error: string };
 
@@ -18,7 +19,7 @@ export async function saveScore(submissionId: string, scoreItemId: string, rawVa
       { submission_id: submissionId, score_item_id: scoreItemId, raw_value: rawValue, entered_by: user.id },
       { onConflict: "submission_id,score_item_id" },
     );
-  if (error) return { error: error.message };
+  if (error) return { error: toFriendlyError(error) };
 
   revalidatePath("/judge");
   return { success: true };
@@ -35,7 +36,7 @@ export async function setEliminated(
     p_round_id: roundId,
     p_eliminated: eliminated,
   });
-  if (error) return { error: error.message };
+  if (error) return { error: toFriendlyError(error) };
 
   revalidatePath("/judge");
   revalidatePath("/status");

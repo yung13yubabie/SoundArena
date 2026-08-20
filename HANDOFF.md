@@ -891,6 +891,22 @@ B2 迴圈、feedback RLS(非管理員讀不到/管理員讀得到)都用真實 a
 
 `npx tsc --noEmit`、`npx eslint`、`npm run build` 全程乾淨(warning 只有兩個跟這輪改動無關的既有項目)。所有 PoC 腳本都是用 Admin API 建立的拋棄式帳號,測完即刪,沒有殘留測試資料;所有結果都用獨立的 service_role SELECT 覆核過,不是只信 PoC 自己的回應。已 commit(`dbe6f0d`)、push、`vercel deploy --prod` 上線。
 
+## 08-21:第二輪獨立複查
+
+使用者自己抓到兩個真實產品問題(Suno 欄位可誤填 YouTube 連結、比賽建立後無法刪除),加上另一份第三方 AI 複查報告。細節跟決策依據都寫進 [ADR-0013](docs/adr/0013-independent-review-round-2.md),這裡只記重點:
+
+- **Suno 帳號欄位驗證**:production 真的查到一筆 `suno_handle` 被填成 YouTube 連結的既有報名(還是 `pending_review`,沒被誤核准)。新增 `web/src/lib/suno.ts` 統一驗證,前後端都套用。
+- **Rate limit 競態條件(第三方複查抓到,已確認為真)**:原本的 SELECT-EXISTS trigger 在併發下會漏放——50 併發漏放 5 筆、100 併發漏放 6 筆。改用 `pg_advisory_xact_lock` 序列化,修復後不管併發多少都精準只放行 1 筆。
+- **verifySunoSharer() 濫用防護**:原本沒有 auth check、沒有 rate limit,任何人都能把我們的站當 Suno API 免費代理。補上登入要求 + 2 秒冷卻。
+- **輸入長度上限**:feedback/comments/submissions/registrations/profiles/competitions 的自由輸入欄位補上 DB constraint + server 端驗證兩層。
+- **原始 DB 錯誤外洩清理**:新增 `web/src/lib/actionError.ts` 的 `toFriendlyError()`,已知錯誤給清楚訊息,未知錯誤只顯示「操作失敗 + 錯誤代碼」,真正內容記到伺服器 log。套用到全部相關 Server Action。
+- **假上傳控制項**:`submit/SubmitForm.tsx` 的拖曳上傳區塊過去是純裝飾、不能真的操作,且文案還寫著已經棄用的 Cloudflare R2。已改成誠實的「還沒開放」提示,`competitions/CompetitionBrowser.tsx` 同一批過時文案一併修掉。
+- **x-forwarded-for 偽造測試(第三方複查列為最高優先)**:實測結果是安全的——部署暫時的 header 回顯端點到 production,偽造 `X-Forwarded-For` 完全被 Vercel edge 覆寫,`vote/actions.ts` 現有寫法不需要換架構。測試端點已刪除。
+
+全部用真實併發 PoC / 真實帳號驗證過,`tsc`/`eslint`/`build` 全程乾淨。
+
+**這輪誠實記錄、還沒處理的部分**(細節見 ADR-0013 結尾):主辦資格「審核制」(使用者想反轉 ADR-0010 的自助通過設計,需要先確認既有主辦人要不要一併重新送審)、比賽刪除功能(目前完全沒有任何刪除路徑)、Discord OAuth consent 文案與實際 scope 行為矛盾(需要拆成兩段式 OAuth,是 auth 流程改動)、CSP 仍是 `unsafe-inline` 基礎版沒有 nonce 化。
+
 ### 下一步
 
-ADR-0011 全部項目已完成,沒有已知遺留的資安限制。接下來若要繼續,是回到更早清單裡「還沒做」的部分:B2 實際上傳/播放 UI(`storage.ts` 基礎設施已就緒但零使用者介面)、好友測試賽的完整端對端點擊驗證、留言審核/不當言論掃描功能(使用者提過但規格不夠明確,需要先釐清)、Discord Server ID / Resend API key(待使用者提供才能真的送出通知)。
+前三項(組織審核制、比賽刪除、Discord OAuth 重新設計)都需要先跟使用者確認設計細節,不是可以直接猜著做的範圍——下一個 session 如果使用者已經回覆,直接照當時的回覆內容實作;如果還沒回覆,先問清楚再動手。CSP nonce 化跟 B2 上傳/播放 UI 是純工程量的部分,隨時可以直接開工。
