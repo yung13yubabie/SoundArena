@@ -2,6 +2,12 @@
 .DS_Store
 Thumbs.db
 
+# 環境變數/secret——web/.gitignore 已經擋了 web/.env*,這裡補根目錄層級,防止有人
+# 不小心在 repo 根目錄(不是 web/ 底下)建立 .env.local 之類的檔案時漏擋。
+**/.env
+**/.env.*
+!**/.env.example
+
 # design/verify.js 產出的截圖,可重跑腳本重新產生,不當永久檔案看
 design/screenshots/
 

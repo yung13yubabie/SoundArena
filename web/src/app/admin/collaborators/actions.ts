@@ -34,7 +34,7 @@ export async function inviteCollaboratorByEmail(
   if (!trimmed) return { error: "請輸入 email" };
 
   const { data: foundRaw, error: lookupError } = await supabase
-    .rpc("find_profile_by_email", { p_email: trimmed })
+    .rpc("find_profile_by_email", { p_competition_id: competitionId, p_email: trimmed })
     .maybeSingle();
   if (lookupError) return { error: lookupError.message };
   const found = foundRaw as unknown as FoundProfile | null;

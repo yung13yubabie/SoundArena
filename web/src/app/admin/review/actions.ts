@@ -16,15 +16,11 @@ export async function reviewSubmission(
   } = await supabase.auth.getUser();
   if (!user) return { error: "請先登入" };
 
-  const { error } = await supabase
-    .from("submissions")
-    .update({
-      status,
-      reviewed_by: user.id,
-      reviewed_at: new Date().toISOString(),
-      review_note: note?.trim() || null,
-    })
-    .eq("id", submissionId);
+  const { error } = await supabase.rpc("review_submission", {
+    p_submission_id: submissionId,
+    p_status: status,
+    p_note: note?.trim() || null,
+  });
   if (error) return { error: error.message };
 
   revalidatePath("/admin/review");

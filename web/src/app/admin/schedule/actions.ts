@@ -28,16 +28,14 @@ function orNull(value: string): string | null {
 export async function saveSchedule(input: ScheduleInput): Promise<ActionResult> {
   const supabase = await createClient();
 
-  const { error: competitionError } = await supabase
-    .from("competitions")
-    .update({
-      promotion_starts_at: orNull(input.promotionStart),
-      promotion_ends_at: orNull(input.promotionEnd),
-      announcement_starts_at: orNull(input.announcementStart),
-      announcement_ends_at: orNull(input.announcementEnd),
-      registration_closes_at: orNull(input.registrationDeadline),
-    })
-    .eq("id", input.competitionId);
+  const { error: competitionError } = await supabase.rpc("save_competition_schedule", {
+    p_competition_id: input.competitionId,
+    p_promotion_starts_at: orNull(input.promotionStart),
+    p_promotion_ends_at: orNull(input.promotionEnd),
+    p_announcement_starts_at: orNull(input.announcementStart),
+    p_announcement_ends_at: orNull(input.announcementEnd),
+    p_registration_closes_at: orNull(input.registrationDeadline),
+  });
   if (competitionError) return { error: competitionError.message };
 
   // Applied uniformly to every round for now — the schedule screen doesn't yet

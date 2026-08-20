@@ -30,13 +30,11 @@ export async function setEliminated(
   eliminated: boolean,
 ): Promise<ActionResult> {
   const supabase = await createClient();
-  const { error } = await supabase
-    .from("registrations")
-    .update({
-      status: eliminated ? "eliminated" : "active",
-      eliminated_in_round_id: eliminated ? roundId : null,
-    })
-    .eq("id", registrationId);
+  const { error } = await supabase.rpc("set_registration_eliminated", {
+    p_registration_id: registrationId,
+    p_round_id: roundId,
+    p_eliminated: eliminated,
+  });
   if (error) return { error: error.message };
 
   revalidatePath("/judge");

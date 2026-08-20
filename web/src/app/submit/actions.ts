@@ -72,18 +72,31 @@ export async function submitEntry(input: SubmitEntryInput): Promise<ActionResult
   const {
     data: { user },
   } = await supabase.auth.getUser();
+  if (!user) return { error: "請先登入" };
 
-  const { error } = await supabase.from("submissions").insert({
-    round_id: input.roundId,
-    registration_id: input.registrationId,
-    suno_share_url: input.sunoShareUrl,
-    title: input.title,
-    cover_image_url: input.coverImageUrl,
-    sharer_handle: input.sharerHandle,
-    lyrics: input.lyrics,
-    allow_public_playback: input.allowPublicPlayback,
-    // 身份比對(verifySunoSharer)已經在呼叫這個 action 之前跑完並通過,直接進待審核。
-    status: "pending_review",
+  // 不信任 client 傳來的 sharerHandle——資安複查發現舊版直接相信 client,攻擊者可以
+  // 跳過 verifySunoSharer() 帶假身份送出投稿。這裡在伺服器端重新呼叫 Suno API 驗證一次。
+  const verify = await verifySunoSharer(input.sunoShareUrl);
+  if (verify.kind !== "ok") return { error: "Suno 分享連結驗證失敗，請確認連結正確" };
+
+  const { data: registration } = await supabase
+    .from("registrations")
+    .select("suno_handle")
+    .eq("id", input.registrationId)
+    .maybeSingle();
+  if (!registration || registration.suno_handle.toLowerCase() !== verify.info.sharerHandle.toLowerCase()) {
+    return { error: "Suno 分享者帳號跟報名時填的帳號不符" };
+  }
+
+  const { error } = await supabase.rpc("submit_entry", {
+    p_round_id: input.roundId,
+    p_registration_id: input.registrationId,
+    p_suno_share_url: input.sunoShareUrl,
+    p_title: input.title,
+    p_cover_image_url: input.coverImageUrl,
+    p_sharer_handle: verify.info.sharerHandle,
+    p_lyrics: input.lyrics,
+    p_allow_public_playback: input.allowPublicPlayback,
   });
 
   if (error) {

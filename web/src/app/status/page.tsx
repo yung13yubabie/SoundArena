@@ -8,6 +8,7 @@ import { CommentsPanel } from "@/components/CommentsPanel";
 import { SUBMISSION_STATE_META, STATE_PILL_CLASS, type SubmissionState } from "@/lib/mockData";
 import { PrivacyPanel, type PrivacyRegistration, type PrivacySubmission } from "./PrivacyPanel";
 import { NotificationToggle } from "./NotificationToggle";
+import { DisplayNameEditor } from "./DisplayNameEditor";
 
 interface RegistrationRow {
   id: string;
@@ -67,6 +68,8 @@ export default async function StatusPage() {
   const userId = claims?.claims?.sub as string | undefined;
   if (!userId) redirect("/login");
 
+  const { data: profile } = await supabase.from("profiles").select("display_name").eq("id", userId).maybeSingle();
+
   const { data: registrations } = await supabase
     .from("registrations")
     .select(
@@ -114,6 +117,9 @@ export default async function StatusPage() {
           <p className="mt-1.5 max-w-[680px] text-sm leading-relaxed text-ink-dim">
             查看你在每場比賽、每一輪的投稿進度。已被淘汰的話，後續輪次只能投票，不能再投稿。
           </p>
+          <div className="mt-2.5">
+            <DisplayNameEditor initialName={profile?.display_name ?? "（尚未設定名稱）"} />
+          </div>
         </div>
 
         {regs.length === 0 ? (

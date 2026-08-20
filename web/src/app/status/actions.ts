@@ -5,6 +5,24 @@ import { createClient } from "@/lib/supabase/server";
 
 type ActionResult = { success: true } | { error: string };
 
+export async function updateDisplayName(name: string): Promise<ActionResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "請先登入" };
+
+  const trimmed = name.trim();
+  if (!trimmed) return { error: "暱稱不能是空的" };
+  if (trimmed.length > 40) return { error: "暱稱最長 40 個字" };
+
+  const { error } = await supabase.from("profiles").update({ display_name: trimmed }).eq("id", user.id);
+  if (error) return { error: error.message };
+  revalidatePath("/status");
+  revalidatePath(`/u/${user.id}`);
+  return { success: true };
+}
+
 export async function setRegistrationPublic(registrationId: string, isPublic: boolean): Promise<ActionResult> {
   const supabase = await createClient();
   const { error } = await supabase.rpc("set_registration_public", {
