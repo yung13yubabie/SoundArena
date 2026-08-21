@@ -26,12 +26,16 @@ export async function registerForCompetition(formData: FormData): Promise<Action
   const parsed = parseSunoHandle(rawSunoHandle);
   if (!parsed.ok) return { error: parsed.error };
 
-  const { error } = await supabase.from("registrations").insert({
-    competition_id: competitionId,
-    user_id: user.id,
-    display_name: displayName,
-    suno_handle: parsed.handle,
-  });
+  const { data: registration, error } = await supabase
+    .from("registrations")
+    .insert({
+      competition_id: competitionId,
+      user_id: user.id,
+      display_name: displayName,
+      suno_handle: parsed.handle,
+    })
+    .select("id")
+    .single();
   if (error) {
     return {
       error: toFriendlyError(error, [{ test: (_m, c) => c === "23505", friendly: "你已經報名過這場比賽了" }]),
@@ -40,14 +44,15 @@ export async function registerForCompetition(formData: FormData): Promise<Action
 
   // 通知事件是報名成功之後的附加動作,失敗不該讓整個報名動作失敗(跟
   // auth/callback/route.ts 的 joinDiscordGuild() 是同一種「非致命附加動作」慣例)。
+  // title/body 不再由這裡組字串傳過去——ADR-0015 第 4 項的完整修法:呼叫端只傳
+  // event_type + resource_id,實際文案由 create_notification_event() 自己產生,
+  // 呼叫端無法注入任意內容。
   try {
-    const { data: competition } = await supabase.from("competitions").select("name").eq("id", competitionId).maybeSingle();
     await supabase.rpc("create_notification_event", {
       p_user_id: user.id,
       p_competition_id: competitionId,
       p_event_type: "registration_confirmed",
-      p_title: "報名成功",
-      p_body: `已收到你對「${competition?.name ?? "這場比賽"}」的報名，等主辦人審核。`,
+      p_resource_id: registration.id,
     });
   } catch {
     // 通知事件建立失敗不影響報名本身已經成功

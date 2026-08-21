@@ -113,7 +113,7 @@ export async function submitEntry(input: SubmitEntryInput): Promise<ActionResult
     return { error: "Suno 分享者帳號跟報名時填的帳號不符" };
   }
 
-  const { error } = await supabase.rpc("submit_entry", {
+  const { data: submissionId, error } = await supabase.rpc("submit_entry", {
     p_round_id: input.roundId,
     p_registration_id: input.registrationId,
     p_suno_share_url: verify.info.canonicalUrl,
@@ -131,19 +131,20 @@ export async function submitEntry(input: SubmitEntryInput): Promise<ActionResult
   }
 
   // 通知事件是附加動作,失敗不該讓投稿本身失敗(見 register/actions.ts 同樣的慣例)。
+  // title/body 不再由這裡組字串傳過去,見 register/actions.ts 同一處的說明。
   try {
-    if (user) {
-      const [{ data: registration }, { data: round }] = await Promise.all([
-        supabase.from("registrations").select("competition_id").eq("id", input.registrationId).maybeSingle(),
-        supabase.from("rounds").select("name").eq("id", input.roundId).maybeSingle(),
-      ]);
+    if (user && submissionId) {
+      const { data: registration } = await supabase
+        .from("registrations")
+        .select("competition_id")
+        .eq("id", input.registrationId)
+        .maybeSingle();
       if (registration) {
         await supabase.rpc("create_notification_event", {
           p_user_id: user.id,
           p_competition_id: registration.competition_id,
           p_event_type: "submission_confirmed",
-          p_title: "投稿已送出",
-          p_body: `「${input.title}」已送出到「${round?.name ?? "本輪"}」，狀態轉為待人工審核。`,
+          p_resource_id: submissionId,
         });
       }
     }

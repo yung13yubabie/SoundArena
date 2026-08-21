@@ -935,10 +935,20 @@ P2 順手修的:`review_submission()` 補 `p_status` 白名單(原本接受完�
 
 全部用真實帳號 PoC 驗證過(含 TOCTOU 那個需要人工放大窗口才能穩定重現的),`tsc`/`eslint`/`build` 全程乾淨。已 commit、push、`vercel deploy --prod` 上線。
 
+## 08-21 更晚:補完擱置項目(通知架構、CSP nonce 化、CI + 分支保護)
+
+使用者要求把擱置清單補完,明確排除 Discord OAuth 重新設計跟實際設定發信(這兩項仍卡在需要使用者確認範圍/提供 API key)。細節見 [ADR-0016](docs/adr/0016-deferred-items-cleanup.md):
+
+1. **通知事件內容改成伺服器端產生**——`create_notification_event()` 簽章從 `title/body` 改成 `event_type + resource_id`,呼叫端從此無法注入任何自訂文字內容,ADR-0015 第 4 項的 blocker 正式解除。
+2. **CSP 從 `unsafe-inline` 改成 nonce-based**(僅 script-src,style-src 刻意保留 unsafe-inline,見 ADR-0016 說明)——照 `web/AGENTS.md` 指示先讀了這個 Next.js 版本內建的 CSP 文件才動手,不是憑舊版知識猜。`/login` 頁面原本是純靜態,已拆成 Server Component(`connection()` 強制動態)+ Client Component,不然 nonce 機制對它無效。用真實瀏覽器(claude-in-chrome)在本機 production server 上驗證過:CSP header 正確帶 nonce、Next.js 自動把同一個 nonce 套到 preload 資源、瀏覽器 console 零 CSP violation、首頁互動功能正常。同時補上 COOP/CORP。
+3. **新增 GitHub Actions CI**(`tsc`/`eslint`/`build`,實測不需要任何環境變數)+ **啟用 main 分支保護**(禁止 force push、禁止刪除、要求 CI 通過,不要求強制 PR review——理由見 ADR-0016)。
+
+`tsc`/`eslint`/`build` 全程乾淨,已 commit、push、`vercel deploy --prod` 上線,並在 GitHub 上啟用分支保護。
+
 ## 目前還沒處理的部分
 
-Discord OAuth consent 文案與實際 scope 行為矛盾(需要拆成兩段式 OAuth,是 auth 流程改動)、CSP 仍是 `unsafe-inline` 基礎版沒有 nonce 化、CSP 缺 COOP/CORP(HSTS/Permissions-Policy/Referrer-Policy/X-Content-Type-Options 已確認正式環境有送出)、通知 RPC 的完整重構(見上方第 4 項,Resend 上線前必做)、main branch protection(見上方,等使用者決定)、B2 物件孤兒清理(上傳功能還沒上線,不是立即問題)。
+Discord OAuth consent 文案與實際 scope 行為矛盾(需要拆成兩段式 OAuth,是 auth 流程改動,使用者已明確表示先不用)、實際設定 Resend/Discord 發信(需要使用者提供 API key/Server ID)、B2 物件孤兒清理(上傳功能還沒上線,不是立即問題)。
 
 ### 下一步
 
-Discord OAuth 重新設計、branch protection 啟用範圍,都需要先跟使用者確認才動手,不是可以直接猜著做的範圍。CSP nonce 化跟 B2 上傳/播放 UI 是純工程量的部分,隨時可以直接開工。
+Discord OAuth 重新設計需要先跟使用者確認範圍才動手。B2 上傳/播放 UI 是下一個比較大的功能區塊,可以直接開工;實際發信需要等使用者提供 Resend/Discord 憑證。
