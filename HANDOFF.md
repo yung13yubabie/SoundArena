@@ -973,6 +973,18 @@ P2 順手修的:`review_submission()` 補 `p_status` 白名單(原本接受完�
 
 留存清理目前是手動觸發,自動化排程(比如用 Vercel Cron 偵測比賽剛結束就自動跑)還沒做。Discord OAuth 兩段式重新設計(使用者已明確表示先不用)、實際設定 Resend/Discord 發信(需要使用者提供 API key/Server ID)、完整登入流程的瀏覽器測試(需要先確認/修正 Supabase Auth 的 Site URL 設定)都還卡著。
 
+## 08-22:留存清理自動化 + 留存政策文案
+
+使用者要求繼續處理上一輪列出的待辦(留存清理自動化排程),另外問「音檔留存清理 寫在報名說明/淘汰說明會不會比較好」。細節見 [ADR-0019](docs/adr/0019-audio-retention-cron-automation.md):
+
+1. **排名/清單判斷邏輯抽成共用函式**——`cleanupNonFinalistAudio()`(手動觸發)原本直接把判斷寫在 Server Action 裡,抽成 `web/src/lib/audioRetention.ts` 的 `planAudioRetention()`,手動觸發跟自動排程共用同一套邏輯,不重寫第二份。
+2. **新增 Vercel Cron 當保底**——`web/src/app/api/cron/cleanup-audio/route.ts` + `web/vercel.json`(每天一次)。用 `CRON_SECRET` bearer token 驗證呼叫者,用 `createServiceClient()`(service_role)直接寫 `submissions.audio_object_key`,**不透過** `clear_submission_audio()` RPC——那支 RPC 的權限檢查依賴 `auth.uid()`,service_role 底下永遠是 `null`,呼叫一定會被擋(跟這個 session 稍早 `revoke_organizer()` 踩過的坑同一個原因)。手動觸發路徑維持原本的 RPC + 權限檢查不變,cron 只是主辦人忘記手動清時的保底。
+3. **留存政策文案補三處**——報名頁(`RegisterForm.tsx` 開頭說明)、投稿頁上傳說明(`SubmitForm.tsx`)、狀態頁淘汰通知(`StatusSubmissionsList.tsx`),三處都強調「Suno 連結不受影響,仍可點擊收聽」。
+
+**真實驗證**:部署後對正式站 `/api/cron/cleanup-audio` 做了三次真實 curl 請求——不帶 header → 401、錯誤 secret → 401、正確 secret → 200 且回傳 `{"ok":true,"processed":[]}`。`processed: []` 另外用 service_role 查證過是資料現狀決定的正確結果(目前沒有任何比賽的決賽輪已截止投票),不是端點壞掉回空的假象。
+
+`tsc`/`eslint`/`build` 全程乾淨(eslint 剩 2 個跟本次改動無關的既有警告),已 commit、push(CI 綠燈)、`vercel --prod` 上線。`CRON_SECRET` 只進 `.env.local`(已確認 gitignore)跟 Vercel production 環境變數,沒進 repo。
+
 ### 下一步
 
-Discord OAuth 重新設計需要先跟使用者確認範圍才動手。留存清理的自動化排程可以直接開工;實際發信需要等使用者提供 Resend/Discord 憑證；完整登入流程的瀏覽器測試需要先請使用者確認/修正 Supabase Auth 的 Site URL 設定。
+Discord OAuth 重新設計需要先跟使用者確認範圍才動手。實際發信需要等使用者提供 Resend/Discord 憑證；完整登入流程的瀏覽器測試需要先請使用者確認/修正 Supabase Auth 的 Site URL 設定。留存清理自動化已完成,下次有比賽真的跑完全部賽程時,可以實際觀察 cron 排程觸發後 `processed` 是否正確清出資料(目前只驗證了「沒有東西該清時回空」的分支,還沒驗證過「真的有東西被清」的分支跑在 cron 路徑上——手動觸發路徑已經驗證過,邏輯共用同一個 `planAudioRetention()`,風險低但值得記錄)。
