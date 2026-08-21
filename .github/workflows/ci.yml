@@ -23,8 +23,10 @@ jobs:
 
       - run: npm ci
 
-      - run: npx tsc --noEmit
-
       - run: npx eslint .
 
+      # `next build` 內建的型別檢查涵蓋 tsc --noEmit 要做的事,而且它會先產生
+      # Next.js 自己生成的型別(比如 layout.tsx 用到的 LayoutProps)才做檢查——
+      # 乾淨 checkout 沒有 .next 目錄時,獨立跑 tsc --noEmit 會因為找不到這些
+      # 生成型別而失敗,本機開發機器不會踩到是因為 .next 目錄通常已經存在。
       - run: npm run build
