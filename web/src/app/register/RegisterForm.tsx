@@ -126,6 +126,7 @@ export function RegisterForm({ competitionId, competitionName, existing, registr
           <h1 className="font-display text-[30px]">報名參賽 — {competitionName}</h1>
           <p className="mt-1.5 max-w-[680px] text-sm leading-relaxed text-ink-dim">
             填寫基本資料並提供 Suno 帳號，送出後由主辦人審核，審核通過才能投稿。
+            投票開始前可自行刪除投稿並重新上傳；比賽完全結束後，只有最終排名前三名的音檔會保留在站內，其餘參賽者的音檔將會清除（Suno 連結不受影響）。
           </p>
         </div>
 

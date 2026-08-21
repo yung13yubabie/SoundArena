@@ -336,6 +336,7 @@ export function SubmitForm({ options }: { options: RoundOption[] }) {
               )}
               <div className="mt-1.5 text-[11.5px] leading-relaxed text-ink-faint">
                 從 Suno 下載後上傳原始檔案，通過審核的作品會在站內直接播放；不上傳的話，其他人只能點連結到 Suno 上聽。
+                比賽完全結束後，只有最終排名前三名的音檔會保留，其餘參賽者的音檔將會清除（Suno 連結不受影響，仍可點擊收聽）。
               </div>
             </div>
 

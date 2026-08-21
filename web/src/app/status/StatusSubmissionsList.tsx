@@ -100,9 +100,14 @@ export function StatusSubmissionsList({
               )}
 
               {reg.status === "eliminated" && (
-                <div className="mb-3 flex items-center gap-2.5 rounded-[11px] border border-bad/30 bg-bad/8 px-4 py-2.75 text-[12.5px] text-bad">
-                  <Icon name="alert" size={15} />
-                  你已於「{reg.eliminatedRoundName ?? "某輪"}」遭淘汰 — 後續輪次僅保留投票資格，無法再投稿
+                <div className="mb-3 rounded-[11px] border border-bad/30 bg-bad/8 px-4 py-2.75 text-[12.5px] text-bad">
+                  <div className="flex items-center gap-2.5">
+                    <Icon name="alert" size={15} />
+                    你已於「{reg.eliminatedRoundName ?? "某輪"}」遭淘汰 — 後續輪次僅保留投票資格，無法再投稿
+                  </div>
+                  <div className="mt-1.5 pl-[23px] text-[11.5px] leading-relaxed text-bad/80">
+                    比賽完全結束後，站內音檔將會清除（Suno 連結不受影響，仍可點擊收聽）
+                  </div>
                 </div>
               )}
 
