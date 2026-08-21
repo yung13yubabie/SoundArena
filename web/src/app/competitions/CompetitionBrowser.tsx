@@ -10,6 +10,7 @@ import { PlayerBar } from "@/components/PlayerBar";
 export interface BrowserTrack {
   id: string;
   title: string;
+  sunoShareUrl: string;
 }
 
 export interface BrowserRound {
@@ -118,7 +119,14 @@ export function CompetitionBrowser({
           ))
         )}
       </div>
-      {playingTrack && <PlayerBar title={playingTrack.title} />}
+      {playingTrack && (
+        <PlayerBar
+          key={playingTrack.id}
+          submissionId={playingTrack.id}
+          title={playingTrack.title}
+          fallbackUrl={playingTrack.sunoShareUrl}
+        />
+      )}
     </div>
   );
 }

@@ -16,6 +16,7 @@ interface SubmissionRow {
   id: string;
   title: string | null;
   registration_id: string;
+  suno_share_url: string;
   registrations: { user_id: string; display_name: string } | { user_id: string; display_name: string }[] | null;
 }
 
@@ -104,7 +105,7 @@ export default async function VotePage({
 
   const { data: submissions } = await supabase
     .from("submissions")
-    .select("id, title, registration_id, registrations(user_id, display_name)")
+    .select("id, title, registration_id, suno_share_url, registrations(user_id, display_name)")
     .eq("round_id", roundId)
     .eq("status", "approved");
 
@@ -121,6 +122,8 @@ export default async function VotePage({
       id: s.id,
       title: revealed ? (s.title ?? "未命名作品") : "— 標題於匿名階段不顯示 —",
       isOwn: reg?.user_id === userId,
+      // 匿名階段不能給 Suno 連結當備援——點開會看到作者的 Suno 帳號,直接洩漏身份。
+      sunoShareUrl: revealed ? s.suno_share_url : null,
     };
   });
 

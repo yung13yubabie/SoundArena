@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import { SiteHeader } from "@/components/SiteHeader";
 import { Icon } from "@/lib/icons";
-import { submitEntry, verifySunoSharer } from "./actions";
+import { submitEntry, verifySunoSharer, requestAudioUpload } from "./actions";
+import { ALLOWED_AUDIO_TYPES, MAX_AUDIO_FILE_SIZE } from "@/lib/audioUpload";
 
 export interface RoundOption {
   roundId: string;
@@ -33,6 +34,7 @@ async function parseSunoLink(url: string, expectedHandle: string): Promise<Parse
 }
 
 type ParseState = "idle" | "loading" | "ok" | "mismatch" | "invalid" | "not_found" | "error";
+type UploadState = "idle" | "uploading" | "done" | "error";
 
 export function SubmitForm({ options }: { options: RoundOption[] }) {
   const [selected, setSelected] = useState(options[0]);
@@ -45,6 +47,79 @@ export function SubmitForm({ options }: { options: RoundOption[] }) {
   const [submitted, setSubmitted] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadState, setUploadState] = useState<UploadState>("idle");
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadFileName, setUploadFileName] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [audioObjectKey, setAudioObjectKey] = useState<string | null>(null);
+
+  function pickFile() {
+    fileInputRef.current?.click();
+  }
+
+  function clearUpload() {
+    setUploadState("idle");
+    setUploadProgress(0);
+    setUploadFileName(null);
+    setUploadError(null);
+    setAudioObjectKey(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }
+
+  async function handleFileSelected(file: File | undefined) {
+    if (!file) return;
+    if (!ALLOWED_AUDIO_TYPES[file.type]) {
+      setUploadState("error");
+      setUploadError("檔案格式不支援，請上傳 mp3/wav/m4a/ogg/flac");
+      return;
+    }
+    if (file.size > MAX_AUDIO_FILE_SIZE) {
+      setUploadState("error");
+      setUploadError(`檔案太大，最大 ${Math.floor(MAX_AUDIO_FILE_SIZE / 1024 / 1024)}MB`);
+      return;
+    }
+
+    setUploadState("uploading");
+    setUploadProgress(0);
+    setUploadFileName(file.name);
+    setUploadError(null);
+    setAudioObjectKey(null);
+
+    const requested = await requestAudioUpload(selected.registrationId, file.type, file.size);
+    if ("error" in requested) {
+      setUploadState("error");
+      setUploadError(requested.error);
+      return;
+    }
+
+    await new Promise<void>((resolve) => {
+      const xhr = new XMLHttpRequest();
+      xhr.upload.addEventListener("progress", (e) => {
+        if (e.lengthComputable) setUploadProgress(Math.round((e.loaded / e.total) * 100));
+      });
+      xhr.addEventListener("load", () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          setUploadState("done");
+          setUploadProgress(100);
+          setAudioObjectKey(requested.objectKey);
+        } else {
+          setUploadState("error");
+          setUploadError("上傳失敗，請再試一次");
+        }
+        resolve();
+      });
+      xhr.addEventListener("error", () => {
+        setUploadState("error");
+        setUploadError("上傳失敗，請檢查網路連線後再試一次");
+        resolve();
+      });
+      xhr.open("PUT", requested.uploadUrl);
+      xhr.setRequestHeader("Content-Type", file.type);
+      xhr.send(file);
+    });
+  }
 
   async function runParse() {
     if (!url.trim()) return;
@@ -72,6 +147,7 @@ export function SubmitForm({ options }: { options: RoundOption[] }) {
       sharerHandle: okResult.handle,
       lyrics,
       allowPublicPlayback,
+      audioObjectKey,
     });
     setPending(false);
     if ("error" in result) {
@@ -129,6 +205,7 @@ export function SubmitForm({ options }: { options: RoundOption[] }) {
                     setSelected(next);
                     setState("idle");
                     setResult(null);
+                    if (next.registrationId !== selected.registrationId) clearUpload();
                   }
                 }}
                 className="w-full appearance-none rounded-[10px] border border-panel-border bg-black/25 px-3.5 py-2.5 text-[13.5px] text-ink outline-none focus:border-accent/50 [color-scheme:dark]"
@@ -207,9 +284,58 @@ export function SubmitForm({ options }: { options: RoundOption[] }) {
             </div>
 
             <div className="mb-5">
-              <label className="mb-1.5 block text-[12.5px] font-semibold text-ink-dim">上傳音檔案（播放用）</label>
-              <div className="rounded-[12px] border border-panel-border bg-white/[0.03] px-4.5 py-4 text-[12.5px] text-ink-faint">
-                這個功能還沒開放，目前投稿只會記錄你貼的 Suno 連結，播放請直接點連結到 Suno 上聽。
+              <label className="mb-1.5 block text-[12.5px] font-semibold text-ink-dim">上傳音檔案（播放用，選填）</label>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="audio/mpeg,audio/wav,audio/x-wav,audio/mp4,audio/x-m4a,audio/ogg,audio/flac,audio/x-flac"
+                className="hidden"
+                onChange={(e) => handleFileSelected(e.target.files?.[0])}
+              />
+              {uploadState === "idle" ? (
+                <button
+                  type="button"
+                  onClick={pickFile}
+                  className="w-full rounded-[12px] border-1.5 border-dashed border-panel-border px-6.5 py-6.5 text-center text-[12.5px] text-ink-faint transition-colors hover:border-accent/40 hover:text-ink-dim"
+                >
+                  <Icon name="upload" className="inline-block" />
+                  <br />
+                  點擊選擇音檔（mp3/wav/m4a/ogg/flac，最大 {Math.floor(MAX_AUDIO_FILE_SIZE / 1024 / 1024)}MB）
+                </button>
+              ) : (
+                <div className="rounded-[12px] border border-panel-border bg-white/[0.03] px-4.5 py-4">
+                  <div className="mb-1.5 flex items-center justify-between gap-2">
+                    <span className="min-w-0 truncate text-[12.5px] text-ink">{uploadFileName}</span>
+                    <button
+                      type="button"
+                      onClick={clearUpload}
+                      className="flex-none text-[11.5px] text-ink-faint hover:text-bad"
+                    >
+                      移除
+                    </button>
+                  </div>
+                  {uploadState === "uploading" && (
+                    <div className="relative h-1.5 overflow-hidden rounded-full bg-white/12">
+                      <span
+                        className="absolute top-0 bottom-0 left-0 rounded-full bg-gradient-to-r from-[#ff9457] via-accent to-accent-2 transition-[width]"
+                        style={{ width: `${uploadProgress}%` }}
+                      />
+                    </div>
+                  )}
+                  {uploadState === "done" && (
+                    <div className="flex items-center gap-1.5 text-[12px] text-ok">
+                      <Icon name="check" size={13} /> 上傳完成
+                    </div>
+                  )}
+                  {uploadState === "error" && (
+                    <div className="flex items-center gap-1.5 text-[12px] text-bad">
+                      <Icon name="alert" size={13} /> {uploadError}
+                    </div>
+                  )}
+                </div>
+              )}
+              <div className="mt-1.5 text-[11.5px] leading-relaxed text-ink-faint">
+                從 Suno 下載後上傳原始檔案，通過審核的作品會在站內直接播放；不上傳的話，其他人只能點連結到 Suno 上聽。
               </div>
             </div>
 
@@ -238,7 +364,7 @@ export function SubmitForm({ options }: { options: RoundOption[] }) {
             )}
 
             <button
-              disabled={state !== "ok" || pending || !title.trim()}
+              disabled={state !== "ok" || pending || !title.trim() || uploadState === "uploading"}
               onClick={handleSubmit}
               className="rounded-[10px] bg-gradient-to-r from-[#ff9457] via-accent to-accent-2 px-4.5 py-2.5 text-[13.5px] font-semibold text-[#1a0e08] disabled:opacity-45"
             >

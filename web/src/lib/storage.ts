@@ -31,6 +31,14 @@ export async function getPlaybackUrl(key: string, expiresInSeconds = 3600): Prom
   return getSignedUrl(client(), command, { expiresIn: expiresInSeconds });
 }
 
+// 讓瀏覽器直接 PUT 到 B2,不繞道我們自己的伺服器——音檔可能有幾十 MB,不適合
+// 塞進 Server Action 的 body size 限制。B2 的密鑰只在這裡簽章時用到,從頭到尾
+// 不會傳到瀏覽器。
+export async function createUploadUrl(key: string, contentType: string, expiresInSeconds = 600): Promise<string> {
+  const command = new PutObjectCommand({ Bucket: process.env.B2_BUCKET!, Key: key, ContentType: contentType });
+  return getSignedUrl(client(), command, { expiresIn: expiresInSeconds });
+}
+
 export async function deleteAudioObject(key: string): Promise<void> {
   await client().send(new DeleteObjectCommand({ Bucket: process.env.B2_BUCKET!, Key: key }));
 }

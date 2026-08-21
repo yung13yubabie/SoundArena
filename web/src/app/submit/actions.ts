@@ -1,14 +1,47 @@
 "use server";
 
+import { randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { toFriendlyError } from "@/lib/actionError";
 import { parseSunoShareUrl } from "@/lib/suno";
+import { createUploadUrl } from "@/lib/storage";
+import { ALLOWED_AUDIO_TYPES, MAX_AUDIO_FILE_SIZE } from "@/lib/audioUpload";
 
 type ActionResult = { success: true } | { error: string };
 
 const MAX_TITLE_LENGTH = 200;
 const MAX_LYRICS_LENGTH = 30000;
+
+export type RequestAudioUploadResult = { success: true; uploadUrl: string; objectKey: string } | { error: string };
+
+export async function requestAudioUpload(
+  registrationId: string,
+  contentType: string,
+  fileSize: number,
+): Promise<RequestAudioUploadResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "請先登入" };
+
+  const extension = ALLOWED_AUDIO_TYPES[contentType];
+  if (!extension) return { error: "檔案格式不支援，請上傳 mp3/wav/m4a/ogg/flac" };
+  if (fileSize > MAX_AUDIO_FILE_SIZE) return { error: `檔案太大，最大 ${Math.floor(MAX_AUDIO_FILE_SIZE / 1024 / 1024)}MB` };
+
+  const { data: registration } = await supabase
+    .from("registrations")
+    .select("id")
+    .eq("id", registrationId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (!registration) return { error: "找不到這筆報名" };
+
+  const objectKey = `submissions/${registrationId}/${randomUUID()}.${extension}`;
+  const uploadUrl = await createUploadUrl(objectKey, contentType);
+  return { success: true, uploadUrl, objectKey };
+}
 
 export interface SunoShareInfo {
   sharerHandle: string;
@@ -86,6 +119,7 @@ export interface SubmitEntryInput {
   sharerHandle: string;
   lyrics: string;
   allowPublicPlayback: boolean;
+  audioObjectKey: string | null;
 }
 
 export async function submitEntry(input: SubmitEntryInput): Promise<ActionResult> {
@@ -122,6 +156,7 @@ export async function submitEntry(input: SubmitEntryInput): Promise<ActionResult
     p_sharer_handle: verify.info.sharerHandle,
     p_lyrics: input.lyrics,
     p_allow_public_playback: input.allowPublicPlayback,
+    p_audio_object_key: input.audioObjectKey,
   });
 
   if (error) {

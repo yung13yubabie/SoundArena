@@ -8,6 +8,7 @@ interface SubmissionRow {
   id: string;
   title: string | null;
   round_id: string;
+  suno_share_url: string;
 }
 
 export default async function CompetitionsPage({
@@ -85,7 +86,7 @@ export default async function CompetitionsPage({
   const { data: submissions } = roundIds.length
     ? await supabase
         .from("submissions")
-        .select("id, title, round_id")
+        .select("id, title, round_id, suno_share_url")
         .in("round_id", roundIds)
         .eq("status", "approved")
         .eq("allow_public_playback", true)
@@ -98,7 +99,7 @@ export default async function CompetitionsPage({
     name: r.name,
     tracks: submissionRows
       .filter((s) => s.round_id === r.id)
-      .map((s) => ({ id: s.id, title: s.title ?? "未命名作品" })),
+      .map((s) => ({ id: s.id, title: s.title ?? "未命名作品", sunoShareUrl: s.suno_share_url })),
   }));
 
   return (

@@ -11,6 +11,7 @@ export interface VoteSubmission {
   id: string;
   title: string;
   isOwn: boolean;
+  sunoShareUrl: string | null;
 }
 
 export function VoteList({
@@ -109,7 +110,14 @@ export function VoteList({
           <Icon name="check" /> 已完成本輪投票,感謝參與
         </div>
       )}
-      {playing && <PlayerBar title={playing.title} />}
+      {playing && (
+        <PlayerBar
+          key={playing.id}
+          submissionId={playing.id}
+          title={playing.title}
+          fallbackUrl={playing.sunoShareUrl ?? undefined}
+        />
+      )}
     </div>
   );
 }
