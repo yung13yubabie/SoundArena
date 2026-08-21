@@ -945,10 +945,20 @@ P2 順手修的:`review_submission()` 補 `p_status` 白名單(原本接受完�
 
 `tsc`/`eslint`/`build` 全程乾淨,已 commit、push、`vercel deploy --prod` 上線,並在 GitHub 上啟用分支保護。
 
-## 目前還沒處理的部分
+## 08-21 深夜:B2 音檔上傳 + 站內播放上線
 
-Discord OAuth consent 文案與實際 scope 行為矛盾(需要拆成兩段式 OAuth,是 auth 流程改動,使用者已明確表示先不用)、實際設定 Resend/Discord 發信(需要使用者提供 API key/Server ID)、B2 物件孤兒清理(上傳功能還沒上線,不是立即問題)。
+使用者要求接著做 B2 並且測試。細節見 [ADR-0017](docs/adr/0017-b2-audio-upload-and-playback.md):
+
+- **上傳**:瀏覽器直接 PUT 到 B2(presigned URL,不繞道伺服器,避免大檔案撞到 Server Action body size 限制)。`submit_entry()` RPC 補上 `audio_object_key` 雙層驗證(格式 + 歸屬,不能拿別人報名底下的 key 冒充)。
+- **播放**:`PlayerBar.tsx` 從純假資料(播放中狀態、進度條時間全部寫死)改成真的 `<audio>` 元素,接上 `CompetitionBrowser`(公開試聽)跟 `VoteList`(投票頁,匿名輪次刻意不提供 Suno 連結備援,避免點開連結洩漏作者身份)。
+- **部署時抓到兩個真實問題**:(1) B2 bucket CORS 原本只開 `GET`/`HEAD`,沒有 `PUT`,瀏覽器直接上傳會被 CORS 擋,已補上專用規則;(2) **用真實瀏覽器對正式站端對端測試時抓到一個這輪自己引入的 CSP bug**——上一輪 CSP nonce 化漏加 `media-src`,`<audio>` 元素 fallback 到 `default-src 'self'`,B2 不在裡面,導致播放功能在自己剛加固的 CSP 底下完全播不出來。已修好並重新驗證:CSP violation 消失、音檔真的完整播放到結尾(`currentTime` 追上 `duration`)、上傳的 XHR PUT 也在瀏覽器對正式站驗證過 CORS+CSP 通過。**這個 bug 只有真的在瀏覽器裡跑過完整流程才抓得到,tsc/eslint/build 全部乾淨不代表功能真的能動**——這輪的教訓值得記住。
+
+驗證方式細節:嘗試過用真實帳號的 magic link 建立完整瀏覽器 session 做端對端點擊測試,但 Supabase 專案的 Site URL 還停在預設的 `127.0.0.1:3000`(從沒改過),沒有 Management API token 沒辦法直接修,這條路放棄;改用「直接對 B2 presigned URL 做真實 PUT/GET 往返(byte-for-byte 雜湊比對) + 在正式站瀏覽器環境注入真實 `<audio>`/XHR 測試 CORS/CSP」的方式驗證,一樣是真實環境、真實網路請求,只是繞過了應用層的登入畫面——這個限制記下來,下次如果要做完整登入點擊流程的瀏覽器測試,需要先請使用者確認 Supabase Auth 的 Site URL/Redirect URLs 設定。
+
+### 這輪沒有做的部分
+
+`/status` 頁還沒接播放(投稿者只能透過 `/competitions` 或 `/vote` 確認上傳結果)、前三名保留音檔其餘淘汰後刪除的留存政策(自動化清除機制還沒做)、Discord OAuth 兩段式重新設計(使用者已明確表示先不用)、實際設定 Resend/Discord 發信(需要使用者提供 API key/Server ID)。
 
 ### 下一步
 
-Discord OAuth 重新設計需要先跟使用者確認範圍才動手。B2 上傳/播放 UI 是下一個比較大的功能區塊,可以直接開工;實際發信需要等使用者提供 Resend/Discord 憑證。
+Discord OAuth 重新設計需要先跟使用者確認範圍才動手。`/status` 頁播放、留存清除機制是下一個可以直接開工的區塊;實際發信需要等使用者提供 Resend/Discord 憑證；完整登入流程的瀏覽器測試需要先請使用者確認/修正 Supabase Auth 的 Site URL 設定。
