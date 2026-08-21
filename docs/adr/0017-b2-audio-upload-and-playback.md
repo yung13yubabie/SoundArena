@@ -16,6 +16,12 @@
 
 `CompetitionBrowser.tsx`(探索比賽的公開試聽)跟 `VoteList.tsx`(投票頁)都接上這支新的 PlayerBar。**匿名投票輪次刻意不提供 Suno 連結當備援**——點開 Suno 連結會直接看到作者的 Suno 帳號,在還沒公開身份的階段等於洩漏身份,只有 `revealed=true` 時才傳 `sunoShareUrl` 給 PlayerBar。
 
+## 端對端驗證抓到的真實 bug:CSP 忘了開 media-src
+
+用真實瀏覽器測試(claude-in-chrome,直接對正式站操作,不是本機)時抓到一個這輪自己引入的 bug:上一輪做 CSP nonce 化時只顧到 `script-src`/`style-src`/`img-src`/`font-src`/`connect-src`,沒有加 `media-src`——CSP 的 `<audio>`/`<video>` 元素來源沒有明確指定 `media-src` 時會 fallback 到 `default-src 'self'`,B2 不在 `'self'` 底下,結果是**這輪剛做出來的播放功能,在自己剛加固過的 CSP 底下完全播不出來**,瀏覽器 console 會看到 `securitypolicyviolation` 事件,`violatedDirective: "media-src"`,`audio.error` 是 `MEDIA_ELEMENT_ERROR: Media load rejected by URL safety check`。
+
+驗證方式:先建立一個測試用的 `<audio>` 元素直接指向真實的 B2 簽章播放網址,在正式站上執行,確認真的收到 CSP violation;補上 `media-src 'self' https://*.backblazeb2.com` 後重新部署,同一個測試重跑,`securitypolicyviolation` 完全消失,`audio.readyState` 變成 `4`(HAVE_ENOUGH_DATA)、`duration` 正確顯示、實際點擊觸發 `play()` 後 `currentTime` 真的從 0 跑到跟 `duration`相同(播放到結尾),同時也用真實 XHR PUT 對正式站源驗證上傳路徑(`connect-src` 的萬用字元)在瀏覽器裡確實通過 CORS+CSP、拿到 `200`。這是這一輪 CSP nonce 化(ADR-0016)沒有靠 build 或 lint 抓到的真實回歸——只有真的在瀏覽器裡跑過完整的上傳/播放流程才會發現,純粹型別檢查跟建置成功不代表功能真的能動。
+
 ## 這輪沒有做的部分
 
 - **`/status` 頁(投稿者自己確認上傳結果)還沒接播放**——目前只能透過 `/competitions`(如果有開公開試聽)或 `/vote`(審核通過進入投票後)確認,純粹是時間考量,之後可以直接複用同一支 `PlayerBar`。

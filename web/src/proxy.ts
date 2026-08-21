@@ -20,6 +20,7 @@ function buildCspHeader(nonce: string): string {
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: https://lh3.googleusercontent.com https://cdn.discordapp.com https://*.supabase.co",
     "font-src 'self' data:",
+    "media-src 'self' https://*.backblazeb2.com",
     "connect-src 'self' https://*.supabase.co https://*.backblazeb2.com https://studio-api-prod.suno.com",
     "frame-src https://www.youtube.com",
     "frame-ancestors 'none'",
