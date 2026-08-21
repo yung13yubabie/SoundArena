@@ -3,12 +3,15 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { SiteHeader } from "@/components/SiteHeader";
 import { EmptyState } from "@/components/EmptyState";
-import { Icon } from "@/lib/icons";
-import { CommentsPanel } from "@/components/CommentsPanel";
-import { SUBMISSION_STATE_META, STATE_PILL_CLASS, type SubmissionState } from "@/lib/mockData";
+import { type SubmissionState } from "@/lib/mockData";
 import { PrivacyPanel, type PrivacyRegistration, type PrivacySubmission } from "./PrivacyPanel";
-import { NotificationToggle } from "./NotificationToggle";
 import { DisplayNameEditor } from "./DisplayNameEditor";
+import {
+  StatusSubmissionsList,
+  type StatusRegistration,
+  type StatusRound,
+  type StatusSubmission,
+} from "./StatusSubmissionsList";
 
 interface RegistrationRow {
   id: string;
@@ -44,6 +47,7 @@ interface RoundRow {
   round_index: number;
   competition_id: string;
   allows_new_submissions: boolean;
+  voting_opens_at: string | null;
 }
 
 interface SubmissionRow {
@@ -90,7 +94,7 @@ export default async function StatusPage() {
   const { data: rounds } = competitionIds.length
     ? await supabase
         .from("rounds")
-        .select("id, name, round_index, competition_id, allows_new_submissions")
+        .select("id, name, round_index, competition_id, allows_new_submissions, voting_opens_at")
         .in("competition_id", competitionIds)
         .order("round_index")
     : { data: [] as RoundRow[] };
@@ -106,7 +110,6 @@ export default async function StatusPage() {
     : { data: [] as SubmissionRow[] };
 
   const subs = (submissions ?? []) as unknown as SubmissionRow[];
-  const submissionByKey = new Map(subs.map((s) => [`${s.round_id}:${s.registration_id}`, s]));
 
   return (
     <div>
@@ -125,97 +128,42 @@ export default async function StatusPage() {
         {regs.length === 0 ? (
           <EmptyState icon="inbox" title="你還沒有報名任何比賽" sub="先去活動頁報名一場比賽，這裡就會出現投稿進度" />
         ) : (
-          regs.map((reg) => {
-            const eliminatedRound = reg.eliminated_in_round_id
-              ? (rounds ?? []).find((r) => r.id === reg.eliminated_in_round_id)
-              : null;
-            const compRounds = (rounds ?? []).filter((r) => r.competition_id === reg.competition_id);
-
-            return (
-              <div key={reg.id} className="mb-7">
-                <div className="mb-3 flex items-center justify-between">
-                  <h2 className="text-[16px] font-semibold">{oneName(reg.competitions)}</h2>
-                  <NotificationToggle registrationId={reg.id} initialEnabled={reg.notifications_enabled} />
-                </div>
-
-                {reg.review_status === "pending_review" && (
-                  <div className="mb-3 flex items-center gap-2.5 rounded-[11px] border border-warn/30 bg-warn/8 px-4 py-2.75 text-[12.5px] text-warn">
-                    <Icon name="alert" size={15} />
-                    報名審核中，主辦人審核通過後才能投稿
-                  </div>
-                )}
-                {reg.review_status === "rejected" && (
-                  <div className="mb-3 flex items-center gap-2.5 rounded-[11px] border border-bad/30 bg-bad/8 px-4 py-2.75 text-[12.5px] text-bad">
-                    <Icon name="alert" size={15} />
-                    <span className="flex-1">
-                      報名被退回：{reg.review_note || "（主辦人沒有留下原因）"}
-                    </span>
-                    <Link href={`/register?competition=${reg.competition_id}`} className="font-semibold text-bad hover:underline">
-                      修改後重新送出 →
-                    </Link>
-                  </div>
-                )}
-
-                {reg.status === "eliminated" && (
-                  <div className="mb-3 flex items-center gap-2.5 rounded-[11px] border border-bad/30 bg-bad/8 px-4 py-2.75 text-[12.5px] text-bad">
-                    <Icon name="alert" size={15} />
-                    你已於「{eliminatedRound?.name ?? "某輪"}」遭淘汰 — 後續輪次僅保留投票資格，無法再投稿
-                  </div>
-                )}
-
-                {compRounds.length === 0 ? (
-                  <EmptyState icon="inbox" title="這場比賽還沒有任何輪次" sub="等主辦方設定賽制後再回來看看" />
-                ) : (
-                  compRounds.map((round) => {
-                    const sub = submissionByKey.get(`${round.id}:${reg.id}`);
-                    const meta = sub ? SUBMISSION_STATE_META[sub.status] : null;
-                    return (
-                      <div key={round.id} className="glass mb-2 px-4.5 py-4">
-                        <div className="flex items-center gap-4">
-                          <div className="flex-1 text-[13.5px]">
-                            {round.name}
-                            {sub?.title && <span className="ml-2 text-ink-dim">— {sub.title}</span>}
-                          </div>
-                          <div className="text-[11.5px] text-ink-faint">
-                            {!sub && !round.allows_new_submissions ? "本輪未開放投稿" : " "}
-                          </div>
-                          {meta ? (
-                            <span
-                              className={`inline-flex items-center gap-1.25 rounded-full border px-2.5 py-1 text-[11px] ${STATE_PILL_CLASS[meta.cls]}`}
-                            >
-                              {meta.label}
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1.25 rounded-full border border-panel-border px-2.5 py-1 text-[11px] text-ink-faint">
-                              尚未投稿
-                            </span>
-                          )}
-                        </div>
-                        {sub && (
-                          <div className="mt-2 flex items-center gap-2 border-t border-panel-border pt-2 text-[11.5px] text-ink-faint">
-                            <a
-                              href={sub.suno_share_url}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="flex items-center gap-1 text-accent hover:underline"
-                            >
-                              在 Suno 上查看 <Icon name="externalLink" size={11} />
-                            </a>
-                            {sub.status === "rejected" && sub.review_note && (
-                              <span className="text-bad">・退回原因：{sub.review_note}</span>
-                            )}
-                          </div>
-                        )}
-                        {sub && sub.status === "approved" && (
-                          <CommentsPanel submissionId={sub.id} canComment={false} canEndorse={true} />
-                        )}
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            );
-          })
+          <StatusSubmissionsList
+            registrations={regs.map(
+              (reg): StatusRegistration => ({
+                id: reg.id,
+                competitionId: reg.competition_id,
+                competitionName: oneName(reg.competitions),
+                status: reg.status,
+                eliminatedRoundName: reg.eliminated_in_round_id
+                  ? ((rounds ?? []).find((r) => r.id === reg.eliminated_in_round_id)?.name ?? null)
+                  : null,
+                notificationsEnabled: reg.notifications_enabled,
+                reviewStatus: reg.review_status,
+                reviewNote: reg.review_note,
+              }),
+            )}
+            rounds={(rounds ?? []).map(
+              (r): StatusRound => ({
+                id: r.id,
+                competitionId: r.competition_id,
+                name: r.name,
+                allowsNewSubmissions: r.allows_new_submissions,
+                votingOpensAt: r.voting_opens_at,
+              }),
+            )}
+            submissions={subs.map(
+              (s): StatusSubmission => ({
+                id: s.id,
+                roundId: s.round_id,
+                registrationId: s.registration_id,
+                status: s.status,
+                title: s.title,
+                sunoShareUrl: s.suno_share_url,
+                reviewNote: s.review_note,
+              }),
+            )}
+          />
         )}
 
         {regs.length > 0 && (notificationEvents ?? []).length > 0 && (

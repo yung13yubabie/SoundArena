@@ -955,10 +955,24 @@ P2 順手修的:`review_submission()` 補 `p_status` 白名單(原本接受完�
 
 驗證方式細節:嘗試過用真實帳號的 magic link 建立完整瀏覽器 session 做端對端點擊測試,但 Supabase 專案的 Site URL 還停在預設的 `127.0.0.1:3000`(從沒改過),沒有 Management API token 沒辦法直接修,這條路放棄;改用「直接對 B2 presigned URL 做真實 PUT/GET 往返(byte-for-byte 雜湊比對) + 在正式站瀏覽器環境注入真實 `<audio>`/XHR 測試 CORS/CSP」的方式驗證,一樣是真實環境、真實網路請求,只是繞過了應用層的登入畫面——這個限制記下來,下次如果要做完整登入點擊流程的瀏覽器測試,需要先請使用者確認 Supabase Auth 的 Site URL/Redirect URLs 設定。
 
+## 08-21 更深夜:投稿刪除重投、狀態頁播放、音檔留存清理、投票資料完整性確認
+
+使用者接連要求三件事,細節見 [ADR-0018](docs/adr/0018-submission-delete-status-playback-audio-retention.md):
+
+1. **投稿刪除重投**——`delete_own_submission()` RPC,只在這一輪投票還沒開始時允許(投票開始後刪除會讓已投出的票被 cascade 默默清掉,刻意硬擋)。
+2. **`/status` 頁接上真的播放功能**——抽成新的 client component `StatusSubmissionsList.tsx`,跟 `CompetitionBrowser`/`VoteList` 共用同一支 `PlayerBar`。
+3. **音檔留存清理**——`cleanupNonFinalistAudio()`,決賽投票截止後,主辦人可以在 `/admin/format` 手動觸發,依決賽排名保留前三名(含他們在其他輪次上傳的音檔),其餘清除。目前是手動觸發,不是自動排程(專案還沒有 cron 基礎設施)。
+
+**過程中抓到一個真實的函式重載 bug**:上一輪幫 `submit_entry()` 加新參數時只用 `create or replace`,沒有先 drop 舊簽章,Postgres 把它當成新增一個重載而不是取代——舊的 8 參數版本沒被清掉,兩個版本同時存在。真實 PoC 測「刪除後重新投稿」時,PostgREST 直接回 `PGRST203 無法決定要呼叫哪個重載`。Next.js 正常呼叫路徑一律有帶完整參數所以沒受影響,但這個隱患本身不該留著。寫了一支暫時診斷 function 系統性掃過整個 schema,確認只有這一處是真的問題(另一處 `check_suno_verify_rate_limit()` 的殘留重載無害,純粹是死程式碼),都已經清乾淨。**教訓:改已上線 function 的參數列表,要嘛簽章完全不變讓 `create or replace` 真的取代,要嘛先明確 `drop function` 舊簽章——不能只加預設值蒙混過去。**
+
+**使用者要求確認的「投票資料完整性」**(擔心投票當下顯示 A、開票卻算到 B):完整追蹤了從 `VoteList.tsx` 的按鈕 `onClick` → `castVote()` → `votes` 表寫入 → `get_round_scores()` 的計分查詢,全程都是用真實 UUID 對應,匿名輪次的顯示順序打亂(`shuffle`)只影響畫面呈現,不影響任何一個環節的資料綁定,沒有找到會算錯投稿對象的路徑。也確認了「主辦人自己會不會看到匿名身份」:`/judge` 評分頁不管是不是主辦人一律顯示「匿名作品 #N」(寫死,不受角色影響);`/vote` 投票頁的身份揭露純粹依「這一輪的匿名設定 + 現在時間」計算,不因呼叫者是誰而不同。`/admin/review`(審核投稿)不受此限制,主辦人審核時本來就需要看真實身份核對 Suno 帳號,這是投票開始前的另一段流程,不是「匿名投票」的一部分。
+
+全部用真實帳號 PoC 驗證過,`tsc`/`eslint`/`build` 全程乾淨。
+
 ### 這輪沒有做的部分
 
-`/status` 頁還沒接播放(投稿者只能透過 `/competitions` 或 `/vote` 確認上傳結果)、前三名保留音檔其餘淘汰後刪除的留存政策(自動化清除機制還沒做)、Discord OAuth 兩段式重新設計(使用者已明確表示先不用)、實際設定 Resend/Discord 發信(需要使用者提供 API key/Server ID)。
+留存清理目前是手動觸發,自動化排程(比如用 Vercel Cron 偵測比賽剛結束就自動跑)還沒做。Discord OAuth 兩段式重新設計(使用者已明確表示先不用)、實際設定 Resend/Discord 發信(需要使用者提供 API key/Server ID)、完整登入流程的瀏覽器測試(需要先確認/修正 Supabase Auth 的 Site URL 設定)都還卡著。
 
 ### 下一步
 
-Discord OAuth 重新設計需要先跟使用者確認範圍才動手。`/status` 頁播放、留存清除機制是下一個可以直接開工的區塊;實際發信需要等使用者提供 Resend/Discord 憑證；完整登入流程的瀏覽器測試需要先請使用者確認/修正 Supabase Auth 的 Site URL 設定。
+Discord OAuth 重新設計需要先跟使用者確認範圍才動手。留存清理的自動化排程可以直接開工;實際發信需要等使用者提供 Resend/Discord 憑證；完整登入流程的瀏覽器測試需要先請使用者確認/修正 Supabase Auth 的 Site URL 設定。

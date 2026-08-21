@@ -18,6 +18,7 @@ import {
   setRoundAnonymity,
   setAllRoundsAnonymity,
   deleteCompetition,
+  cleanupNonFinalistAudio,
 } from "./actions";
 
 export interface ScoreItemData {
@@ -444,6 +445,10 @@ function CompetitionMetaForm({ competition }: { competition: CompetitionData }) 
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [confirmingCleanup, setConfirmingCleanup] = useState(false);
+  const [cleaningUp, setCleaningUp] = useState(false);
+  const [cleanupError, setCleanupError] = useState<string | null>(null);
+  const [cleanupResult, setCleanupResult] = useState<number | null>(null);
 
   async function handleSave() {
     setSaving(true);
@@ -463,6 +468,19 @@ function CompetitionMetaForm({ competition }: { competition: CompetitionData }) 
       return;
     }
     router.push("/admin/format");
+  }
+
+  async function handleCleanup() {
+    setCleaningUp(true);
+    setCleanupError(null);
+    const result = await cleanupNonFinalistAudio(competition.id);
+    setCleaningUp(false);
+    setConfirmingCleanup(false);
+    if ("error" in result) {
+      setCleanupError(result.error);
+      return;
+    }
+    setCleanupResult(result.cleared);
   }
 
   return (
@@ -519,6 +537,47 @@ function CompetitionMetaForm({ competition }: { competition: CompetitionData }) 
         <div className="mt-1.5 text-[11.5px] leading-relaxed text-ink-faint">
           匿名的輪次投票截止後才公開作者身份;公開的輪次從一開始就看得到是誰投稿。每輪下方可個別覆寫。
         </div>
+      </div>
+
+      <div className="mt-7 border-t border-panel-border pt-5">
+        <label className="mb-1.5 block text-[12.5px] font-semibold text-ink-dim">整理音檔儲存空間</label>
+        <p className="mb-2.5 text-[11.5px] leading-relaxed text-ink-faint">
+          決賽投票截止（整場比賽完全結束）後，可以一次清掉「非前三名」參賽者上傳的音檔，只保留 Suno 連結，前三名的音檔會保留。決賽投票還沒截止的話無法執行。
+        </p>
+        {cleanupError && (
+          <p className="mb-2.5 rounded-[10px] border border-bad/30 bg-bad/10 p-2.5 text-[12px] text-bad">{cleanupError}</p>
+        )}
+        {cleanupResult !== null && (
+          <p className="mb-2.5 rounded-[10px] border border-ok/30 bg-ok/10 p-2.5 text-[12px] text-ok">
+            已清除 {cleanupResult} 筆非前三名的音檔
+          </p>
+        )}
+        {confirmingCleanup ? (
+          <div className="flex items-center gap-2.5">
+            <span className="text-[12px] text-warn">確定要清除非前三名的音檔嗎？此動作無法復原。</span>
+            <button
+              onClick={handleCleanup}
+              disabled={cleaningUp}
+              className="rounded-[10px] border border-warn/35 bg-warn/8 px-3.5 py-1.5 text-[12px] font-semibold text-warn transition-colors hover:bg-warn/14 disabled:opacity-45"
+            >
+              {cleaningUp ? "清除中…" : "確定清除"}
+            </button>
+            <button
+              onClick={() => setConfirmingCleanup(false)}
+              disabled={cleaningUp}
+              className="rounded-[10px] border border-panel-border px-3.5 py-1.5 text-[12px] text-ink-dim disabled:opacity-45"
+            >
+              取消
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => setConfirmingCleanup(true)}
+            className="rounded-[10px] border border-panel-border bg-white/[0.04] px-3.5 py-1.5 text-[12px] font-semibold text-ink transition-colors hover:border-warn/40"
+          >
+            清除非前三名音檔
+          </button>
+        )}
       </div>
 
       <div className="mt-7 border-t border-panel-border pt-5">

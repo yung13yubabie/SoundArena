@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { toFriendlyError } from "@/lib/actionError";
 import { parseSunoShareUrl } from "@/lib/suno";
-import { createUploadUrl } from "@/lib/storage";
+import { createUploadUrl, deleteAudioObject } from "@/lib/storage";
 import { ALLOWED_AUDIO_TYPES, MAX_AUDIO_FILE_SIZE } from "@/lib/audioUpload";
 
 type ActionResult = { success: true } | { error: string };
@@ -189,5 +189,39 @@ export async function submitEntry(input: SubmitEntryInput): Promise<ActionResult
 
   revalidatePath("/submit");
   revalidatePath("/status");
+  return { success: true };
+}
+
+// 投票還沒開始前,投稿者可以刪除重新上傳——投票一旦開始就不給刪(delete_own_submission()
+// RPC 會擋),避免已經投出去的票因為 cascade 被默默清掉。
+export async function deleteMySubmission(submissionId: string): Promise<ActionResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "請先登入" };
+
+  const { data: audioObjectKey, error } = await supabase.rpc("delete_own_submission", {
+    p_submission_id: submissionId,
+  });
+  if (error) {
+    return {
+      error: toFriendlyError(error, [
+        { test: (m) => m.includes("voting has already opened"), friendly: "這一輪投票已經開始，無法刪除投稿" },
+        { test: (m) => m.includes("not your submission"), friendly: "這不是你的投稿" },
+      ]),
+    };
+  }
+
+  if (audioObjectKey) {
+    try {
+      await deleteAudioObject(audioObjectKey);
+    } catch {
+      // B2 檔案沒刪成功不影響投稿本身已經被刪除——不留孤兒 DB 資料比不留孤兒檔案重要。
+    }
+  }
+
+  revalidatePath("/status");
+  revalidatePath("/submit");
   return { success: true };
 }

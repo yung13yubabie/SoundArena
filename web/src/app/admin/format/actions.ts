@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { toFriendlyError } from "@/lib/actionError";
+import { deleteAudioObject } from "@/lib/storage";
+import { getRoundResults } from "@/lib/roundResults";
 
 type ActionResult = { success: true } | { error: string };
 
@@ -280,4 +282,61 @@ export async function addScoreItem(
   if (error) return { error: toFriendlyError(error) };
   revalidatePath("/admin/format");
   return { success: true, id: data as string };
+}
+
+export type CleanupAudioResult = { success: true; cleared: number } | { error: string };
+
+// 使用者原本的留存政策:前三名保留音檔,其餘參賽者淘汰後移除音檔,只留 Suno 連結,
+// 而且要等整場比賽完全結束才統一清,不逐輪清。「前三名」判斷用決賽的加權計分排名
+// (跟公開結果頁 /results 同一套 getRoundResults() 邏輯,不重寫第二份排名算法);
+// 保留的是這些人在全部輪次的音檔,不只是決賽那一筆——初賽也上傳過音檔的話一併保留。
+export async function cleanupNonFinalistAudio(competitionId: string): Promise<CleanupAudioResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "請先登入" };
+
+  const { data: rounds } = await supabase
+    .from("rounds")
+    .select("id, voting_closes_at")
+    .eq("competition_id", competitionId)
+    .order("round_index", { ascending: false })
+    .limit(1);
+  const finalRound = rounds?.[0];
+  if (!finalRound) return { error: "找不到這場比賽的輪次" };
+  if (!finalRound.voting_closes_at || new Date(finalRound.voting_closes_at) > new Date()) {
+    return { error: "比賽還沒完全結束（決賽投票尚未截止），還不能清除音檔" };
+  }
+
+  const results = await getRoundResults(supabase, finalRound.id, competitionId);
+  const top3SubmissionIds = new Set([...results.ranking].sort((a, b) => b.total - a.total).slice(0, 3).map((r) => r.id));
+
+  const { data: finalSubs } = await supabase.from("submissions").select("id, registration_id").eq("round_id", finalRound.id);
+  const keepRegistrationIds = new Set(
+    (finalSubs ?? []).filter((s) => top3SubmissionIds.has(s.id)).map((s) => s.registration_id),
+  );
+
+  const { data: allSubs } = await supabase
+    .from("submissions")
+    .select("id, registration_id, audio_object_key, rounds!inner(competition_id)")
+    .eq("rounds.competition_id", competitionId)
+    .not("audio_object_key", "is", null);
+
+  let cleared = 0;
+  for (const s of allSubs ?? []) {
+    if (keepRegistrationIds.has(s.registration_id)) continue;
+    if (s.audio_object_key) {
+      try {
+        await deleteAudioObject(s.audio_object_key);
+      } catch {
+        // B2 檔案沒刪成功也要繼續清掉 DB 欄位,不要讓單一檔案的錯誤卡住整批清理。
+      }
+    }
+    const { error } = await supabase.rpc("clear_submission_audio", { p_submission_id: s.id });
+    if (!error) cleared++;
+  }
+
+  revalidatePath("/admin/format");
+  return { success: true, cleared };
 }
