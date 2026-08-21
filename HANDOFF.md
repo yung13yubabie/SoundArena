@@ -917,10 +917,28 @@ B2 迴圈、feedback RLS(非管理員讀不到/管理員讀得到)都用真實 a
 
 **使用者本人的主辦人帳號(`ec330b2f-...`,同時是平台管理員)跟另一個既有主辦人帳號,部署後都會變成「待審核」狀態**——這是「全部重新送審」的預期結果,不是 bug。平台管理員自己不受守門邏輯影響仍可進入 `/admin`,只要進到「主辦人管理」畫面把自己核准掉,就能恢復對既有比賽的管理權限。
 
+## 08-21 稍晚:主辦/比賽資料手動清理 + 第三輪獨立複查
+
+使用者直接在對話裡要求「除了我之外的其他主辦直接幫我移除」——查詢後只有一個既有主辦人(伶安簡),已透過 `revoke_organizer` 同等的更新駁回。接著使用者說探索頁還看得到紀錄,查出是該主辦人建立的 4 場測試比賽(「哈哈笑」/「開心的笑」,都沒有真實報名資料),已直接用 `delete_competition` 的邏輯清掉。這兩個操作是直接對 production 資料庫執行的一次性清理,不是透過 migration,這裡記錄一下避免之後看資料庫覺得奇怪。**意見回饋目前只有使用者自己 8/16 的測試訊息,朋友還沒有送出過任何真實回饋。**
+
+接著使用者丟了第三輪獨立複查報告,明確要求用 `systematic-debugging`／`debugging-and-error-recovery` 搭配既有的 `mattpocock-skills:diagnosing-bugs` 處理。五個 P1 全部確認為真並修復,細節與 PoC 證據都在 [ADR-0015](docs/adr/0015-independent-review-round-3.md):
+
+1. **Suno 投稿連結可偽裝成釣魚網站**——舊版只抽 code 不查網域,`https://evil.example/s/<真實code>` 能通過驗證並存進 DB。已修:新增 `parseSunoShareUrl()` 強制 hostname 是 suno.com,存進 DB 的一律是 canonical 網址;`submit_entry()` RPC 也補了第二層防護。
+2. **刪除比賽有 TOCTOU 競態**——用注入 `pg_sleep()` 的暫時診斷 function 把原本微秒等級的窗口放大到可測試,證實併發報名確實會被悄悄 cascade 吃掉。已修:`delete_competition()` 先對比賽列上 `FOR UPDATE` 鎖,同樣的注入延遲測試證實修復後併發報名會正確收到外鍵錯誤,不會悄悄消失。
+3. **公開主辦人名單沒跟著審核制一起改**——`list_public_organizers()` 忘記加 `host_approved_at is not null`。已修。
+4. **通知事件 RPC 內容完全不受限**——`event_type`/`title`/`body` 呼叫端可以填任意內容,對任意 user_id 發事件。已做成本低的加固(event_type 白名單、長度上限、目標必須是真參賽者、補 `created_by` 欄位 + rate limit),**完整的「server 端自己產生內容」重構列成 Resend 上線前的 blocker,還沒做**。
+5. **Suno 驗證 2 秒冷卻會誤傷合法送出流程**——preflight 跟 submitEntry 的伺服器端二次驗證共用同一個冷卻,可能互相卡。已修:冷卻改成以「使用者+code」為單位,同一個連結重複驗證不受限,換不同連結依然被擋。
+
+P2 順手修的:`review_submission()` 補 `p_status` 白名單(原本接受完整 submission_status enum,含 4 個職責外的值)、「重新賦予」按鈕文案依實際效果分成「重新賦予」/「移回待審核」兩種、`AdminShell.tsx` 三處 SELECT 錯誤不再直接顯示 Supabase 原始訊息。
+
+**工程 P1(沒有動手,交給使用者決定)**:`gh api` 確認 main 分支目前完全沒有 branch protection——沒有禁止 force push、沒有要求 PR review、沒有要求 CI 通過。這輪所有 migration/RPC 修法都是這個 session 直接 push 到 main 上線,啟用 branch protection 會改變「直接 push+deploy」這個協作模式,是工作流程決定,沒有先斬後奏。
+
+全部用真實帳號 PoC 驗證過(含 TOCTOU 那個需要人工放大窗口才能穩定重現的),`tsc`/`eslint`/`build` 全程乾淨。已 commit、push、`vercel deploy --prod` 上線。
+
 ## 目前還沒處理的部分
 
-Discord OAuth consent 文案與實際 scope 行為矛盾(需要拆成兩段式 OAuth,是 auth 流程改動)、CSP 仍是 `unsafe-inline` 基礎版沒有 nonce 化、CSP 缺 COOP/CORP(HSTS/Permissions-Policy/Referrer-Policy/X-Content-Type-Options 已確認正式環境有送出)。這些都是純工程量或需要先跟使用者確認範圍的項目,還沒動手。
+Discord OAuth consent 文案與實際 scope 行為矛盾(需要拆成兩段式 OAuth,是 auth 流程改動)、CSP 仍是 `unsafe-inline` 基礎版沒有 nonce 化、CSP 缺 COOP/CORP(HSTS/Permissions-Policy/Referrer-Policy/X-Content-Type-Options 已確認正式環境有送出)、通知 RPC 的完整重構(見上方第 4 項,Resend 上線前必做)、main branch protection(見上方,等使用者決定)、B2 物件孤兒清理(上傳功能還沒上線,不是立即問題)。
 
 ### 下一步
 
-Discord OAuth 重新設計需要先跟使用者確認範圍(兩段式 OAuth 是比較大的 auth 流程改動)才動手。CSP nonce 化跟 B2 上傳/播放 UI 是純工程量的部分,隨時可以直接開工。
+Discord OAuth 重新設計、branch protection 啟用範圍,都需要先跟使用者確認才動手,不是可以直接猜著做的範圍。CSP nonce 化跟 B2 上傳/播放 UI 是純工程量的部分,隨時可以直接開工。

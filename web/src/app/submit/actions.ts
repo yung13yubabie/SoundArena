@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { toFriendlyError } from "@/lib/actionError";
+import { parseSunoShareUrl } from "@/lib/suno";
 
 type ActionResult = { success: true } | { error: string };
 
@@ -13,6 +14,7 @@ export interface SunoShareInfo {
   sharerHandle: string;
   sharerDisplayName: string;
   avatarUrl: string | null;
+  canonicalUrl: string;
 }
 
 export type VerifySunoResult =
@@ -32,15 +34,20 @@ export async function verifySunoSharer(url: string): Promise<VerifySunoResult> {
   } = await supabase.auth.getUser();
   if (!user) return { kind: "error", message: "請先登入" };
 
-  const { error: rateLimitError } = await supabase.rpc("check_suno_verify_rate_limit");
-  if (rateLimitError) return { kind: "error", message: "請求太頻繁，請稍等一下再試" };
+  // 先檢查這是不是真正的 suno.com 網址,再抽 code——不然 https://evil.example/s/<真實
+  // code> 這種網址,code 部分是真的,Suno API 一樣會驗證通過,但存進 DB、拿去顯示給
+  // 別人點擊的卻是 evil.example,變成用「SoundArena 已驗證」包裝的釣魚連結。
+  const parsed = parseSunoShareUrl(url);
+  if (!parsed.ok) return { kind: "invalid" };
 
-  const code = (url.match(/\/s\/([A-Za-z0-9]+)/) || url.match(/[?&]sh=([A-Za-z0-9]+)/) || [])[1];
-  if (!code) return { kind: "invalid" };
+  // key 用 code(不是整個網址)——preflight 跟 submitEntry() 的伺服器端二次驗證
+  // 驗的是同一個 code,不應該互相卡對方的冷卻時間。
+  const { error: rateLimitError } = await supabase.rpc("check_suno_verify_rate_limit", { p_code: parsed.code });
+  if (rateLimitError) return { kind: "error", message: "請求太頻繁，請稍等一下再試" };
 
   let response: Response;
   try {
-    response = await fetch(`https://studio-api-prod.suno.com/api/share/code/${code}`, {
+    response = await fetch(`https://studio-api-prod.suno.com/api/share/code/${parsed.code}`, {
       headers: { "User-Agent": "Mozilla/5.0" },
     });
   } catch {
@@ -65,6 +72,7 @@ export async function verifySunoSharer(url: string): Promise<VerifySunoResult> {
       sharerHandle: data.sharer_handle,
       sharerDisplayName: data.sharer_display_name ?? data.sharer_handle,
       avatarUrl: data.sharer_avatar_url ?? null,
+      canonicalUrl: parsed.canonicalUrl,
     },
   };
 }
@@ -108,7 +116,7 @@ export async function submitEntry(input: SubmitEntryInput): Promise<ActionResult
   const { error } = await supabase.rpc("submit_entry", {
     p_round_id: input.roundId,
     p_registration_id: input.registrationId,
-    p_suno_share_url: input.sunoShareUrl,
+    p_suno_share_url: verify.info.canonicalUrl,
     p_title: input.title,
     p_cover_image_url: input.coverImageUrl,
     p_sharer_handle: verify.info.sharerHandle,

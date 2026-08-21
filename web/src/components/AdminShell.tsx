@@ -132,7 +132,8 @@ export function AdminShell({
       .order("created_at", { ascending: false })
       .then(({ data, error }) => {
         if (error) {
-          setPlatformError(error.message);
+          console.error("[AdminShell] failed to load platform competitions:", error);
+          setPlatformError("載入失敗，請重新整理頁面再試一次");
           return;
         }
         setPlatformCompetitions((data ?? []) as unknown as PlatformCompetitionRow[]);
@@ -149,7 +150,8 @@ export function AdminShell({
       .order("display_name")
       .then(({ data, error }) => {
         if (error) {
-          setOrganizersError(error.message);
+          console.error("[AdminShell] failed to load organizers:", error);
+          setOrganizersError("載入失敗，請重新整理頁面再試一次");
           return;
         }
         setPlatformOrganizers((data ?? []) as PlatformOrganizerRow[]);
@@ -165,7 +167,8 @@ export function AdminShell({
       .order("created_at", { ascending: false })
       .then(({ data, error }) => {
         if (error) {
-          setFeedbackError(error.message);
+          console.error("[AdminShell] failed to load feedback:", error);
+          setFeedbackError("載入失敗，請重新整理頁面再試一次");
           return;
         }
         setPlatformFeedback((data ?? []) as unknown as PlatformFeedbackRow[]);
@@ -480,7 +483,9 @@ export function AdminShell({
                                   disabled={revokingId === o.id}
                                   className="focus-ring rounded-[10px] border border-panel-border bg-white/[0.04] px-3 py-1.5 text-[11.5px] font-semibold text-ink transition-colors hover:border-accent/40 disabled:opacity-45"
                                 >
-                                  重新賦予
+                                  {/* 這個按鈕只清 host_revoked_at,從沒被核准過的人(已駁回)點了之後
+                                      不會自動變成核准,只是回到待審核——文案要跟實際效果一致。 */}
+                                  {o.host_approved_at ? "重新賦予" : "移回待審核"}
                                 </button>
                               </div>
                             ))}
