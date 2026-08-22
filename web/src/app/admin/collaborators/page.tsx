@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getManageableCompetitions } from "@/lib/manageableCompetitions";
+import { redirectToLogin } from "@/lib/loginRedirect";
 import { AdminShell } from "@/components/AdminShell";
 import { CollaboratorsClient, type CollaboratorRow } from "./CollaboratorsClient";
 import type { CollaboratorPermissions } from "./actions";
@@ -54,7 +55,7 @@ export default async function AdminCollaboratorsPage({
   const { c: requestedId } = await searchParams;
   const supabase = await createClient();
   const { data: claims } = await supabase.auth.getClaims();
-  if (!claims?.claims?.sub) redirect("/login");
+  if (!claims?.claims?.sub) redirectToLogin(requestedId ? `/admin/collaborators?c=${encodeURIComponent(requestedId)}` : "/admin/collaborators");
   const userId = claims.claims.sub as string;
 
   const { data: profile } = await supabase

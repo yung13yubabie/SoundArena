@@ -31,15 +31,21 @@ export async function GET(request: NextRequest) {
     const plan = await planAudioRetention(supabase, comp.id);
     if (!plan.ended || plan.toClear.length === 0) continue;
 
+    // SA-006 修復:只有 B2 真的刪除成功才清 DB 欄位,失敗就跳過——key 還留著,
+    // 下一次 cron 執行會因為 audio_object_key 還在而自然重試,不用額外的重試狀態。
     let cleared = 0;
     for (const item of plan.toClear) {
+      let b2Deleted = false;
       try {
         await deleteAudioObject(item.audioObjectKey);
-      } catch {
-        // B2 檔案沒刪成功也要繼續清掉 DB 欄位,不要讓單一檔案的錯誤卡住整批清理。
+        b2Deleted = true;
+      } catch (err) {
+        console.error(`B2 刪除失敗,保留 audio_object_key 供下次重試: ${item.audioObjectKey}`, err);
       }
-      const { error } = await supabase.from("submissions").update({ audio_object_key: null }).eq("id", item.submissionId);
-      if (!error) cleared++;
+      if (b2Deleted) {
+        const { error } = await supabase.from("submissions").update({ audio_object_key: null }).eq("id", item.submissionId);
+        if (!error) cleared++;
+      }
     }
     results.push({ competitionId: comp.id, name: comp.name, cleared });
   }

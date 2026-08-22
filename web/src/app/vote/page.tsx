@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { redirectToLogin } from "@/lib/loginRedirect";
 import { SiteHeader } from "@/components/SiteHeader";
 import { EmptyState } from "@/components/EmptyState";
 import { VoteList, type VoteSubmission } from "./VoteList";
@@ -42,7 +43,7 @@ export default async function VotePage({
   const supabase = await createClient();
   const { data: claims } = await supabase.auth.getClaims();
   const userId = claims?.claims?.sub as string | undefined;
-  if (!userId) redirect("/login");
+  if (!userId) redirectToLogin(roundId ? `/vote?round=${encodeURIComponent(roundId)}` : "/vote");
 
   const nowIso = new Date().toISOString();
 

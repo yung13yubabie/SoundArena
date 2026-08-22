@@ -1,6 +1,6 @@
-import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { redirectToLogin } from "@/lib/loginRedirect";
 import { SiteHeader } from "@/components/SiteHeader";
 import { EmptyState } from "@/components/EmptyState";
 import { type SubmissionState } from "@/lib/mockData";
@@ -70,7 +70,7 @@ export default async function StatusPage() {
   const supabase = await createClient();
   const { data: claims } = await supabase.auth.getClaims();
   const userId = claims?.claims?.sub as string | undefined;
-  if (!userId) redirect("/login");
+  if (!userId) redirectToLogin("/status");
 
   const { data: profile } = await supabase.from("profiles").select("display_name").eq("id", userId).maybeSingle();
 

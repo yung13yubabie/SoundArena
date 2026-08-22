@@ -328,7 +328,7 @@ function RoundFormatCard({
       <div className="mb-4 flex items-center gap-2.5">
         <span className="flex-1 text-[15px] font-semibold">{round.name}</span>
         <div className="flex items-center gap-1.75">
-          <Switch on={round.isAnonymous} onClick={toggleAnonymous} />
+          <Switch on={round.isAnonymous} label={`「${round.name}」是否匿名`} onClick={toggleAnonymous} />
           <span className="text-[11.5px] text-ink-dim">{round.isAnonymous ? "本輪匿名" : "本輪公開"}</span>
         </div>
         {round.locked === "preliminary" && (
@@ -414,7 +414,7 @@ function RoundFormatCard({
       {round.special.includes("themed_round") && <ThemedRoundConfigPanel roundId={round.id} initial={round.themeConfig} />}
 
       <div className="mt-3.5 flex items-center gap-2.5 border-t border-panel-border pt-2.5">
-        <Switch on={!!round.scoringRule} onClick={toggleOverride} />
+        <Switch on={!!round.scoringRule} label="此輪是否使用獨立評分規則" onClick={toggleOverride} />
         <span className="text-[12.5px]">此輪使用獨立評分規則（不勾選則沿用比賽預設評分規則）</span>
       </div>
       {round.scoringRule && (

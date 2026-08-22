@@ -1063,3 +1063,21 @@ SA-003(上傳生命週期強化)是使用者選定的下一輪稽核項目,還�
 ### 下一步
 
 SA-003 剩下的三項(quota/孤兒檔案回收/MIME驗證)還沒排優先序。SA-004(CI 安全回歸測試矩陣)、P2 清單(SA-006/007/008/009/013 等)也都還沒動手。
+
+## 08-22:稽核批次修復 SA-006/007/008/009/013
+
+使用者用 `/goal` 設定「繼續處理審計稽核剩餘工作,可分輪分批次,到整個報告都完成」,授權持續處理不需每項都先確認範圍。這是第一批,一次處理五個獨立問題。細節見 [ADR-0024](docs/adr/0024-audit-batch-sa006-007-008-009-013.md)。
+
+- **SA-006**(B2 刪除失敗遺失 key):只有刪除真的成功才清 DB 欄位,失敗就跳過,key 留著讓下一輪清理自然重試——不用新的狀態表。黑箱測試很難真的製造 B2 delete 失敗(idempotent 語意),PoC 只驗證了成功路徑,失敗路徑是程式碼審查層級的確認,誠實記錄。
+- **SA-007**(score 寫入沒驗證關聯性):`revoke insert/update/delete on submission_scores`,新增 `save_submission_score()` RPC 驗證 score_item 真的屬於這個 submission 適用的 scoring_rule。真實 PoC 4/4 通過,包含證實直接繞過 RPC 會被 GRANT 層擋下(`42501`)。
+- **SA-008**(建立比賽非原子操作):新增 `create_competition_full()` 把 4 個步驟收進一個 transaction。用注入故意失敗的診斷函式驗證(呼應 ADR-0015 的手法)——確認連已經成功 insert 的 competition 都會被完整回滾,驗證後移除診斷函式。
+- **SA-009**(Switch 缺 accessible 語義):補上 `role="switch"`/`aria-checked`/必填的 `aria-label`,7 個呼叫點全部更新,順手把觸控目標調到符合 WCAG 2.2 AA 的 24px。
+- **SA-013**(OAuth 完成後導回首頁):新增 `redirectToLogin()`/`safeNextPath()` 共用工具,11 個「未登入導去 /login」的頁面全部保留原始目的地(含 query 參數)。開放重導向防護邏輯獨立測試 10/10 通過。
+
+**過程中的插曲**:跑最終驗證時把 `cd && eslint &` 背景化,`cd` 只作用在子 shell,導致後續 `npm run build` 意外在 SoundArena 外層目錄執行、誤跑到使用者 home 目錄下一個無關的 training-dashboard 專案——輸出跟預期的 Next.js log 對不上時立刻停下查證,沒有照單全收,確認後在正確目錄重跑拿到真實結果。
+
+`tsc`/`eslint`/`build` 全程乾淨,已 commit、push、`vercel --prod` 上線。
+
+### 下一步
+
+按 `/goal` 指示繼續下一批——SA-004(CI 安全回歸測試矩陣)、SA-003 剩餘三項、SA-005/010/011/012 等尚未處理。

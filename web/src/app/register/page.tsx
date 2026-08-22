@@ -1,9 +1,9 @@
-import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { SiteHeader } from "@/components/SiteHeader";
 import { EmptyState } from "@/components/EmptyState";
 import { RegisterForm } from "./RegisterForm";
 import Link from "next/link";
+import { redirectToLogin } from "@/lib/loginRedirect";
 
 // SPEC.md 第2節「存取順序(硬性)」：未登入不得進入報名頁。src/proxy.ts already
 // redirects at the routing layer; this is the defense-in-depth check Next.js's
@@ -17,11 +17,11 @@ export default async function RegisterPage({
   const { data: claims } = await supabase.auth.getClaims();
   const userId = claims?.claims?.sub as string | undefined;
 
-  if (!userId) {
-    redirect("/login");
-  }
-
   const { competition: competitionId } = await searchParams;
+
+  if (!userId) {
+    redirectToLogin(competitionId ? `/register?competition=${encodeURIComponent(competitionId)}` : "/register");
+  }
 
   if (!competitionId) {
     const { data: openCompetitions } = await supabase

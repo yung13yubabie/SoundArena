@@ -125,7 +125,7 @@ function CollaboratorCard({ collaborator, isOrganizer }: { collaborator: Collabo
       <div className="flex flex-wrap gap-x-5 gap-y-2">
         {PERMISSION_META.map((p) => (
           <label key={p.key} className={`flex items-center gap-2 text-[12px] text-ink-dim ${isOrganizer ? "" : "opacity-70"}`}>
-            <Switch on={permissions[p.key]} onClick={() => toggle(p.key)} />
+            <Switch on={permissions[p.key]} label={p.label} onClick={() => toggle(p.key)} />
             {p.label}
           </label>
         ))}
@@ -191,7 +191,7 @@ function InviteForm({
               className={`flex items-center gap-2 text-[12px] text-ink-dim ${capped ? "opacity-35" : ""}`}
               title={capped ? "你自己沒有這項權限，無法授予給別人" : undefined}
             >
-              <Switch on={permissions[p.key]} onClick={() => toggle(p.key)} />
+              <Switch on={permissions[p.key]} label={p.label} onClick={() => toggle(p.key)} />
               {p.label}
             </label>
           );

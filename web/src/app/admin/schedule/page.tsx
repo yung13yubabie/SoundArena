@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getManageableCompetitions } from "@/lib/manageableCompetitions";
+import { redirectToLogin } from "@/lib/loginRedirect";
 import { AdminShell } from "@/components/AdminShell";
 import { ScheduleForm } from "./ScheduleForm";
 
@@ -16,7 +17,7 @@ export default async function AdminSchedulePage({
   const { c: requestedId } = await searchParams;
   const supabase = await createClient();
   const { data: claims } = await supabase.auth.getClaims();
-  if (!claims?.claims?.sub) redirect("/login");
+  if (!claims?.claims?.sub) redirectToLogin(requestedId ? `/admin/schedule?c=${encodeURIComponent(requestedId)}` : "/admin/schedule");
   const userId = claims.claims.sub as string;
 
   const { data: profile } = await supabase

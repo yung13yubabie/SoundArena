@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getManageableCompetitions } from "@/lib/manageableCompetitions";
+import { redirectToLogin } from "@/lib/loginRedirect";
 import { AdminShell } from "@/components/AdminShell";
 import { EmptyState } from "@/components/EmptyState";
 import { JudgeBoard, type JudgeSubmission, type JudgeScoreItem } from "./JudgeBoard";
@@ -41,7 +42,13 @@ export default async function JudgePage({
   const supabase = await createClient();
   const { data: claims } = await supabase.auth.getClaims();
   const userId = claims?.claims?.sub as string | undefined;
-  if (!userId) redirect("/login");
+  if (!userId) {
+    const params = new URLSearchParams();
+    if (requestedId) params.set("c", requestedId);
+    if (requestedRoundId) params.set("round", requestedRoundId);
+    const query = params.toString();
+    redirectToLogin(query ? `/judge?${query}` : "/judge");
+  }
 
   const { data: profile } = await supabase
     .from("profiles")

@@ -98,7 +98,7 @@ export function PrivacyPanel({
           <span className="text-[12.5px]">{r.competitionName}</span>
           <div className="flex items-center gap-2">
             <span className="text-[11px] text-ink-faint">{r.isPublic ? "公開" : "不公開"}</span>
-            <Switch on={r.isPublic} onClick={() => toggleReg(r.id, !r.isPublic)} />
+            <Switch on={r.isPublic} label={`「${r.competitionName}」報名資訊是否公開`} onClick={() => toggleReg(r.id, !r.isPublic)} />
           </div>
         </div>
       ))}
@@ -111,7 +111,7 @@ export function PrivacyPanel({
               <span className="text-[12.5px]">{s.title}</span>
               <div className="flex items-center gap-2">
                 <span className="text-[11px] text-ink-faint">{s.isPublic ? "公開" : "不公開"}</span>
-                <Switch on={s.isPublic} onClick={() => toggleSub(s.id, !s.isPublic)} />
+                <Switch on={s.isPublic} label={`「${s.title}」是否公開試聽`} onClick={() => toggleSub(s.id, !s.isPublic)} />
               </div>
             </div>
           ))}

@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 
 type Provider = "google" | "discord";
 
-export function LoginClient() {
+export function LoginClient({ next }: { next: string }) {
   const [loadingProvider, setLoadingProvider] = useState<Provider | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -19,7 +19,7 @@ export function LoginClient() {
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
       options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
+        redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
         scopes: provider === "google" ? "openid email profile" : "identify guilds.join",
       },
     });

@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getManageableCompetitions } from "@/lib/manageableCompetitions";
+import { redirectToLogin } from "@/lib/loginRedirect";
 import { AdminShell } from "@/components/AdminShell";
 import { EmptyState } from "@/components/EmptyState";
 import { ReviewQueue, type ReviewRow } from "./ReviewQueue";
@@ -34,7 +35,7 @@ export default async function AdminReviewPage({
   const supabase = await createClient();
   const { data: claims } = await supabase.auth.getClaims();
   const userId = claims?.claims?.sub as string | undefined;
-  if (!userId) redirect("/login");
+  if (!userId) redirectToLogin(requestedId ? `/admin/review?c=${encodeURIComponent(requestedId)}` : "/admin/review");
 
   const { data: profile } = await supabase
     .from("profiles")

@@ -1,8 +1,8 @@
-import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { SiteHeader } from "@/components/SiteHeader";
 import { EmptyState } from "@/components/EmptyState";
 import { SubmitForm, type RoundOption } from "./SubmitForm";
+import { redirectToLogin } from "@/lib/loginRedirect";
 
 interface RegistrationRow {
   id: string;
@@ -20,7 +20,7 @@ export default async function SubmitPage() {
   const supabase = await createClient();
   const { data: claims } = await supabase.auth.getClaims();
   const userId = claims?.claims?.sub as string | undefined;
-  if (!userId) redirect("/login");
+  if (!userId) redirectToLogin("/submit");
 
   const { data: registrations } = await supabase
     .from("registrations")

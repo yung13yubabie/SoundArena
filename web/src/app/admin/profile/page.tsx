@@ -1,13 +1,13 @@
-import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { AdminShell } from "@/components/AdminShell";
 import { ProfileForm } from "./ProfileForm";
+import { redirectToLogin } from "@/lib/loginRedirect";
 
 export default async function AdminProfilePage() {
   const supabase = await createClient();
   const { data: claims } = await supabase.auth.getClaims();
   const userId = claims?.claims?.sub as string | undefined;
-  if (!userId) redirect("/login");
+  if (!userId) redirectToLogin("/admin/profile");
 
   const { data: profile } = await supabase
     .from("profiles")

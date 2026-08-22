@@ -249,6 +249,7 @@ export function AdminShell({
             <div className="mb-3.5 flex items-center gap-2.5">
               <Switch
                 on={viewpoint === "platform"}
+                label="切換平台管理員視角與主辦人視角"
                 onClick={() => {
                   const nv = viewpoint === "platform" ? "organizer" : "platform";
                   setViewpoint(nv);

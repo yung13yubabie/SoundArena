@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getManageableCompetitions } from "@/lib/manageableCompetitions";
+import { redirectToLogin } from "@/lib/loginRedirect";
 import { CreateCompetitionForm } from "./CreateCompetitionForm";
 import {
   AdminFormatClient,
@@ -56,7 +57,7 @@ export default async function AdminFormatPage({
   const { c: requestedId } = await searchParams;
   const supabase = await createClient();
   const { data: claims } = await supabase.auth.getClaims();
-  if (!claims?.claims?.sub) redirect("/login");
+  if (!claims?.claims?.sub) redirectToLogin(requestedId ? `/admin/format?c=${encodeURIComponent(requestedId)}` : "/admin/format");
   const userId = claims.claims.sub as string;
 
   const { data: profile } = await supabase

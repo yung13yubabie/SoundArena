@@ -12,6 +12,7 @@ export function NotificationToggle({ registrationId, initialEnabled }: { registr
     <label className="flex items-center gap-1.75 text-[11.5px] text-ink-dim">
       <Switch
         on={enabled}
+        label="接收這場比賽的通知"
         onClick={() => {
           const next = !enabled;
           setEnabled(next);

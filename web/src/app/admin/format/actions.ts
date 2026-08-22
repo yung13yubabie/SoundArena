@@ -49,6 +49,10 @@ async function insertDefaultScoreItems(
   );
 }
 
+// SA-008 修復:原本依序做 4 個獨立呼叫(insert competition → RPC create_initial_rounds
+// → insert scoring_rule → insert score items),中途任一步失敗,前面已成功的部分不會
+// 自動 rollback,可能留下結構不完整的比賽殘留。改成單一 RPC(create_competition_full),
+// 一次呼叫就是一個 transaction,任何一步失敗全部 rollback,不會有「建立了一半」的比賽。
 export async function createCompetition(formData: FormData): Promise<ActionResult> {
   const supabase = await createClient();
   const {
@@ -61,32 +65,12 @@ export async function createCompetition(formData: FormData): Promise<ActionResul
   if (!name) return { error: "請填寫比賽名稱" };
   if (name.length > 200) return { error: "比賽名稱最長 200 字" };
 
-  const { data: competition, error: competitionError } = await supabase
-    .from("competitions")
-    .insert({
-      organizer_id: user.id,
-      name,
-      slug: slugify(name),
-      is_public: true,
-    })
-    .select("id")
-    .single();
-  if (competitionError || !competition) return { error: toFriendlyError(competitionError ?? { message: "建立比賽失敗" }) };
-
-  const { error: roundsError } = await supabase.rpc("create_initial_rounds", {
-    p_competition_id: competition.id,
+  const { error } = await supabase.rpc("create_competition_full", {
+    p_name: name,
+    p_slug: slugify(name),
     p_default_anonymous: defaultAnonymous,
   });
-  if (roundsError) return { error: toFriendlyError(roundsError) };
-
-  const { data: scoringRule, error: scoringError } = await supabase
-    .from("scoring_rules")
-    .insert({ competition_id: competition.id, round_id: null })
-    .select("id")
-    .single();
-  if (scoringError || !scoringRule) return { error: toFriendlyError(scoringError ?? { message: "建立評分規則失敗" }) };
-
-  await insertDefaultScoreItems(supabase, scoringRule.id);
+  if (error) return { error: toFriendlyError(error) };
 
   revalidatePath("/admin/format");
   revalidatePath("/");
@@ -302,15 +286,24 @@ export async function cleanupNonFinalistAudio(competitionId: string): Promise<Cl
     return { error: "比賽還沒完全結束（決賽投票尚未截止），還不能清除音檔" };
   }
 
+  // SA-006 資安複查發現:舊版不管 B2 delete 有沒有成功都清掉 DB 的 audio_object_key,
+  // 刪除失敗時等於永久丟失重試所需的 key,私人音檔可能悄悄留在 B2 卻再也找不到。
+  // 修法很小:只有 B2 真的刪除成功才清 DB 欄位,失敗就整個跳過這筆——key 還留著,
+  // 下一輪清理(手動或 cron)會因為 audio_object_key 還在而自然重新嘗試,不需要
+  // 額外的 tombstone/retry 狀態表。
   let cleared = 0;
   for (const item of plan.toClear) {
+    let b2Deleted = false;
     try {
       await deleteAudioObject(item.audioObjectKey);
-    } catch {
-      // B2 檔案沒刪成功也要繼續清掉 DB 欄位,不要讓單一檔案的錯誤卡住整批清理。
+      b2Deleted = true;
+    } catch (err) {
+      console.error(`B2 刪除失敗,保留 audio_object_key 供下次重試: ${item.audioObjectKey}`, err);
     }
-    const { error } = await supabase.rpc("clear_submission_audio", { p_submission_id: item.submissionId });
-    if (!error) cleared++;
+    if (b2Deleted) {
+      const { error } = await supabase.rpc("clear_submission_audio", { p_submission_id: item.submissionId });
+      if (!error) cleared++;
+    }
   }
 
   revalidatePath("/admin/format");
