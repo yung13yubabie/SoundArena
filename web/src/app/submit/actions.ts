@@ -5,14 +5,20 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { toFriendlyError } from "@/lib/actionError";
 import { parseSunoShareUrl } from "@/lib/suno";
-import { createUploadUrl, deleteAudioObject } from "@/lib/storage";
-import { ALLOWED_AUDIO_TYPES, MAX_AUDIO_FILE_SIZE } from "@/lib/audioUpload";
+import { createUploadUrl, deleteAudioObject, getObjectHeadBytes } from "@/lib/storage";
+import { ALLOWED_AUDIO_TYPES, MAX_AUDIO_FILE_SIZE, matchesAudioMagicBytes } from "@/lib/audioUpload";
 
 type ActionResult = { success: true } | { error: string };
 
 const MAX_TITLE_LENGTH = 200;
 const MAX_LYRICS_LENGTH = 30000;
 const MAX_PROCESS_DOC_LENGTH = 20000;
+
+// SA-003 剩餘項目:24 小時內同一筆報名最多申請這麼多次 upload URL(不含已經被
+// 投稿吃掉的)——核發 URL 本身幾乎零成本,真正的風險是有人重複申請卻從不真的
+// 送出投稿,累積一堆孤兒物件。這個上限只是擋濫用,正常使用者調整/重傳幾次
+// 完全不會撞到。
+const MAX_PENDING_UPLOADS_PER_DAY = 20;
 
 export type RequestAudioUploadResult = { success: true; uploadUrl: string; objectKey: string } | { error: string };
 
@@ -39,8 +45,24 @@ export async function requestAudioUpload(
     .maybeSingle();
   if (!registration) return { error: "找不到這筆報名" };
 
+  const { count } = await supabase
+    .from("pending_uploads")
+    .select("id", { count: "exact", head: true })
+    .eq("registration_id", registrationId)
+    .is("consumed_at", null)
+    .gte("created_at", new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
+  if ((count ?? 0) >= MAX_PENDING_UPLOADS_PER_DAY) {
+    return { error: "上傳請求太頻繁，請稍後再試" };
+  }
+
   const objectKey = `submissions/${registrationId}/${randomUUID()}.${extension}`;
   const uploadUrl = await createUploadUrl(objectKey, contentType, fileSize);
+
+  const { error: trackError } = await supabase
+    .from("pending_uploads")
+    .insert({ registration_id: registrationId, object_key: objectKey, content_type: contentType, declared_size: fileSize });
+  if (trackError) return { error: "建立上傳請求失敗，請稍後再試" };
+
   return { success: true, uploadUrl, objectKey };
 }
 
@@ -149,6 +171,24 @@ export async function submitEntry(input: SubmitEntryInput): Promise<ActionResult
     .maybeSingle();
   if (!registration || registration.suno_handle.toLowerCase() !== verify.info.sharerHandle.toLowerCase()) {
     return { error: "Suno 分享者帳號跟報名時填的帳號不符" };
+  }
+
+  // SA-003 剩餘項目:contentType header 已經綁進上傳簽章不能偽造(ADR-0023),但實際
+  // byte 內容可能根本不是那個格式。投稿當下(不是上傳當下)才做這個檢查,因為投稿
+  // 才是「這個檔案真的要被使用」的時間點——只查開頭幾十個 bytes,不用整個下載。
+  if (input.audioObjectKey) {
+    const { data: pendingUpload } = await supabase
+      .from("pending_uploads")
+      .select("content_type")
+      .eq("object_key", input.audioObjectKey)
+      .maybeSingle();
+    if (!pendingUpload) return { error: "找不到這個上傳紀錄，請重新上傳音檔" };
+
+    const headBytes = await getObjectHeadBytes(input.audioObjectKey);
+    if (!matchesAudioMagicBytes(headBytes, pendingUpload.content_type)) {
+      await deleteAudioObject(input.audioObjectKey).catch(() => {});
+      return { error: "上傳的檔案內容看起來不是有效的音訊格式，請確認檔案沒有損壞" };
+    }
   }
 
   const { data: submissionId, error } = await supabase.rpc("submit_entry", {

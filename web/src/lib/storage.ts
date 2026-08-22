@@ -48,3 +48,17 @@ export async function createUploadUrl(key: string, contentType: string, contentL
 export async function deleteAudioObject(key: string): Promise<void> {
   await client().send(new DeleteObjectCommand({ Bucket: process.env.B2_BUCKET!, Key: key }));
 }
+
+// SA-003 剩餘項目:只驗證宣稱的 Content-Type(已經綁進簽章,不能偽造 header)不夠——
+// 實際 byte 內容可能根本不是那個格式。只抓開頭幾十個 bytes(Range GET,不用整個
+// 下載)給呼叫端做 magic bytes 比對,見 audioUpload.ts 的 matchesAudioMagicBytes()。
+export async function getObjectHeadBytes(key: string, byteCount = 64): Promise<Buffer> {
+  const command = new GetObjectCommand({ Bucket: process.env.B2_BUCKET!, Key: key, Range: `bytes=0-${byteCount - 1}` });
+  const response = await client().send(command);
+  const chunks: Buffer[] = [];
+  // Node runtime 下 Body 是 Node.js Readable stream。
+  for await (const chunk of response.Body as AsyncIterable<Buffer>) {
+    chunks.push(Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks);
+}

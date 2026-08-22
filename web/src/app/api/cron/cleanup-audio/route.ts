@@ -50,5 +50,31 @@ export async function GET(request: NextRequest) {
     results.push({ competitionId: comp.id, name: comp.name, cleared });
   }
 
-  return NextResponse.json({ ok: true, processed: results });
+  // SA-003 剩餘項目:清掉「申請了 upload URL、可能也真的上傳了檔案,但從沒被任何
+  // submit_entry() 吃掉」的孤兒物件——48 小時的緩衝期是為了不要清掉使用者正在
+  // 填表單、還沒送出投稿的合法上傳。B2 的 DeleteObject 對不存在的 key 是
+  // idempotent 成功,所以「使用者拿到 URL 但根本沒上傳」的情況這裡也會自然清乾淨。
+  const orphanCutoff = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+  const { data: orphans } = await supabase
+    .from("pending_uploads")
+    .select("id, object_key")
+    .is("consumed_at", null)
+    .lt("created_at", orphanCutoff);
+
+  let orphansCleared = 0;
+  for (const orphan of orphans ?? []) {
+    let b2Deleted = false;
+    try {
+      await deleteAudioObject(orphan.object_key);
+      b2Deleted = true;
+    } catch (err) {
+      console.error(`孤兒上傳物件刪除失敗,保留紀錄供下次重試: ${orphan.object_key}`, err);
+    }
+    if (b2Deleted) {
+      const { error } = await supabase.from("pending_uploads").delete().eq("id", orphan.id);
+      if (!error) orphansCleared++;
+    }
+  }
+
+  return NextResponse.json({ ok: true, processed: results, orphansCleared, orphansFound: (orphans ?? []).length });
 }

@@ -1094,3 +1094,17 @@ SA-003 剩下的三項(quota/孤兒檔案回收/MIME驗證)還沒排優先序。
 ### 下一步
 
 按 `/goal` 指示繼續下一批——SA-004(CI 安全回歸測試矩陣)、SA-003 剩餘三項(quota/孤兒檔案回收/MIME驗證)、SA-005(通知寄送,需要使用者提供 Resend/Discord 憑證才能繼續)、SA-012(觀測性)尚未處理。SA-011 已標記為暫緩,等使用者決定要不要冒風險推送 auth config。
+
+## 08-22:SA-003 完整收尾——quota、孤兒檔案回收、MIME 內容驗證
+
+按 `/goal` 繼續處理。細節見 [ADR-0026](docs/adr/0026-sa003-remainder-quota-orphan-gc-mime.md)。
+
+新增 `pending_uploads` 表追蹤 upload URL 申請紀錄(`consumed_at` 表示是否已被真的投稿吃掉,跟 ADR-0024 的 `audio_object_key` 保留手法同一種精神)。三個具體修法:(1)`requestAudioUpload()` 加 24 小時 20 筆的 quota 限制;(2)延伸既有的 `/api/cron/cleanup-audio` 排程,清掉 48 小時內沒被消費的孤兒上傳(只有 B2 真的刪除成功才清 DB 紀錄,跟 SA-006 同一套失敗保留原則);(3)`submitEntry()` 投稿當下用 `getObjectHeadBytes()`(S3 Range GET 只抓開頭 64 bytes)+ `matchesAudioMagicBytes()` 驗證實際內容真的是宣稱的音訊格式,不符合就刪除物件並拒絕投稿。
+
+真實 PoC(9/9 通過):magic bytes 正確判斷真實 ID3 header / 偽裝的純文字、`pending_uploads` RLS(owner 可寫、陌生人不行)、`submit_entry()` 正確標記 consumed_at、孤兒掃描查詢正確且不誤抓、模擬 cron 清理流程真的清掉、Range GET 對真實 B2 物件驗證通過、quota 計數查詢在 20 筆時正確觸發門檻。
+
+`tsc`/`eslint`/`build` 全程乾淨,`Buffer` 相關新函式沒有洩漏進 client bundle。已 commit、push、`vercel --prod` 上線。**至此 SA-003 全部驗收標準都已完成。**
+
+### 下一步
+
+按 `/goal` 指示繼續——SA-004(CI 安全回歸測試矩陣)是剩下最大的一項,SA-005(需使用者提供憑證)、SA-011(需使用者決定風險)保持暫緩,SA-012(觀測性)還沒處理。
