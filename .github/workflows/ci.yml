@@ -31,6 +31,32 @@ jobs:
       # 生成型別而失敗,本機開發機器不會踩到是因為 .next 目錄通常已經存在。
       - run: npm run build
 
+  # DB-01 資安複查(第三方稽核報告第二輪):security-regression 這一步真的握有
+  # 正式環境的 SUPABASE_SERVICE_ROLE_KEY(bypass RLS 的信任等級),原本跟 build
+  # 同一個 job、同一個 push 就自動執行——如果哪個 npm 依賴被植入惡意 postinstall
+  # script,CI 環境就會自動、無人值守地暴露這把 key。拆成獨立 job,綁定
+  # ci-security-test 這個 GitHub Environment(有 required reviewer 保護規則),
+  # 每次執行前都需要手動在 Actions 頁面按核准才會真的跑——不是每個 push 都自動
+  # 靜默執行。三個憑證也已經從 repo-level secrets 移到這個 environment 專屬的
+  # secrets,一般的 build job 完全碰不到。
+  security-test:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: ci-security-test
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - run: npm ci
+
       # SA-004:對正式 Supabase 專案跑一次 Role × Resource × Action 安全回歸測試
       # (跨租戶隔離、collaborator 權限子集、Judge 匿名邊界、score/vote 有效性等)。
       # 用一次性測試帳號,結束後自動清理,不影響真實資料。
