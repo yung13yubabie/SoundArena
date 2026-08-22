@@ -161,7 +161,11 @@ export async function submitEntry(input: SubmitEntryInput): Promise<ActionResult
 
   if (error) {
     return {
-      error: toFriendlyError(error, [{ test: (_m, c) => c === "23505", friendly: "這個輪次你已經投稿過了" }]),
+      error: toFriendlyError(error, [
+        { test: (_m, c) => c === "23505", friendly: "這個輪次你已經投稿過了" },
+        { test: (m) => m.includes("submissions have not opened yet"), friendly: "這一輪還沒開放投稿" },
+        { test: (m) => m.includes("submission window has closed"), friendly: "這一輪投稿已經截止" },
+      ]),
     };
   }
 

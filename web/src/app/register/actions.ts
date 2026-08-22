@@ -38,7 +38,10 @@ export async function registerForCompetition(formData: FormData): Promise<Action
     .single();
   if (error) {
     return {
-      error: toFriendlyError(error, [{ test: (_m, c) => c === "23505", friendly: "你已經報名過這場比賽了" }]),
+      error: toFriendlyError(error, [
+        { test: (_m, c) => c === "23505", friendly: "你已經報名過這場比賽了" },
+        { test: (_m, c) => c === "42501", friendly: "報名尚未開放或已經截止" },
+      ]),
     };
   }
 
@@ -103,6 +106,7 @@ export async function resubmitRegistration(
             return `送出太頻繁，請等約 ${minutes} 分鐘後再重新送出`;
           })(),
         },
+        { test: (m) => m.includes("registration window is closed"), friendly: "報名尚未開放或已經截止" },
       ]),
     };
   }

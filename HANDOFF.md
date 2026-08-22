@@ -988,3 +988,24 @@ P2 順手修的:`review_submission()` 補 `p_status` 白名單(原本接受完�
 ### 下一步
 
 Discord OAuth 重新設計需要先跟使用者確認範圍才動手。實際發信需要等使用者提供 Resend/Discord 憑證；完整登入流程的瀏覽器測試需要先請使用者確認/修正 Supabase Auth 的 Site URL 設定。留存清理自動化已完成,下次有比賽真的跑完全部賽程時,可以實際觀察 cron 排程觸發後 `processed` 是否正確清出資料(目前只驗證了「沒有東西該清時回空」的分支,還沒驗證過「真的有東西被清」的分支跑在 cron 路徑上——手動觸發路徑已經驗證過,邏輯共用同一個 `planAudioRetention()`,風險低但值得記錄)。
+
+## 08-22:第三方 SaaS 稽核報告獨立複查 + SA-001/SA-002 修復
+
+使用者丟了一份第三方 AI 產生的完整 production audit 報告(13 項 findings),要求用 `mattpocock-skills:systematic-debugging` 紀律處理——不能照單全收,先獨立複查再決定修什麼。細節見 [ADR-0020](docs/adr/0020-third-party-audit-sa001-sa002.md):
+
+**複查結果**:4 個 P1 全部用實際 code/migration 內容核對過,全部確認屬實。最值得記住的兩個發現:
+
+1. **投稿截止時間比報告寫的更嚴重**——`rounds.allows_new_submissions` 這個欄位從 schema 建立以來,整個程式碼庫沒有任何一處把它寫成過 `false`(用 `grep -rn allows_new_submissions` 全專案驗證過),`submit_entry()` 唯一的截止檢查形同虛設;真正的 `submission_opens_at/closes_at` 時間戳記除了 `/admin/schedule` 寫入畫面外,沒有任何地方讀取比對。不是「UI 有查但 backend 沒有」,是整個系統從頭到尾沒人檢查。
+2. **Judge 匿名性只在 UI 成立**——`/judge` 頁面刻意寫死「一律顯示匿名作品,即使你是主辦本人」,但 `registrations readable by organizer or collaborator` policy 對 judge 權限一樣整列可讀,合法拿到 judge 權限的協作者能直接繞過 UI 查到真實身份。
+
+使用者確認這輪範圍是「SA-001 + SA-002 先修」,SA-003(上傳生命週期重構)跟 SA-004(CI 安全測試矩陣)規模較大,留到之後個別討論。SA-006/007/008/009/013 等 P2/P3 也確認屬實但這輪沒動手。
+
+**修法**:報名/投稿的截止時間收進 DB layer(RLS policy 的 WITH CHECK 子查詢 + `submit_entry()` 補時間戳比對);Judge 匿名性收進新的 `judge_submissions_for_round()` SECURITY DEFINER RPC(只回傳評分需要的 4 個欄位,不含任何身份資訊),`registrations`/`submissions` 的 collaborator 讀取 policy 收窄成只留 `review` 權限。
+
+**真實 PoC(9/9 通過)**:5 個一次性測試帳號 + 真實 password-sign-in session(不是 service_role 偽造),涵蓋 judge-only 協作者被擋、review 協作者跟主辦人本人仍正常(回歸測試)、報名/投稿截止前後的成功/失敗、以及用獨立 service_role 查詢複查投稿真的落地在 DB。過程中抓到兩個真的 bug:(1)`judge_submissions_for_round()` 第一版 `RETURN QUERY` 型別不匹配(`registrations.status` 是自訂 enum,不是 text)——已推送的 migration 不編輯,用新檔案 forward-fix;(2)PoC 腳本自己的 batch insert 沒把 collaborator 的 4 個 boolean 欄位帶滿,PostgREST 把缺的欄位當明確 NULL 送進去撞 NOT NULL constraint——修正腳本本身,不是修復的問題。
+
+`tsc`/`eslint`/`build` 全程乾淨,已 commit、push、`vercel --prod` 上線。
+
+### 下一步
+
+SA-003(上傳檔案大小未綁進簽章 + 沒有 provisional upload 生命週期)跟 SA-004(CI 缺乏 RLS/多租戶安全回歸測試)是報告裡剩下的兩個 P1,規模都比這輪大——SA-003 需要新表追蹤 upload intent/quota/orphan GC,SA-004 需要一整套 Role × Resource × Action 測試矩陣。哪個先做、做到多深,需要使用者決定。P2 清單(SA-006/007/008/009/013 等)也還沒排優先序。

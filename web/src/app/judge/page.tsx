@@ -19,11 +19,11 @@ interface ScoringRuleRow {
   score_items: ScoreItemRow[];
 }
 
-interface SubmissionRow {
-  id: string;
+interface JudgeSubmissionRow {
+  submission_id: string;
   title: string | null;
   registration_id: string;
-  registrations: { id: string; status: string } | { id: string; status: string }[] | null;
+  registration_status: string;
 }
 
 function one<T>(value: T | T[] | null): T | null {
@@ -121,16 +121,15 @@ export default async function JudgePage({
     );
   }
 
+  // judge_submissions_for_round() 是匿名安全的 RPC(ADR-0020 SA-001):只回傳
+  // 評分需要的欄位,不像直接查 registrations 那樣會把 user_id/display_name/
+  // suno_handle 整列露出來給 judge 權限的協作者。
   const [{ data: scoringRuleRows }, { data: submissionRows }, { data: votes }] = await Promise.all([
     supabase
       .from("scoring_rules")
       .select("id, round_id, score_items(id, label, kind, weight_percent, score_item_templates(key))")
       .eq("competition_id", competition.id),
-    supabase
-      .from("submissions")
-      .select("id, title, registration_id, registrations(id, status)")
-      .eq("round_id", round.id)
-      .eq("status", "approved"),
+    supabase.rpc("judge_submissions_for_round", { p_round_id: round.id }),
     supabase.from("votes").select("submission_id").eq("round_id", round.id),
   ]);
 
@@ -164,8 +163,8 @@ export default async function JudgePage({
     voteCounts.set(v.submission_id, (voteCounts.get(v.submission_id) ?? 0) + 1);
   }
 
-  const submissionsRaw = (submissionRows ?? []) as unknown as SubmissionRow[];
-  const submissionIds = submissionsRaw.map((s) => s.id);
+  const submissionsRaw = (submissionRows ?? []) as unknown as JudgeSubmissionRow[];
+  const submissionIds = submissionsRaw.map((s) => s.submission_id);
 
   const { data: scoreRows } = submissionIds.length
     ? await supabase.from("submission_scores").select("submission_id, score_item_id, raw_value").in("submission_id", submissionIds)
@@ -174,16 +173,16 @@ export default async function JudgePage({
   const scoreByKey = new Map((scoreRows ?? []).map((s) => [`${s.submission_id}:${s.score_item_id}`, s.raw_value]));
 
   const submissions: JudgeSubmission[] = submissionsRaw.map((s, idx) => {
-    const reg = one(s.registrations);
     const values: Record<string, number> = {};
     for (const item of scoreItems) {
-      values[item.id] = item.templateKey === "vote" ? (voteCounts.get(s.id) ?? 0) : (scoreByKey.get(`${s.id}:${item.id}`) ?? 0);
+      values[item.id] =
+        item.templateKey === "vote" ? (voteCounts.get(s.submission_id) ?? 0) : (scoreByKey.get(`${s.submission_id}:${item.id}`) ?? 0);
     }
     return {
-      id: s.id,
+      id: s.submission_id,
       label: `匿名作品 #${String(idx + 1).padStart(2, "0")}`,
-      registrationId: reg?.id ?? s.registration_id,
-      eliminated: reg?.status === "eliminated",
+      registrationId: s.registration_id,
+      eliminated: s.registration_status === "eliminated",
       values,
     };
   });
