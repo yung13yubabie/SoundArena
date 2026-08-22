@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { Icon } from "@/lib/icons";
-import { SUBMISSION_STATE_META, STATE_PILL_CLASS } from "@/lib/mockData";
+import { SUBMISSION_STATE_META, STATE_PILL_CLASS } from "@/lib/submissionStateMeta";
 import { reviewSubmission } from "./actions";
 
 export interface ReviewRow {

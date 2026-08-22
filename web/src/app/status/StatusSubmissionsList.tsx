@@ -7,7 +7,7 @@ import { CommentsPanel } from "@/components/CommentsPanel";
 import { PlayerBar } from "@/components/PlayerBar";
 import { NotificationToggle } from "./NotificationToggle";
 import { deleteMySubmission } from "../submit/actions";
-import { SUBMISSION_STATE_META, STATE_PILL_CLASS, type SubmissionState } from "@/lib/mockData";
+import { SUBMISSION_STATE_META, STATE_PILL_CLASS, type SubmissionState } from "@/lib/submissionStateMeta";
 
 export interface StatusRegistration {
   id: string;

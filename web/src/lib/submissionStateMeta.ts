@@ -18,5 +18,3 @@ export const STATE_PILL_CLASS: Record<string, string> = {
   approved: "border-ok/35 bg-ok/8 text-ok",
   rejected: "border-panel-border text-ink-faint line-through",
 };
-
-

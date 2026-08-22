@@ -1157,3 +1157,13 @@ SA-003 剩下的三項(quota/孤兒檔案回收/MIME驗證)還沒排優先序。
 使用者同意「先修正 site_url 再推送全部 config」後,推送前做最後檢查時發現一個原本沒具體識別出來的真實風險:`config.toml` 的 `[auth.external.google]`/`[auth.external.discord]` secret 欄位用 `env(SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET)` 這種語法,`config push` 執行時會用當下環境變數替換——**確認我的執行環境完全沒有設定這兩個變數**,代表推送很可能直接把正式環境的 OAuth secret 換成空值,讓全站 Google/Discord 登入失效。這比「不知道有沒有別的手動設定會被覆蓋」明確、嚴重得多。回報後使用者選擇**先停下,不推送**。
 
 SA-011 維持 Unable to Verify 狀態,但現在有了明確的下一步路徑:要嘛使用者提供這兩個 OAuth client secret 的實際值讓 push 安全執行,要嘛直接在 Supabase dashboard 手動改,完全不透過 `config push`。純文件調查,沒有程式碼異動,不需要 commit/deploy。
+
+## 08-22:Anti-Slop 清理——原始稽核報告 P3/P4 段落的三個具體項目
+
+Stop hook 持續認為三項暫緩不等於完成。重新翻閱原始稽核報告全文,發現先前只聚焦 SA-001~SA-013 編號 finding,漏看了報告的「Anti-Slop Report」跟「Prioritized Remediation Roadmap」P3/P4 段落——這些是不需要憑證、不需要使用者風險決定的具體項目,是真正還沒做、能自主完成的部分。細節見 [ADR-0030](docs/adr/0030-anti-slop-cleanup.md)。
+
+- **`mockData.ts` 改名**為 `submissionStateMeta.ts`——內容只有投稿狀態的顯示文字/CSS class 對照表,跟假資料無關,舊檔名容易誤導新人以為 production 還依賴 mock。
+- **Closed Competition 卡片 CTA 文字修正**——狀態徽章早就正確顯示「報名已截止」,但下方連結文字不管狀態一律寫死「查看並報名 →」,造成 visual state 跟 action affordance 不一致。改成依狀態顯示「查看比賽 →」。
+- **清除 vestigial 的 `competitions.anonymity_mode`**——ADR-0006 就自己標記這個欄位不再被讀取,但一直沒真的刪掉。確認 app 層零引用、目前生效的 SQL function 都已改用 `rounds.is_anonymous`、且 `competitions` UPDATE 早就整個從 authenticated 收回(連寫入路徑都不存在)後,執行 `drop column` + `drop type`。這是結構性改動,額外重跑完整安全回歸測試(15/15 通過)+ 專門為 `create_competition_full()` RPC 寫真實 PoC(2/2 通過)雙重驗證。
+
+`tsc`/`eslint`/`build` 全程乾淨,已 commit、push、`vercel --prod` 上線。

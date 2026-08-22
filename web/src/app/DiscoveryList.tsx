@@ -124,7 +124,7 @@ export function DiscoveryList({ competitions, authed }: { competitions: Competit
                       href={`/register?competition=${c.id}`}
                       className="text-[12px] font-semibold text-accent hover:underline"
                     >
-                      查看並報名 →
+                      {status === "open" ? "查看並報名 →" : "查看比賽 →"}
                     </Link>
                     <Link
                       href={`/competitions?competition=${c.id}`}

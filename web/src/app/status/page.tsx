@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { redirectToLogin } from "@/lib/loginRedirect";
 import { SiteHeader } from "@/components/SiteHeader";
 import { EmptyState } from "@/components/EmptyState";
-import { type SubmissionState } from "@/lib/mockData";
+import { type SubmissionState } from "@/lib/submissionStateMeta";
 import { PrivacyPanel, type PrivacyRegistration, type PrivacySubmission } from "./PrivacyPanel";
 import { DisplayNameEditor } from "./DisplayNameEditor";
 import {
