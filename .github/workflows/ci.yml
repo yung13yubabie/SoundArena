@@ -30,3 +30,12 @@ jobs:
       # 乾淨 checkout 沒有 .next 目錄時,獨立跑 tsc --noEmit 會因為找不到這些
       # 生成型別而失敗,本機開發機器不會踩到是因為 .next 目錄通常已經存在。
       - run: npm run build
+
+      # SA-004:對正式 Supabase 專案跑一次 Role × Resource × Action 安全回歸測試
+      # (跨租戶隔離、collaborator 權限子集、Judge 匿名邊界、score/vote 有效性等)。
+      # 用一次性測試帳號,結束後自動清理,不影響真實資料。
+      - run: npm run test:security
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
