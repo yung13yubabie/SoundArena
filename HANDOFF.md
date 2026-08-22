@@ -1210,3 +1210,23 @@ DB-01(security regression CI 直接握有正式環境 service_role)還沒處理�
 ### 下一步
 
 第二輪報告其餘的 P2/P3 項目(手機後台 IA 重新設計、多輪時程獨立化、PlatformAdmin 操作靜默失敗、routable admin URL、vote IP fraud signal 化、Judge/Organizer 匿名文案精確化等)還沒排優先序,規模都不小,需要使用者決定下一步方向。
+
+## 08-22:第二輪稽核 P2/P3 第一批——DB-10、DB-14、DB-15
+
+按 `/goal`(「先compact 再繼續進行p2/p3」)繼續處理三個獨立、互不依賴的項目。細節見 [ADR-0034](docs/adr/0034-round2-audit-db10-db14-db15.md)。
+
+- **DB-10**(登入導轉遺失原始目的地):查證範圍比報告舉例的 `/register` 更大——`proxy.ts` 的 `AUTH_REQUIRED_PATHS`(register/admin/judge/status/feedback/vote)全部路徑都是這段 middleware 級 redirect 先攔下,跑在 ADR-0024(SA-013)加的頁面層 `redirectToLogin()` 之前,代表 SA-013 那次修的 `next` 參數對這些路徑其實從未真正生效過,只有不在清單裡的 `/submit` 用得到。修法:middleware 的 redirect 改成正確組出 `/login?next=<編碼後的原始 path+search>`。正式環境已用 curl 對 `/register`、`/vote`、`/admin/schedule` 三條路徑實測驗證,`Location` header 正確帶上 `next`。
+- **DB-14**(評分頁文案過度承諾):`judge/page.tsx` 原文案宣稱主辦人「即使是本人」也完全看不到作者身份,但同一人在 `/admin/review` 本來就需要核對真實 Suno 帳號——文案改成把匿名承諾精確限定在評分工作台這個環節。純文案修改。
+- **DB-15**(`reportClientError()` 沒有輸入邊界):補上 authenticated only、context 白名單(只認目前 3 個真實呼叫點)、訊息長度上限 1000 字、去除控制字元/換行、記憶體內每人每分鐘 10 次節流,防止這支「讓錯誤進 log」的好意 action 被當成免費灌水管道。
+
+`tsc`/`eslint`/`build`/`test:security`(20/20)全程乾淨,已 commit(`1d46285`)、push、`vercel --prod` 上線,正式環境三條路徑真實驗證通過。
+
+### 待使用者決定:`security-test` CI 閘的例行審核流程
+
+ADR-0033 的 DB-01 設計刻意讓 `security-test` job 每次觸發都停在「等待審核」,需要手動點核准。這次 push 之後,`security-test` 一樣卡在 waiting——目前累積了兩個 run 在等審核(這次的 + 前一個 DB-01 文件 commit 的)。這是**設計本身的行為**,不是異常,但代表往後每次 push 完,`test:security` 不會自動跑完,除非有人手動去 GitHub Actions 頁面核准。
+
+需要使用者決定:(a) 每次自己上 GitHub 手動核准,還是 (b) 之後每次我在本機跑完 `npm run test:security` 驗證過就等同覆蓋了 CI 那一份、直接略過核准也沒關係,還是 (c) 其他安排。這件事故意留給使用者選,因為自動幫忙核准會直接架空 DB-01「防止 CI 無人值守碰到 service_role」這個設計初衷。
+
+### 下一步
+
+第二輪報告其餘 P2/P3 項目(DB-04 AdminShell 手機版面、DB-05 Format/Schedule/Review 固定桌面 grid、DB-06 PlatformAdmin 操作靜默失敗、DB-07 routable admin URL、DB-08 投稿/比賽刪除的 B2 孤兒物件、DB-09 多輪時程獨立化、DB-12 導覽命名優化、DB-13 vote IP fraud signal 化)還沒處理,可依 `/goal` 繼續分批進行。
