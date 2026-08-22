@@ -1147,3 +1147,13 @@ SA-003 剩下的三項(quota/孤兒檔案回收/MIME驗證)還沒排優先序。
 ### 下一步
 
 第三方稽核報告目前可獨立處理的項目都已完成或明確標記邊界。SA-005(通知寄送)、SA-011(auth config 風險決定)持續暫緩,等使用者提供憑證/做決定。SA-012 的主動 alert 半部同樣卡在需要外部服務。沒有其他待處理的稽核項目。
+
+## 08-22:SA-011 深入調查——找到具體、確定會發生的風險,維持暫緩
+
+`/goal` 的 Stop hook 認為「暫緩」不算完成,要求進一步確認是否真的沒有更安全的做法。細節見 [ADR-0029](docs/adr/0029-sa011-investigation-halted.md)。
+
+查證後確認 Supabase CLI 沒有任何唯讀方式可以先看正式環境目前的 auth 設定(`config` 子指令只有 `push`,沒有 `pull`/`get`)。CLI 的 Management API 憑證確實存在 Windows Credential Manager,但沒有把它挖出來繞過 CLI 自己刻意不開放的介面——這是迴避一個有意設計的安全邊界,不是解決真正的技術障礙。
+
+使用者同意「先修正 site_url 再推送全部 config」後,推送前做最後檢查時發現一個原本沒具體識別出來的真實風險:`config.toml` 的 `[auth.external.google]`/`[auth.external.discord]` secret 欄位用 `env(SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET)` 這種語法,`config push` 執行時會用當下環境變數替換——**確認我的執行環境完全沒有設定這兩個變數**,代表推送很可能直接把正式環境的 OAuth secret 換成空值,讓全站 Google/Discord 登入失效。這比「不知道有沒有別的手動設定會被覆蓋」明確、嚴重得多。回報後使用者選擇**先停下,不推送**。
+
+SA-011 維持 Unable to Verify 狀態,但現在有了明確的下一步路徑:要嘛使用者提供這兩個 OAuth client secret 的實際值讓 push 安全執行,要嘛直接在 Supabase dashboard 手動改,完全不透過 `config push`。純文件調查,沒有程式碼異動,不需要 commit/deploy。
