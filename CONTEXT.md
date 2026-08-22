@@ -5,11 +5,11 @@
 ## Language
 
 **Competition(賽事 / 比賽)**:
-由一位 Organizer 建立的一場完整比賽外框,是一串有序 Round 的容器,擁有名稱、預設 ScoringRule、整體時程、公開狀態(是否出現在 Discovery 頁)。第一個 Round 固定是「初賽」、最後一個固定是「決賽」,中間的 Round 數量與內容由 Organizer 自訂。SoundArena 是開放多租戶平台(見下方 ADR-0002):任何登入使用者都能自由建立 Competition 並成為其 Organizer,不需要平台審核。匿名揭露不再是 Competition 層級的屬性,見 Round / AnonymityMode(ADR-0006)。
+由一位 Organizer 建立的一場完整比賽外框,是一串有序 Round 的容器,擁有名稱、預設 ScoringRule、整體時程、公開狀態(是否出現在 Discovery 頁)。第一個 Round 固定是「初賽」、最後一個固定是「決賽」,中間的 Round 數量與內容由 Organizer 自訂。SoundArena 是開放多租戶平台(見下方 ADR-0002):任何使用者都能申請成為 Organizer 並建立 Competition,但要先通過 PlatformAdmin 審核(見下方 Organizer 詞條、ADR-0014)。匿名揭露不再是 Competition 層級的屬性,見 Round / AnonymityMode(ADR-0006)。
 _Avoid_: 賽制(這個詞專指 FormatBlock 組合,不是比賽本身;混用會搞不清楚「建立一場賽事」跟「設定一輪賽制」是兩件事)
 
 **Organizer(主辦者)**:
-建立了至少一場 Competition 的使用者,是該 Competition 的擁有者(ownership),對自己建立的 Competition(們)有完整管理權限(審核投稿、設定賽制、設定時程、評審評分、邀請 Collaborator),權限範圍僅限於自己建立的 Competition,看不到、也管不到其他 Organizer 的比賽。任何登入使用者建立第一場 Competition 的當下就自動成為 Organizer,沒有額外的申請或審核步驟(唯一的前置動作是完成一次性的主辦人身分檔案設定,自助完成,不用等誰核准)——這個自助流程本身沒有改變,見下方 OrganizerRevocation 是額外的事後把關機制,不是把自助流程換成審核制。一場 Competition 永遠只有一位 Organizer,ownership 目前不可轉讓(見 Collaborator)。個人檔案頁的「主辦過 N 場比賽」只計算 Organizer 身分,不計 Collaborator。
+建立了至少一場 Competition 的使用者,是該 Competition 的擁有者(ownership),對自己建立的 Competition(們)有完整管理權限(審核投稿、設定賽制、設定時程、評審評分、邀請 Collaborator),權限範圍僅限於自己建立的 Competition,看不到、也管不到其他 Organizer 的比賽。**ADR-0002 當初「自動成為 Organizer、不需審核」的設計已在 ADR-0014 反轉**:完成一次性的主辦人身分檔案設定後,要等 PlatformAdmin 審核通過(`host_approved_at` 不為 null)才能建立/管理 Competition——這輪(ADR-0014)同時把既有的所有 Organizer 一併重新送審,不是只套用在未來的新申請。一場 Competition 永遠只有一位 Organizer,ownership 目前不可轉讓(見 Collaborator)。個人檔案頁的「主辦過 N 場比賽」只計算 Organizer 身分,不計 Collaborator。
 _Avoid_: 管理員(不夠精確,容易跟 PlatformAdmin 搞混,兩者權限範圍完全不同)
 
 **OrganizerRevocation(主辦資格撤除,ADR-0010)**:

@@ -2,7 +2,7 @@
 
 音樂比賽投票網站,支援 AI 音樂平台(以 Suno 為主)創作者投稿、多輪賽制淘汰、匿名投票,並透過 LINE bot / Discord bot 發送賽事通知。
 
-現有雛形:https://preview--sound-stage-showdown.lovable.app/(Lovable + Supabase Auth,目前僅有前端殼與空狀態頁面,以下規格尚未實作)
+最初的畫面原型:https://preview--sound-stage-showdown.lovable.app/(Lovable + Supabase Auth,寫這份規格時只有前端殼與空狀態頁面)——這份規格目前已大部分實作完成,現況以 [HANDOFF.md](HANDOFF.md) 與 [docs/adr/](docs/adr/) 為準,規格本身記錄的是設計意圖(WHAT/WHY),實作細節可能因後續資安複查/使用者需求而調整,調整都會補一篇 ADR。
 
 版本:2026-08-09 初版,依 grill-me 訪談定案;2026-08-11 因競品調研(songcontest.ai)修訂為開放多租戶平台,見 ADR-0002
 
@@ -11,12 +11,12 @@
 ## 0. 平台定位
 
 - SoundArena 是**開放多租戶平台**,不是站方自己主辦比賽的單一網站(決策理由見 `docs/adr/0002-open-multi-tenant-platform.md`)
-- 任何登入使用者建立第一場 Competition 的當下自動成為該場的 **Organizer**,不需要平台審核或申請
-- 權限分兩層:
-  - **Organizer**:只能管理自己建立的 Competition(審核投稿、賽制建立、時程設定),看不到其他人的比賽後台
-  - **PlatformAdmin**:看得到全站所有 Competition,職責是處理 Report,不是自助開放角色,由平台方手動指派
-- **Report(檢舉)機制**:任何使用者可在 Competition 頁面對該比賽提出檢舉,進入 PlatformAdmin 的處理清單;檢舉對象是整場比賽,不是個別投稿(個別投稿內容的把關由該比賽自己的 Organizer 在審核流程處理,見第 3 節)
-- Organization(多人共同管理同一場比賽)**明確不做**,現階段「一場比賽 = 一位 Organizer」已足夠,團隊協作留待有實際需求再評估
+- 任何使用者都可以送出「成為 Organizer」的申請,但要等 **PlatformAdmin 審核通過**(`host_approved_at` 不為 null)才能建立/管理 Competition——ADR-0002 當初的「自動成為 Organizer、不需審核」已在 ADR-0014 反轉,現行規則以 ADR-0014 為準
+- 權限分三層:
+  - **Organizer**:管理自己建立的 Competition(審核投稿、賽制建立、時程設定),看不到其他人的比賽後台
+  - **Collaborator**:Organizer 可以把單場比賽的部分管理權限(審核投稿、賽制建立、時程設定、評分、邀請其他協作者五種,可個別勾選)委派給其他使用者,範圍僅限被邀請的那一場比賽(見 `docs/adr/0003-collaborator-tiered-permissions.md`)
+  - **PlatformAdmin**:看得到全站所有 Competition,負責 Organizer 申請的審核/撤權,以及草稿期以外比賽的刪除;不是自助開放角色,由平台方手動指派
+- **Report(檢舉)機制已移除**:曾經規劃過「使用者可對整場比賽檢舉,進入 PlatformAdmin 處理清單」,但已在 `docs/adr/0007-remove-report-mechanism.md` 拿掉,目前系統沒有任何檢舉功能;投稿內容的把關仍由該比賽自己的 Organizer/review 協作者在審核流程處理(見第 3 節)
 
 ---
 
@@ -110,7 +110,7 @@
 
 ### 音源
 - **不採用 Suno 官方 iframe 嵌入**,改為要求投稿者上傳音檔案,存放於私有雲端儲存(不可公開列目錄)
-- 後端依請求動態簽發**短效期網址**(建議 5–10 分鐘過期),供播放器讀取,簽發前需確認請求者已登入
+- 後端依請求動態簽發**短效期網址**,供播放器讀取;現行實作預設 1 小時過期(見 `web/src/lib/storage.ts` 的 `getPlaybackUrl()`),簽發前需確認請求者有權限看到這個 `audio_object_key`(RLS 判斷式見 `web/src/lib/playbackActions.ts`)
 - 原因:
   1. 呼應最初「連結不可被任意轉發外流」的需求——Suno CDN 上找得到未加簽章、永久有效、免登入即可下載的直連音檔網址(`cdn1.suno.ai/{歌曲UUID}.mp3`),不適合作為正式播放來源
   2. 唯有自己掌握真正的 `<audio>` 元素,才能串接 Media Session API 做到鎖屏播放控制(見下)
@@ -153,7 +153,7 @@
 ### 角色權限分離
 - 「身份驗證/合規審核」與「內容評分」是兩個獨立的後台角色/權限
 - 評審不應看到投稿者真實身份,避免因認出熟悉的作品而產生不必要的評分偏袒
-- 這兩個角色都是**該場 Competition 的 Organizer 底下**的權限分工,範圍僅限該場比賽;跨比賽的權限(看全站、處理 Report)是 PlatformAdmin,兩者不是同一層級(見第 0 節)
+- 這兩個角色都是**該場 Competition 的 Organizer 底下**的權限分工(可委派給 Collaborator),範圍僅限該場比賽;跨比賽的權限(看全站、審核 Organizer 申請)是 PlatformAdmin,兩者不是同一層級(見第 0 節)
 
 ### 公開試聽(Discovery 頁用)
 - 投稿時 Participant 可自選是否「允許公開展示」該作品,預設關閉
@@ -278,12 +278,8 @@
 - 允許公開展示的作品(見第 5 節)可在此頁直接試聽,不需登入
 - 空狀態(篩選後無結果)需給出清楚的重置篩選路徑,不可只顯示空白
 
-### 檢舉入口
-- Competition 頁面需有明確的「檢舉」按鈕,填寫理由後送出,進入 PlatformAdmin 的處理清單
-- 檢舉是對整場比賽,不是對個別投稿
-
 ### 管理後台的兩種視角
-- 左側可收合側欄(見上「導覽位置」)在多租戶下要能反映使用者的角色範圍:Organizer 登入後只看到自己建立的 Competition 清單與其審核後台/賽制建立/時程設定;PlatformAdmin 另有獨立視角看全站 Competition 與 Report 處理清單
+- 左側可收合側欄(見上「導覽位置」)在多租戶下要能反映使用者的角色範圍:Organizer 登入後只看到自己建立的 Competition 清單與其審核後台/賽制建立/時程設定;PlatformAdmin 另有獨立視角看全站 Competition、Organizer 申請審核清單
 - 兩種視角不共用同一份清單資料,避免 Organizer 誤以為自己能看到別人的比賽
 
 ---

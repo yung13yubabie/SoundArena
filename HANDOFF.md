@@ -1081,3 +1081,16 @@ SA-003 剩下的三項(quota/孤兒檔案回收/MIME驗證)還沒排優先序。
 ### 下一步
 
 按 `/goal` 指示繼續下一批——SA-004(CI 安全回歸測試矩陣)、SA-003 剩餘三項、SA-005/010/011/012 等尚未處理。
+
+## 08-22:SA-010 文件重置 + SA-011 風險評估(暫緩)
+
+繼續按 `/goal` 處理稽核剩餘項目。細節見 [ADR-0025](docs/adr/0025-sa010-documentation-reset.md)。
+
+- **SA-011(email signup 未關閉)**:查證後發現 `supabase config push` 會把整份本機 `config.toml` 推上正式環境,不是只改 email signup 這一項——這個專案的 Site URL 設定已知還停在錯誤的預設值(`127.0.0.1:3000`,上一輪工作就發現過),貿然整份推送有覆蓋掉其他正式環境設定的風險。這屬於「影響正式環境共用基礎設施」的動作,即使有 `/goal` 授權持續處理稽核項目,這類風險動作仍先跟使用者確認,不批次執行——**刻意暫緩,留給使用者決定**。
+- **SA-010(文件漂移)**:重新核對 README/SPEC/CONTEXT 三份文件,發現漂移程度差很多——README.md 最嚴重(Organizer 免審核、Report 機制、Cloudflare R2、「畫面仍用假資料」都是專案最早期的舊描述),SPEC.md 次之(同樣的 Organizer/Report 兩項,加上播放網址過期時間寫「5–10 分鐘」但實際是 1 小時),CONTEXT.md 漂移最少(PlatformAdmin 詞條早就正確記錄 Report 移除,只有 Organizer 詞條沒跟上 ADR-0014)。三份都已改寫成跟現況一致,README 的「開發狀態」段落不再自己維護一份會過期的快照,改成指向 HANDOFF.md/docs/adr/ 作為持續更新來源。
+
+`tsc`/`eslint`/`build` 不適用(純文件改動),已 commit、push。
+
+### 下一步
+
+按 `/goal` 指示繼續下一批——SA-004(CI 安全回歸測試矩陣)、SA-003 剩餘三項(quota/孤兒檔案回收/MIME驗證)、SA-005(通知寄送,需要使用者提供 Resend/Discord 憑證才能繼續)、SA-012(觀測性)尚未處理。SA-011 已標記為暫緩,等使用者決定要不要冒風險推送 auth config。
