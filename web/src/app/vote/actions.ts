@@ -15,12 +15,16 @@ async function getClientIp(): Promise<string> {
   return h.get("x-real-ip") ?? "0.0.0.0";
 }
 
-export async function castVote(roundId: string, submissionId: string): Promise<ActionResult> {
+export async function castVote(roundId: string, submissionId: string, aiUsageRating: number | null): Promise<ActionResult> {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { error: "請先登入" };
+
+  if (aiUsageRating !== null && (!Number.isInteger(aiUsageRating) || aiUsageRating < 1 || aiUsageRating > 5)) {
+    return { error: "AI 使用方式評分必須是 1 到 5 的整數" };
+  }
 
   const voterIp = await getClientIp();
 
@@ -34,6 +38,7 @@ export async function castVote(roundId: string, submissionId: string): Promise<A
     submission_id: submissionId,
     voter_id: user.id,
     voter_ip: voterIp,
+    ai_usage_rating: aiUsageRating,
   });
 
   if (error) {

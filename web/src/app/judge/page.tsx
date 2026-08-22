@@ -132,7 +132,7 @@ export default async function JudgePage({
       .select("id, round_id, score_items(id, label, kind, weight_percent, score_item_templates(key))")
       .eq("competition_id", competition.id),
     supabase.rpc("judge_submissions_for_round", { p_round_id: round.id }),
-    supabase.from("votes").select("submission_id").eq("round_id", round.id),
+    supabase.from("votes").select("submission_id, ai_usage_rating").eq("round_id", round.id),
   ]);
 
   const scoringRules = (scoringRuleRows ?? []) as unknown as ScoringRuleRow[];
@@ -161,9 +161,20 @@ export default async function JudgePage({
   }
 
   const voteCounts = new Map<string, number>();
+  const ratingSums = new Map<string, { sum: number; count: number }>();
   for (const v of votes ?? []) {
     voteCounts.set(v.submission_id, (voteCounts.get(v.submission_id) ?? 0) + 1);
+    if (v.ai_usage_rating !== null) {
+      const acc = ratingSums.get(v.submission_id) ?? { sum: 0, count: 0 };
+      acc.sum += v.ai_usage_rating;
+      acc.count += 1;
+      ratingSums.set(v.submission_id, acc);
+    }
   }
+  const avgRating = (submissionId: string) => {
+    const acc = ratingSums.get(submissionId);
+    return acc && acc.count > 0 ? acc.sum / acc.count : 0;
+  };
 
   const submissionsRaw = (submissionRows ?? []) as unknown as JudgeSubmissionRow[];
   const submissionIds = submissionsRaw.map((s) => s.submission_id);
@@ -177,8 +188,13 @@ export default async function JudgePage({
   const submissions: JudgeSubmission[] = submissionsRaw.map((s, idx) => {
     const values: Record<string, number> = {};
     for (const item of scoreItems) {
-      values[item.id] =
-        item.templateKey === "vote" ? (voteCounts.get(s.submission_id) ?? 0) : (scoreByKey.get(`${s.submission_id}:${item.id}`) ?? 0);
+      if (item.templateKey === "vote") {
+        values[item.id] = voteCounts.get(s.submission_id) ?? 0;
+      } else if (item.templateKey === "audience_ai_usage_rating") {
+        values[item.id] = avgRating(s.submission_id);
+      } else {
+        values[item.id] = scoreByKey.get(`${s.submission_id}:${item.id}`) ?? 0;
+      }
     }
     return {
       id: s.submission_id,

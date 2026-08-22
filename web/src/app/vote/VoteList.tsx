@@ -25,6 +25,7 @@ export function VoteList({
 }) {
   const [votedId, setVotedId] = useState(initialVotedId);
   const [playingId, setPlayingId] = useState<string | null>(null);
+  const [ratings, setRatings] = useState<Record<string, number>>({});
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const reduceMotion = useReducedMotion();
@@ -32,7 +33,7 @@ export function VoteList({
   const vote = (submissionId: string) => {
     setError(null);
     startTransition(async () => {
-      const result = await castVote(roundId, submissionId);
+      const result = await castVote(roundId, submissionId, ratings[submissionId] ?? null);
       if ("error" in result) {
         setError(result.error);
       } else {
@@ -61,6 +62,22 @@ export function VoteList({
           >
             <div className="mb-3 aspect-video rounded-[9px] border border-panel-border bg-gradient-to-br from-[#2a1712] to-[#1a0f0c]" />
             <div className="mb-3.5 text-[13.5px] text-ink-dim italic">{s.title}</div>
+            {!s.isOwn && votedId === null && (
+              <div className="mb-3 flex items-center gap-1">
+                <span className="mr-1 text-[11px] text-ink-faint">AI 使用方式評分（選填，投這首時生效）</span>
+                {[1, 2, 3, 4, 5].map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => setRatings((prev) => ({ ...prev, [s.id]: n }))}
+                    aria-label={`給 ${n} 星`}
+                    className="focus-ring"
+                  >
+                    <Icon name="star" size={14} className={(ratings[s.id] ?? 0) >= n ? "text-accent" : "text-ink-faint"} />
+                  </button>
+                ))}
+              </div>
+            )}
             <div className="flex gap-2">
               <button
                 onClick={() => setPlayingId(s.id)}

@@ -136,6 +136,8 @@ export function JudgeBoard({
                   .filter((i) => i.kind === "weighted")
                   .map((item) => {
                     const isVote = item.templateKey === "vote";
+                    const isAudienceRating = item.templateKey === "audience_ai_usage_rating";
+                    const isAutoComputed = isVote || isAudienceRating;
                     const key = `${s.id}:${item.id}`;
                     return (
                       <tr key={item.id}>
@@ -143,17 +145,19 @@ export function JudgeBoard({
                         <td className="border-t border-white/5 px-3.5 py-3">
                           <span
                             className={`rounded-full border px-2.25 py-0.75 text-[11px] ${
-                              isVote
+                              isAutoComputed
                                 ? "border-[#8fb3d9]/35 bg-[#8fb3d9]/8 text-[#8fb3d9]"
                                 : "border-accent/40 bg-accent/10 text-accent"
                             }`}
                           >
-                            {isVote ? "系統自動" : "人工輸入"}
+                            {isAutoComputed ? "系統自動" : "人工輸入"}
                           </span>
                         </td>
                         <td className="border-t border-white/5 px-3.5 py-3">
                           {isVote ? (
                             `${s.values[item.id] ?? 0} 票`
+                          ) : isAudienceRating ? (
+                            `平均 ${(s.values[item.id] ?? 0).toFixed(1)} 分`
                           ) : (
                             <div className="flex items-center gap-1.5">
                               <input

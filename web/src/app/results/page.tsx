@@ -159,8 +159,14 @@ export default async function ResultsPage({
                           <tr key={item.id}>
                             <td className="border-t border-white/5 px-3.5 py-3 text-ink-dim">{item.label}</td>
                             <td className="border-t border-white/5 px-3.5 py-3">
-                              {(valuesBySubmission.get(s.submission_id) ?? {})[item.id] ?? 0}
-                              {item.templateKey === "vote" ? " 票" : ""}
+                              {item.templateKey === "audience_ai_usage_rating" ? (
+                                `平均 ${((valuesBySubmission.get(s.submission_id) ?? {})[item.id] ?? 0).toFixed(1)} 分`
+                              ) : (
+                                <>
+                                  {(valuesBySubmission.get(s.submission_id) ?? {})[item.id] ?? 0}
+                                  {item.templateKey === "vote" ? " 票" : ""}
+                                </>
+                              )}
                             </td>
                             <td className="border-t border-white/5 px-3.5 py-3">{item.weightPercent}%</td>
                           </tr>
