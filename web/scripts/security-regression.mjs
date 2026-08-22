@@ -296,6 +296,71 @@ async function main() {
   // ============ 7. 直接繞過 RPC 寫 submission_scores 被 GRANT 擋下 ============
   const { error: directScoreErr } = await judgeClient.from("submission_scores").upsert({ submission_id: sub.id, score_item_id: item.id, raw_value: 1, entered_by: judgeOnly.id });
   record("GRANT 收回: 繞過 RPC 直接寫 submission_scores 被拒絕", !!directScoreErr && directScoreErr.code === "42501", directScoreErr?.message);
+
+  // ============ DB-08: delete_own_submission()/delete_competition() 刪除整列時,
+  // 該留在 B2 的 audio_object_key 要真的被寫進 audio_pending_deletion 追蹤表,不能
+  // 隨著那一列消失就變成完全沒有紀錄的孤兒。這裡只驗證 DB 端的追蹤紀錄本身,不碰
+  // 真實 B2(CI 的 ci-security-test environment 沒有配置 B2 憑證,真實刪除驗證見
+  // 一次性 PoC,結論記在 ADR-0034 之後的 DB-08 ADR)。
+  const dbo8FakeKeyA = `secreg-db08/${Date.now()}-a.mp3`;
+  const { data: db08Round } = await admin
+    .from("rounds")
+    .insert({ competition_id: compA, round_index: 3, name: "DB-08 測試輪", is_anonymous: false })
+    .select("id")
+    .single();
+  const { data: db08Sub } = await admin
+    .from("submissions")
+    .insert({ round_id: db08Round.id, registration_id: reg.id, suno_share_url: "https://suno.com/s/db08sub", audio_object_key: dbo8FakeKeyA, status: "approved" })
+    .select("id")
+    .single();
+  const { data: db08ReturnedKey, error: db08DeleteErr } = await participantClient.rpc("delete_own_submission", { p_submission_id: db08Sub.id });
+  const { data: db08PendingRows } = await admin.from("audio_pending_deletion").select("id, object_key, reason").eq("object_key", dbo8FakeKeyA);
+  record(
+    "DB-08: delete_own_submission() 把即將孤兒的 audio_object_key 寫進 audio_pending_deletion",
+    !db08DeleteErr && db08ReturnedKey === dbo8FakeKeyA && (db08PendingRows ?? []).length === 1 && db08PendingRows[0].reason === "submission_delete",
+    `error=${db08DeleteErr?.message ?? "none"} returned=${db08ReturnedKey} rows=${(db08PendingRows ?? []).length}`,
+  );
+
+  const platformAdmin = await makeUser("platformadmin");
+  await admin.from("profiles").update({ is_platform_admin: true }).eq("id", platformAdmin.id);
+  const platformAdminClient = await clientFor(platformAdmin.email);
+
+  const compC = await makeCompetition(organizerA.id, "compC");
+  const { data: compCRound } = await admin.from("rounds").insert({ competition_id: compC, round_index: 1, name: "R1" }).select("id").single();
+  const participantC = await makeUser("participantC");
+  const { data: regC } = await admin
+    .from("registrations")
+    .insert({ competition_id: compC, user_id: participantC.id, display_name: "DB-08 compC", suno_handle: "db08-c" })
+    .select("id")
+    .single();
+  const dbo8FakeKeyB = `secreg-db08/${Date.now()}-b.mp3`;
+  await admin.from("submissions").insert({ round_id: compCRound.id, registration_id: regC.id, suno_share_url: "https://suno.com/s/db08compc", audio_object_key: dbo8FakeKeyB, status: "approved" });
+
+  const { error: db08BlockedErr } = await organizerAClient.rpc("delete_competition", { p_competition_id: compC });
+  record(
+    "回歸(DB-08): 一般 organizer 對有真實報名的比賽仍被擋下",
+    !!db08BlockedErr && db08BlockedErr.message.includes("already has real registrations"),
+    db08BlockedErr?.message,
+  );
+
+  const { data: db08ReturnedKeys, error: db08ForceDeleteErr } = await platformAdminClient.rpc("delete_competition", { p_competition_id: compC });
+  const { data: db08CompCAfter } = await admin.from("competitions").select("id").eq("id", compC).maybeSingle();
+  const { data: db08PendingRowsB } = await admin.from("audio_pending_deletion").select("id, reason").eq("object_key", dbo8FakeKeyB);
+  record(
+    "DB-08: PlatformAdmin 強制刪除有真實投稿的比賽,回傳 audio_object_key 陣列且寫進追蹤表",
+    !db08ForceDeleteErr &&
+      Array.isArray(db08ReturnedKeys) &&
+      db08ReturnedKeys.includes(dbo8FakeKeyB) &&
+      db08CompCAfter === null &&
+      (db08PendingRowsB ?? []).length === 1 &&
+      db08PendingRowsB[0].reason === "competition_delete",
+    `error=${db08ForceDeleteErr?.message ?? "none"} returned=${JSON.stringify(db08ReturnedKeys)}`,
+  );
+
+  const { error: db08DirectReadErr } = await participantClient.from("audio_pending_deletion").select("id").limit(1);
+  record("DB-08: 一般 authenticated 角色無法直接讀 audio_pending_deletion", !!db08DirectReadErr, db08DirectReadErr?.message);
+
+  await admin.from("audio_pending_deletion").delete().in("object_key", [dbo8FakeKeyA, dbo8FakeKeyB]);
 }
 
 async function cleanup() {

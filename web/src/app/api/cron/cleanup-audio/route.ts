@@ -76,5 +76,37 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  return NextResponse.json({ ok: true, processed: results, orphansCleared, orphansFound: (orphans ?? []).length });
+  // DB-08 資安複查:delete_own_submission()/delete_competition() 刪除整列時,把
+  // 即將留在 B2 的 audio_object_key 寫進 audio_pending_deletion(見 ADR-0034 之後
+  // 的追蹤表 migration)——這裡是唯一真正負責把這些追蹤紀錄清掉的地方,跟上面
+  // pending_uploads 孤兒掃描同一套「B2 真的刪成功才清 DB 紀錄」邏輯。不需要緩衝期
+  // (不像 pending_uploads 要等 48 小時避免誤刪還在填表單的合法上傳,這裡寫入的
+  // 都是使用者/PlatformAdmin 已經確定要刪除的資源)。
+  const { data: pendingDeletions } = await supabase
+    .from("audio_pending_deletion")
+    .select("id, object_key");
+
+  let pendingDeletionsCleared = 0;
+  for (const item of pendingDeletions ?? []) {
+    let b2Deleted = false;
+    try {
+      await deleteAudioObject(item.object_key);
+      b2Deleted = true;
+    } catch (err) {
+      console.error(`待刪除音檔清除失敗,保留追蹤紀錄供下次重試: ${item.object_key}`, err);
+    }
+    if (b2Deleted) {
+      const { error } = await supabase.from("audio_pending_deletion").delete().eq("id", item.id);
+      if (!error) pendingDeletionsCleared++;
+    }
+  }
+
+  return NextResponse.json({
+    ok: true,
+    processed: results,
+    orphansCleared,
+    orphansFound: (orphans ?? []).length,
+    pendingDeletionsCleared,
+    pendingDeletionsFound: (pendingDeletions ?? []).length,
+  });
 }

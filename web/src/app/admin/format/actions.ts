@@ -200,7 +200,9 @@ export async function removeRound(roundId: string): Promise<ActionResult> {
 
 export async function deleteCompetition(competitionId: string): Promise<ActionResult> {
   const supabase = await createClient();
-  const { error } = await supabase.rpc("delete_competition", { p_competition_id: competitionId });
+  const { data: orphanedAudioKeys, error } = await supabase.rpc("delete_competition", {
+    p_competition_id: competitionId,
+  });
   if (error) {
     return {
       error: toFriendlyError(error, [
@@ -211,6 +213,19 @@ export async function deleteCompetition(competitionId: string): Promise<ActionRe
       ]),
     };
   }
+
+  // DB-08 資安複查:一般 organizer 自助刪除時這場比賽必定沒有真實報名(RPC 端已擋),
+  // 所以這裡通常是空陣列;只有 PlatformAdmin 繞過那道檢查強制刪除已有真實投稿的比賽時
+  // 才會真的帶音檔 key——盡力立即清 B2,清不掉也沒關係,audio_pending_deletion 追蹤
+  // 紀錄已經在 RPC 那邊寫入,cleanup-audio cron 會兜底重試。
+  for (const key of orphanedAudioKeys ?? []) {
+    try {
+      await deleteAudioObject(key);
+    } catch {
+      // 留給 cron 重試,見上方註解
+    }
+  }
+
   revalidatePath("/admin/format");
   revalidatePath("/");
   return { success: true };

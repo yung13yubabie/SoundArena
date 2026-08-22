@@ -1230,3 +1230,19 @@ ADR-0033 的 DB-01 設計刻意讓 `security-test` job 每次觸發都停在「�
 ### 下一步
 
 第二輪報告其餘 P2/P3 項目(DB-04 AdminShell 手機版面、DB-05 Format/Schedule/Review 固定桌面 grid、DB-06 PlatformAdmin 操作靜默失敗、DB-07 routable admin URL、DB-08 投稿/比賽刪除的 B2 孤兒物件、DB-09 多輪時程獨立化、DB-12 導覽命名優化、DB-13 vote IP fraud signal 化)還沒處理,可依 `/goal` 繼續分批進行。
+
+## 08-22:DB-08——刪除投稿/比賽時,B2 音檔追蹤不能隨列消失
+
+`/goal`(P2/P3 分批處理)繼續進行。細節見 [ADR-0035](docs/adr/0035-db08-audio-pending-deletion.md)。
+
+`delete_own_submission()`(使用者自助刪投稿重傳)跟 `delete_competition()`(PlatformAdmin 強制刪除)刪的是整列本身,一旦那一列消失,`audio_object_key` 就沒有任何 DB 紀錄可以追蹤,B2 上的檔案變成真孤兒,既有的 cron 掃描抓不到。查證後確認一般 organizer 自助刪比賽天生沒風險(DB 層本來就要求零報名才准刪),真正有風險的是 PlatformAdmin 強制刪有真實投稿的比賽、跟使用者自助刪投稿這兩條路徑。
+
+新增 `audio_pending_deletion` 追蹤表,在真的刪除那一列**之前**先寫入即將孤兒化的 key(RLS + 明確 revoke 雙保險,一般 authenticated/anon 完全碰不到)。`delete_competition()` 回傳型別從 `void` 改成 `text[]`,Next.js 端盡力立即清 B2;cron 新增對稱的掃描步驟兜底重試。
+
+一次性 PoC(16/16,對正式環境 + 真實 B2 bucket)+ `security-regression.mjs` 新增 4 項長期守護(24/24)。`tsc`/`eslint`/`build` 全程乾淨。
+
+**順手發現、刻意不處理**:`remove_round()` 完全沒檢查該輪是否已有真實報名/投稿/選票,跟 `delete_own_submission()` 特地擋投票開始後的刪除相比是個對稱的資料完整性缺口(可能默默刪掉真實選票)。這不是 B2 孤兒問題,超出 DB-08 範圍,也不在報告既有 finding 清單裡,留給使用者決定要不要處理、套用哪種保護規則。
+
+### 下一步
+
+`remove_round()` 的輪次保護缺口需要使用者決定優先序與處理方式。第二輪報告剩餘 P2/P3(DB-04/05/06/07/09/12/13)可依 `/goal` 繼續分批進行。
