@@ -40,7 +40,7 @@ export async function requestAudioUpload(
   if (!registration) return { error: "找不到這筆報名" };
 
   const objectKey = `submissions/${registrationId}/${randomUUID()}.${extension}`;
-  const uploadUrl = await createUploadUrl(objectKey, contentType);
+  const uploadUrl = await createUploadUrl(objectKey, contentType, fileSize);
   return { success: true, uploadUrl, objectKey };
 }
 

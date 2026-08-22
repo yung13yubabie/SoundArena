@@ -34,8 +34,14 @@ export async function getPlaybackUrl(key: string, expiresInSeconds = 3600): Prom
 // 讓瀏覽器直接 PUT 到 B2,不繞道我們自己的伺服器——音檔可能有幾十 MB,不適合
 // 塞進 Server Action 的 body size 限制。B2 的密鑰只在這裡簽章時用到,從頭到尾
 // 不會傳到瀏覽器。
-export async function createUploadUrl(key: string, contentType: string, expiresInSeconds = 600): Promise<string> {
-  const command = new PutObjectCommand({ Bucket: process.env.B2_BUCKET!, Key: key, ContentType: contentType });
+//
+// contentLength 綁進簽章(SA-003 資安複查真實 PoC 確認的修法):S3 相容簽章一旦
+// 把 ContentLength 包進 PutObjectCommand,實際 PUT 的 body 大小跟簽章時宣告的值
+// 只要有一絲落差,B2 就會回 403 SignatureDoesNotMatch——原本只在核發 URL「之前」
+// 檢查 client 宣稱的檔案大小,實際上傳可以是任意大小;現在檔案大小變成簽章的一部分,
+// 偽造大小會直接讓整個簽章失效,不是應用層的軟性檢查。
+export async function createUploadUrl(key: string, contentType: string, contentLength: number, expiresInSeconds = 600): Promise<string> {
+  const command = new PutObjectCommand({ Bucket: process.env.B2_BUCKET!, Key: key, ContentType: contentType, ContentLength: contentLength });
   return getSignedUrl(client(), command, { expiresIn: expiresInSeconds });
 }
 

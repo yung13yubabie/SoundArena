@@ -1045,3 +1045,21 @@ Discord OAuth 重新設計需要先跟使用者確認範圍才動手。實際發
 ### 下一步
 
 SA-003(上傳生命週期強化)是使用者選定的下一輪稽核項目,還沒開始。
+
+## 08-22:SA-003 修復——presigned upload 簽章綁定實際檔案大小
+
+使用者要求用 `mattpocock-skills` 的 `systematic-debugging` 紀律繼續處理 SA-003。細節見 [ADR-0023](docs/adr/0023-sa003-upload-size-signature-binding.md)。
+
+**Phase 1(先自己證明漏洞是真的)**:寫診斷腳本對正式 B2 bucket 真實測試——核發一個「宣稱 1MB」的 presigned URL,實際上傳 5MB,結果 PUT 成功、HeadObject 複查確認 5MB 完整落地。SA-003 確認為真:presigned URL 對實際上傳大小完全沒有約束力。
+
+**Phase 2(找更小的修法,不用整套 provisional-upload 架構)**:測試「把 `ContentLength` 也簽進 `PutObjectCommand`」這個假設——結果確認 B2 會依此驗證:大小不符直接 `403 SignatureDoesNotMatch`,大小相符正常成功。這比報告建議的完整生命週期表(新表+quota+孤兒GC)簡單得多,而且是直接堵住技術根因(簽章沒綁大小),不是加一層事後檢查。
+
+**修法**:`createUploadUrl()` 新增 `contentLength` 參數傳進簽章,`requestAudioUpload()` 把已驗證過的 `fileSize` 傳進去——前端完全不用改(瀏覽器上傳的 XHR body 本來就是 File 物件,Content-Length 天然等於 `file.size`)。效果:核發的 URL 現在只能拿來上傳「剛好等於當初驗證通過的大小」的檔案,偽造大小會讓整個簽章失效。
+
+**這輪刻意沒做的部分**(留給使用者決定優先序):upload issuance quota(核發 URL 本身零成本,不是真正的風險點)、provisional upload 生命週期+孤兒檔案自動回收(使用者上傳完檔案卻從未送出投稿,物件會永遠留在 B2,系統不知道它存在——這是真實的長期成本風險,但規模比這次的修法大,需要新表或跟現有 retention cron 整合)、MIME 內容實際驗證(目前只驗證宣稱的 Content-Type,不驗證實際 byte 內容)。
+
+`tsc`/`eslint`/`build` 全程乾淨,已 commit、push、`vercel --prod` 上線。
+
+### 下一步
+
+SA-003 剩下的三項(quota/孤兒檔案回收/MIME驗證)還沒排優先序。SA-004(CI 安全回歸測試矩陣)、P2 清單(SA-006/007/008/009/013 等)也都還沒動手。
