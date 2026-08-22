@@ -123,6 +123,11 @@ export function AdminShell({
   const [feedbackError, setFeedbackError] = useState<string | null>(null);
   const [deletingCompetitionId, setDeletingCompetitionId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  // DB-06 資安複查(第三方稽核報告第二輪):下面四支操作原本 RPC 失敗就什麼都不做——
+  // 按鈕恢復原狀,操作者完全不知道核准/駁回/撤除/刪除其實沒生效。補上錯誤訊息 +
+  // 伺服器端 log(見 clientErrorReport.ts)。
+  const [competitionActionError, setCompetitionActionError] = useState<string | null>(null);
+  const [organizerActionError, setOrganizerActionError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isPlatformAdmin || viewpoint !== "platform" || platformCompetitions !== null) return;
@@ -181,10 +186,15 @@ export function AdminShell({
 
   async function toggleOrganizerRevocation(row: PlatformOrganizerRow) {
     setRevokingId(row.id);
+    setOrganizerActionError(null);
     const supabase = createClient();
     const fn = row.host_revoked_at ? "reinstate_organizer" : "revoke_organizer";
     const { error } = await supabase.rpc(fn, { p_profile_id: row.id });
-    if (!error) {
+    if (error) {
+      console.error("[AdminShell] failed to toggle organizer revocation:", error);
+      reportClientError("AdminShell.toggleOrganizerRevocation", error.message).catch(() => {});
+      setOrganizerActionError("操作失敗，請重新整理頁面再試一次");
+    } else {
       setPlatformOrganizers((prev) =>
         (prev ?? []).map((o) => (o.id === row.id ? { ...o, host_revoked_at: row.host_revoked_at ? null : new Date().toISOString() } : o)),
       );
@@ -194,9 +204,14 @@ export function AdminShell({
 
   async function deletePlatformCompetition(id: string) {
     setDeletingCompetitionId(id);
+    setCompetitionActionError(null);
     const supabase = createClient();
     const { error } = await supabase.rpc("delete_competition", { p_competition_id: id });
-    if (!error) {
+    if (error) {
+      console.error("[AdminShell] failed to delete competition:", error);
+      reportClientError("AdminShell.deletePlatformCompetition", error.message).catch(() => {});
+      setCompetitionActionError("刪除失敗，請重新整理頁面再試一次");
+    } else {
       setPlatformCompetitions((prev) => (prev ?? []).filter((c) => c.id !== id));
     }
     setConfirmDeleteId(null);
@@ -205,9 +220,14 @@ export function AdminShell({
 
   async function approveOrganizer(row: PlatformOrganizerRow) {
     setRevokingId(row.id);
+    setOrganizerActionError(null);
     const supabase = createClient();
     const { error } = await supabase.rpc("approve_organizer_application", { p_profile_id: row.id });
-    if (!error) {
+    if (error) {
+      console.error("[AdminShell] failed to approve organizer:", error);
+      reportClientError("AdminShell.approveOrganizer", error.message).catch(() => {});
+      setOrganizerActionError("核准失敗，請重新整理頁面再試一次");
+    } else {
       setPlatformOrganizers((prev) =>
         (prev ?? []).map((o) => (o.id === row.id ? { ...o, host_approved_at: new Date().toISOString() } : o)),
       );
@@ -217,9 +237,14 @@ export function AdminShell({
 
   async function rejectOrganizer(row: PlatformOrganizerRow) {
     setRevokingId(row.id);
+    setOrganizerActionError(null);
     const supabase = createClient();
     const { error } = await supabase.rpc("revoke_organizer", { p_profile_id: row.id });
-    if (!error) {
+    if (error) {
+      console.error("[AdminShell] failed to reject organizer:", error);
+      reportClientError("AdminShell.rejectOrganizer", error.message).catch(() => {});
+      setOrganizerActionError("駁回失敗，請重新整理頁面再試一次");
+    } else {
       setPlatformOrganizers((prev) =>
         (prev ?? []).map((o) => (o.id === row.id ? { ...o, host_revoked_at: new Date().toISOString() } : o)),
       );
@@ -324,6 +349,9 @@ export function AdminShell({
                   作為平台管理員，這裡看得到全站所有比賽；一般主辦人只看得到自己建立的。
                 </p>
               </div>
+              {competitionActionError && (
+                <div className="glass mb-3.5 px-4 py-3 text-[12.5px] text-bad">{competitionActionError}</div>
+              )}
               {platformError ? (
                 <div className="glass px-4 py-3 text-[12.5px] text-bad">全站比賽清單載入失敗：{platformError}</div>
               ) : platformCompetitions === null ? (
@@ -404,6 +432,9 @@ export function AdminShell({
                   主辦人申請需要你核准才能生效。核准後如需撤除,對方所有比賽管理權限立即失效,且無法自行重新設定恢復,只能由你在這裡重新賦予。不影響對方以一般身份參賽,也不影響他已建立比賽的公開內容。
                 </p>
               </div>
+              {organizerActionError && (
+                <div className="glass mb-3.5 px-4 py-3 text-[12.5px] text-bad">{organizerActionError}</div>
+              )}
               {organizersError ? (
                 <div className="glass px-4 py-3 text-[12.5px] text-bad">主辦人清單載入失敗：{organizersError}</div>
               ) : platformOrganizers === null ? (

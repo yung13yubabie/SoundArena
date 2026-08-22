@@ -19,6 +19,10 @@ const ALLOWED_CONTEXTS = new Set([
   "AdminShell.loadPlatformCompetitions",
   "AdminShell.loadOrganizers",
   "AdminShell.loadFeedback",
+  "AdminShell.toggleOrganizerRevocation",
+  "AdminShell.deletePlatformCompetition",
+  "AdminShell.approveOrganizer",
+  "AdminShell.rejectOrganizer",
 ]);
 
 const MAX_MESSAGE_LENGTH = 1000;

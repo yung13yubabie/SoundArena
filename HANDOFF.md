@@ -1245,4 +1245,14 @@ ADR-0033 的 DB-01 設計刻意讓 `security-test` job 每次觸發都停在「�
 
 ### 下一步
 
-`remove_round()` 的輪次保護缺口需要使用者決定優先序與處理方式。第二輪報告剩餘 P2/P3(DB-04/05/06/07/09/12/13)可依 `/goal` 繼續分批進行。
+`remove_round()` 的輪次保護缺口需要使用者決定優先序與處理方式。第二輪報告剩餘 P2/P3(DB-04/05/07/09/12/13)可依 `/goal` 繼續分批進行。
+
+## 08-22:DB-06——PlatformAdmin 四個操作按鈕,失敗時完全沒有回饋
+
+`/goal` 繼續處理。細節見 [ADR-0036](docs/adr/0036-db06-platformadmin-silent-mutation-failures.md)。
+
+`AdminShell.tsx` 的核准主辦人/駁回申請/撤除資格/強制刪除比賽這四支操作,原本 RPC 失敗時完全沒有 `else` 分支——按鈕恢復原狀,操作者以為成功了,實際上什麼都沒發生。同檔案裡讀取資料的三個 `useEffect`(ADR-0028)本來就有完整錯誤處理,只有這四支寫入操作漏掉,是純粹的疏漏。補上錯誤訊息(沿用既有 `platformError`/`organizersError` 視覺樣式)+ `reportClientError()`(DB-15 剛加固過的伺服器端 log,白名單新增這四個 context)。純前端邏輯變更,不涉及 RLS/RPC 邊界,`tsc`/`eslint`/`build` 全程乾淨。
+
+### 下一步
+
+第二輪報告剩餘 P2/P3(DB-04 AdminShell 手機版面、DB-05 固定桌面 grid、DB-07 routable admin URL、DB-09 多輪時程獨立化、DB-12 導覽命名、DB-13 vote IP fraud signal 化)可依 `/goal` 繼續分批進行。`remove_round()` 輪次保護缺口仍待使用者決定。
