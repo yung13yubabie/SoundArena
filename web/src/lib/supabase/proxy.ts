@@ -49,9 +49,22 @@ export async function updateSession(request: NextRequest) {
     request.nextUrl.pathname.startsWith(path),
   );
 
+  // DB-10 資安複查(第三方稽核報告第二輪):這裡是未登入攔截真正先發生的地方——
+  // AUTH_REQUIRED_PATHS 涵蓋 /register、/admin、/judge、/status、/feedback、/vote,
+  // 對這些路徑,這段 middleware 級的 redirect 一定跑在頁面元件(以及 SA-013 的
+  // redirectToLogin() 呼叫)之前,所以真正決定 /login 網址長什麼樣的是這裡,不是
+  // 頁面元件裡那層(那層對這些路徑事實上變成永遠到不了的 defense-in-depth,只有
+  // /submit 這種不在 AUTH_REQUIRED_PATHS 清單裡的路徑才會真的用到頁面層那份)。
+  // 原本直接 clone URL 只改 pathname,會把原始 query string 原封不動搬到 /login
+  // 底下(例如 /login?competition=ABC),但 login 頁只讀 `next` 參數,於是這個
+  // 目的地資訊就在這裡丟失了,OAuth 完成後永遠導回首頁——這裡改成正確組出
+  // /login?next=<原始 path+search 的 URL 編碼>,格式跟 loginRedirect.ts 的
+  // safeNextPath() 期待的一致。
   if (requiresAuth && !user) {
+    const originalPath = request.nextUrl.pathname + request.nextUrl.search;
     const url = request.nextUrl.clone();
     url.pathname = "/login";
+    url.search = `?next=${encodeURIComponent(originalPath)}`;
     return NextResponse.redirect(url);
   }
 

@@ -99,7 +99,8 @@ export default async function JudgePage({
         本輪待評分作品 — {competition.name}
       </h1>
       <p className="mt-1.5 max-w-[680px] text-sm leading-relaxed text-ink-dim">
-        為了維持評分時不受作者身份影響,這裡一律顯示「匿名作品 #」,即使你是主辦本人。加權項目的權重總和固定
+        為了維持評分時不受作者身份影響,這個評分工作台一律顯示「匿名作品 #」,即使你是主辦本人也一樣——但主辦人/審核協作者在
+        「審核投稿」頁本來就需要核對真實 Suno 帳號,這個承諾只涵蓋評分這個環節,不代表主辦人完全無法得知作者身份。加權項目的權重總和固定
         100%,額外加分項另外累加。
       </p>
       {(rounds ?? []).length > 0 && (
