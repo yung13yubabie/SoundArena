@@ -3,6 +3,7 @@
 import { randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/service";
 import { toFriendlyError } from "@/lib/actionError";
 import { parseSunoShareUrl } from "@/lib/suno";
 import { createUploadUrl, deleteAudioObject, getObjectHeadBytes } from "@/lib/storage";
@@ -191,9 +192,18 @@ export async function submitEntry(input: SubmitEntryInput): Promise<ActionResult
     }
   }
 
-  const { data: submissionId, error } = await supabase.rpc("submit_entry", {
+  // DB-02 資安複查:submit_entry() 原本 grant 給 authenticated,代表任何人都能跳過
+  // 上面這段 Suno API 重新驗證 + magic bytes 檢查,直接對 PostgREST 打這支 RPC——
+  // DB 那層只驗證得到字串/格式層級的東西,驗證不到「這個連結真的是這個人分享的」
+  // 「這個檔案真的是音訊」。現在這支 RPC 只留給 service_role,唯一合法呼叫路徑
+  // 就是這裡——已經完成上面兩層外部驗證之後才呼叫,並且明確傳入剛剛用使用者
+  // session 驗證過的 user.id(不能讓 RPC 依賴 auth.uid(),service_role 呼叫下
+  // auth.uid() 會是 null)。
+  const serviceClient = createServiceClient();
+  const { data: submissionId, error } = await serviceClient.rpc("submit_entry", {
     p_round_id: input.roundId,
     p_registration_id: input.registrationId,
+    p_caller_user_id: user.id,
     p_suno_share_url: verify.info.canonicalUrl,
     p_title: input.title,
     p_cover_image_url: input.coverImageUrl,

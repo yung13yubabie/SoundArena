@@ -65,12 +65,17 @@ export default async function AdminFormatPage({
     .select("host_setup_completed, is_platform_admin, host_revoked_at, host_approved_at")
     .eq("id", userId)
     .maybeSingle();
-  if (!profile?.is_platform_admin && (!profile?.host_setup_completed || !profile?.host_approved_at || profile?.host_revoked_at)) {
-    redirect("/admin/profile");
-  }
-  const isPlatformAdmin = profile.is_platform_admin ?? false;
+  const isPlatformAdmin = profile?.is_platform_admin ?? false;
 
   const myCompetitions = await getManageableCompetitions(supabase, "format");
+
+  // DB-03 資安複查:見 judge/page.tsx 同一處註解——host 審核跟 collaborator
+  // 權限是兩個獨立維度。只有真的一場都管不到(含沒有任何 collaborator 邀請)
+  // 才導去 /admin/profile——這種情況下面才會落入 CreateCompetitionForm,
+  // 「建立新比賽」本來就該卡 host 審核,這條規則沒變。
+  if (!isPlatformAdmin && myCompetitions.length === 0 && (!profile?.host_setup_completed || !profile?.host_approved_at || profile?.host_revoked_at)) {
+    redirect("/admin/profile");
+  }
 
   const competition = requestedId
     ? myCompetitions.find((c) => c.id === requestedId)

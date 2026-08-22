@@ -42,12 +42,15 @@ export default async function AdminReviewPage({
     .select("host_setup_completed, is_platform_admin, host_revoked_at, host_approved_at")
     .eq("id", userId)
     .maybeSingle();
-  if (!profile?.is_platform_admin && (!profile?.host_setup_completed || !profile?.host_approved_at || profile?.host_revoked_at)) {
-    redirect("/admin/profile");
-  }
-  const isPlatformAdmin = profile.is_platform_admin ?? false;
+  const isPlatformAdmin = profile?.is_platform_admin ?? false;
 
   const myCompetitions = await getManageableCompetitions(supabase, "review");
+
+  // DB-03 資安複查:見 judge/page.tsx 同一處註解——host 審核跟 collaborator
+  // 權限是兩個獨立維度,只有真的一場都管不到才導去 /admin/profile。
+  if (!isPlatformAdmin && myCompetitions.length === 0 && (!profile?.host_setup_completed || !profile?.host_approved_at || profile?.host_revoked_at)) {
+    redirect("/admin/profile");
+  }
 
   const competition = requestedId
     ? myCompetitions.find((c) => c.id === requestedId)

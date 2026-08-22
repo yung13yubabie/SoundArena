@@ -152,6 +152,24 @@ async function main() {
     judgeRpcErr?.message,
   );
 
+  // ============ DB-03: judge-only 協作者(自己從未申請/通過 Organizer 審核)
+  // 仍然要能透過 get_manageable_competitions() 拿到被邀請的比賽,不能被
+  // host 審核閘卡死——這是 admin/judge/format/schedule/review/collaborators
+  // 五個頁面共用的授權資料來源,頁面本身的 redirect 邏輯就是看這個結果是否為空。
+  const { data: judgeOnlyProfile } = await admin.from("profiles").select("host_approved_at").eq("id", judgeOnly.id).maybeSingle();
+  const { data: judgeManageable, error: judgeManageableErr } = await judgeClient.rpc("get_manageable_competitions", { p_permission: "judge" });
+  record(
+    "DB-03: judge-only 協作者從未通過 Organizer 審核,但 get_manageable_competitions('judge') 仍正確回傳被邀請的比賽",
+    judgeOnlyProfile?.host_approved_at === null && !judgeManageableErr && (judgeManageable ?? []).some((c) => c.id === compA),
+    `host_approved_at=${judgeOnlyProfile?.host_approved_at} error=${judgeManageableErr?.message ?? "none"} rows=${(judgeManageable ?? []).length}`,
+  );
+  const { data: judgeReviewManageable } = await judgeClient.rpc("get_manageable_competitions", { p_permission: "review" });
+  record(
+    "DB-03(回歸): 同一個 judge-only 協作者查 'review' 權限正確拿到空清單(沒有被過度放行)",
+    (judgeReviewManageable ?? []).length === 0,
+    `rows=${(judgeReviewManageable ?? []).length}`,
+  );
+
   // ============ 3. Review-only 協作者:能看身份,不能評分 ============
   const { data: reviewRead, error: reviewErr } = await reviewClient.from("registrations").select("display_name").eq("id", reg.id).maybeSingle();
   record("Review 權限: review-only 協作者能看到真實身份(合法用途)", !reviewErr && reviewRead?.display_name === "真實身份不該外洩", reviewErr?.message);
@@ -189,10 +207,14 @@ async function main() {
   record("SA-002: 報名截止後 insert 被 DB 拒絕", closedRegErr?.code === "42501", closedRegErr?.message);
   await admin.from("competitions").update({ registration_closes_at: null }).eq("id", compA);
 
+  // submit_entry() 在 DB-02 修復後只留 service_role(見下面專門的 DB-02 區塊),
+  // 這裡改用 admin client 呼叫,單純驗證「截止時間」這個 DB invariant 本身還在,
+  // 跟「誰能呼叫這支 RPC」是兩件事分開測。
   await admin.from("rounds").update({ submission_closes_at: new Date(Date.now() - 3600_000).toISOString() }).eq("id", roundA.id);
-  const { error: closedSubErr } = await participantClient.rpc("submit_entry", {
+  const { error: closedSubErr } = await admin.rpc("submit_entry", {
     p_round_id: roundA.id,
     p_registration_id: reg.id,
+    p_caller_user_id: participant.id,
     p_suno_share_url: "https://suno.com/s/secreg002",
     p_title: "截止後投稿",
     p_cover_image_url: null,
@@ -212,6 +234,64 @@ async function main() {
   const { error: dupVoteErr } = await admin.from("votes").insert({ round_id: roundA.id, submission_id: sub.id, voter_id: voterX.id, voter_ip: "10.0.0.101" });
   record("回歸: 正常投票成功", !firstVoteErr, firstVoteErr?.message);
   record("Vote: 同一人同一輪不能投兩次", !!dupVoteErr && dupVoteErr.code === "23505", dupVoteErr?.message);
+
+  // ============ DB-02: submit_entry() 只留 service_role,直接繞過
+  // Next.js Server Action 的 Suno/MIME 驗證,對 PostgREST 打 RPC 應該被拒絕 ============
+  const { data: extraRound } = await admin
+    .from("rounds")
+    .insert({ competition_id: compA, round_index: 2, name: "DB-02 測試輪", is_anonymous: false })
+    .select("id")
+    .single();
+  const { error: directSubmitErr } = await participantClient.rpc("submit_entry", {
+    p_round_id: extraRound.id,
+    p_registration_id: reg.id,
+    p_caller_user_id: participant.id,
+    p_suno_share_url: "https://suno.com/s/db02bypass",
+    p_title: "繞過驗證的投稿",
+    p_cover_image_url: null,
+    p_sharer_handle: "secreg-handle",
+    p_lyrics: "",
+    p_allow_public_playback: false,
+  });
+  record(
+    "DB-02: 一般 authenticated session 直接呼叫 submit_entry() 被拒絕(只留 service_role)",
+    !!directSubmitErr && directSubmitErr.code === "42501",
+    `error=${directSubmitErr?.message ?? "none"} code=${directSubmitErr?.code}`,
+  );
+
+  const { data: legitSubmitId, error: legitSubmitErr } = await admin.rpc("submit_entry", {
+    p_round_id: extraRound.id,
+    p_registration_id: reg.id,
+    p_caller_user_id: participant.id,
+    p_suno_share_url: "https://suno.com/s/db02legit",
+    p_title: "service_role 正常呼叫",
+    p_cover_image_url: null,
+    p_sharer_handle: "secreg-handle",
+    p_lyrics: "",
+    p_allow_public_playback: false,
+  });
+  record(
+    "回歸: service_role 帶正確 p_caller_user_id 呼叫 submit_entry() 正常成功(模擬 Server Action 的合法路徑)",
+    !legitSubmitErr && !!legitSubmitId,
+    `error=${legitSubmitErr?.message ?? "none"}`,
+  );
+
+  const { error: wrongOwnerErr } = await admin.rpc("submit_entry", {
+    p_round_id: extraRound.id,
+    p_registration_id: reg.id,
+    p_caller_user_id: judgeOnly.id,
+    p_suno_share_url: "https://suno.com/s/db02wrongowner",
+    p_title: "冒充別人的 caller_user_id",
+    p_cover_image_url: null,
+    p_sharer_handle: "secreg-handle",
+    p_lyrics: "",
+    p_allow_public_playback: false,
+  });
+  record(
+    "DB-02(回歸): 就算用 service_role 呼叫,p_caller_user_id 跟 registration 擁有者不符也會被拒絕",
+    !!wrongOwnerErr && wrongOwnerErr.message.includes("not your registration"),
+    `error=${wrongOwnerErr?.message ?? "none"}`,
+  );
 
   // ============ 7. 直接繞過 RPC 寫 submission_scores 被 GRANT 擋下 ============
   const { error: directScoreErr } = await judgeClient.from("submission_scores").upsert({ submission_id: sub.id, score_item_id: item.id, raw_value: 1, entered_by: judgeOnly.id });

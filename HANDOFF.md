@@ -1179,3 +1179,18 @@ Stop hook 持續認為三項暫緩不等於完成。重新翻閱原始稽核報�
 ### 下一步
 
 原始稽核報告到此已經沒有可以自主完成的項目。剩餘的 SA-005/SA-011/SA-012(alert 半部)都明確需要使用者提供憑證或做風險決定。P3 清單裡的 AdminShell 職責拆分、AdminFormat 手機密度是規模更大的重構/需要真實裝置測試,沒有在這次批次處理。
+
+## 08-22:第二輪第三方稽核複查——DB-02、DB-03
+
+使用者丟了第二輪稽核報告(整體分數 57→64,確認上一輪核心問題已收斂),點名三個新 P1,要求先處理 DB-02/DB-03。細節見 [ADR-0032](docs/adr/0032-round2-audit-db02-db03.md)。
+
+- **DB-03**(Collaborator/Judge 被 Organizer 審核閘卡死):確認為真——judge/format/schedule/review/collaborators 五個頁面的 host 審核閘都寫在查詢協作權限「之前」,一個從未申請 Organizer 但被邀請當 judge 的合法使用者會被卡在 `/admin/profile`。修法:先查 `getManageableCompetitions()`,只有真的一場都管不到才導去審核頁——「能建立自己的比賽」跟「能管理被邀請的比賽」現在是獨立維度。
+- **DB-02**(`submit_entry()` 可繞過 Server Action 驗證層):確認為真——這個 session 稍早的 PoC 剛好就直接證明過一般 authenticated session 能繞過 Suno/MIME 驗證直接呼叫這支 RPC。修法:加 `p_caller_user_id` 參數取代 `auth.uid()`,只留 service_role 呼叫。
+
+**過程中抓到一個我自己這次犯的真的 bug**:第一版修法只 `grant ... to service_role`,忘記明確 `revoke ... from public, authenticated, anon`——Postgres 對新建立的 function 預設會隱含授予 PUBLIC 執行權,這跟 session 稍早在 table 層級踩過、寫進 CLAUDE.md 的坑是同一類問題,這次在 function 上又犯了一次。真實 PoC 直接抓到:一般使用者呼叫竟然沒報錯還真的寫進投稿。寫暫時診斷 function 用 `pg_proc`+`aclexplode` 攤開 ACL 確認根因,forward-fix 補上明確 revoke,複查後移除診斷 function。
+
+DB-02/DB-03 的五項檢查都已經加進 `web/scripts/security-regression.mjs`,`npm run test:security` 20/20 通過(含長期守護,不是一次性驗證)。`tsc`/`eslint`/`build` 全程乾淨,已 commit、push、CI 綠燈、`vercel --prod` 上線。
+
+### 下一步
+
+DB-01(security regression CI 直接握有正式環境 service_role)還沒處理——報告建議切出獨立 staging Supabase+B2 環境,這是真正的新基礎設施投資(可能有費用),留給使用者決定要不要投入。第二輪報告其餘的 P2/P3 項目(手機 IA 重新設計、多輪時程獨立化、PlatformAdmin 靜默失敗、routable admin URL、vote IP fraud signal 化等)還沒排優先序。

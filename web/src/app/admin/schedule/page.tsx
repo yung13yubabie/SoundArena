@@ -27,12 +27,15 @@ export default async function AdminSchedulePage({
     .maybeSingle();
   // Platform admin 一律放行——不然他們自己的主辦資格一旦處於待審核，就沒有任何人
   // 能進到這個 shell 去核准任何人的申請（含自己），會變成死鎖。
-  if (!profile?.is_platform_admin && (!profile?.host_setup_completed || !profile?.host_approved_at || profile?.host_revoked_at)) {
-    redirect("/admin/profile");
-  }
-  const isPlatformAdmin = profile.is_platform_admin ?? false;
+  const isPlatformAdmin = profile?.is_platform_admin ?? false;
 
   const myCompetitions = await getManageableCompetitions(supabase, "schedule");
+
+  // DB-03 資安複查:見 judge/page.tsx 同一處註解——host 審核跟 collaborator
+  // 權限是兩個獨立維度,只有真的一場都管不到才導去 /admin/profile。
+  if (!isPlatformAdmin && myCompetitions.length === 0 && (!profile?.host_setup_completed || !profile?.host_approved_at || profile?.host_revoked_at)) {
+    redirect("/admin/profile");
+  }
 
   const selectedId = requestedId
     ? myCompetitions.find((c) => c.id === requestedId)?.id

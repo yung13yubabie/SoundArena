@@ -55,12 +55,18 @@ export default async function JudgePage({
     .select("host_setup_completed, is_platform_admin, host_revoked_at, host_approved_at")
     .eq("id", userId)
     .maybeSingle();
-  if (!profile?.is_platform_admin && (!profile?.host_setup_completed || !profile?.host_approved_at || profile?.host_revoked_at)) {
-    redirect("/admin/profile");
-  }
-  const isPlatformAdmin = profile.is_platform_admin ?? false;
+  const isPlatformAdmin = profile?.is_platform_admin ?? false;
 
   const myCompetitions = await getManageableCompetitions(supabase, "judge");
+
+  // DB-03 資安複查發現:原本這道審核閘在查 myCompetitions 之前就擋掉了「自己
+  // 沒申請當 Organizer,但被別人邀請當 judge 協作者」的合法使用者——「能不能
+  // 建立自己的比賽」(host 審核)跟「能不能管理別人邀請我的比賽」(collaborator
+  // 權限)是兩個獨立維度,不該共用同一道閘。只有真的一場都管不到時,才需要導去
+  // /admin/profile 申請成為 Organizer。
+  if (!isPlatformAdmin && myCompetitions.length === 0 && (!profile?.host_setup_completed || !profile?.host_approved_at || profile?.host_revoked_at)) {
+    redirect("/admin/profile");
+  }
 
   const competition = requestedId
     ? myCompetitions.find((c) => c.id === requestedId)
