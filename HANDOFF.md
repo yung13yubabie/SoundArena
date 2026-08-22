@@ -1167,3 +1167,15 @@ Stop hook 持續認為三項暫緩不等於完成。重新翻閱原始稽核報�
 - **清除 vestigial 的 `competitions.anonymity_mode`**——ADR-0006 就自己標記這個欄位不再被讀取,但一直沒真的刪掉。確認 app 層零引用、目前生效的 SQL function 都已改用 `rounds.is_anonymous`、且 `competitions` UPDATE 早就整個從 authenticated 收回(連寫入路徑都不存在)後,執行 `drop column` + `drop type`。這是結構性改動,額外重跑完整安全回歸測試(15/15 通過)+ 專門為 `create_competition_full()` RPC 寫真實 PoC(2/2 通過)雙重驗證。
 
 `tsc`/`eslint`/`build` 全程乾淨,已 commit、push、`vercel --prod` 上線。
+
+## 08-22:真實瀏覽器補做稽核報告做不到的驗證——Header 對比度修復
+
+原始稽核報告的 Accessibility 章節誠實承認「沒做真實瀏覽器測試,47/100 不代表找到大量 WCAG failure」。用 `claude-in-chrome` 對正式站首頁做真實對比度計算,補上這塊。細節見 [ADR-0031](docs/adr/0031-header-contrast-fix.md)。
+
+第一版對比度腳本天真地拿第一個非透明背景當有效背景色,算出明顯不合理的假陽性(卡片標題對比度算成 1.17)——重寫成正確的 alpha 合成邏輯後,找到一個真實、可驗證的問題:Header 的「更新記錄」「意見回饋」跟 Discovery 頁的「看看主辦人」共用 `text-ink-faint` 顏色,在深色背景下實測對比度 3.81:1,低於 WCAG AA 小字體要求的 4.5:1。改成 `text-ink-dim`(對比度約 8.48:1),只動這 5 個具體的 `<Link>`,不改 token 定義本身(避免牽動其他未稽核過的畫面)。
+
+`tsc`/`eslint`/`build` 全程乾淨,已 commit、push、`vercel --prod` 上線。
+
+### 下一步
+
+原始稽核報告到此已經沒有可以自主完成的項目。剩餘的 SA-005/SA-011/SA-012(alert 半部)都明確需要使用者提供憑證或做風險決定。P3 清單裡的 AdminShell 職責拆分、AdminFormat 手機密度是規模更大的重構/需要真實裝置測試,沒有在這次批次處理。

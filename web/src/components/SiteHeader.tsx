@@ -51,11 +51,11 @@ export function SiteHeader({ authed = true, active, roleLabel }: SiteHeaderProps
         </nav>
 
         <div className="hidden items-center gap-3 md:flex">
-          <Link href="/updates" className="focus-ring text-[12.5px] text-ink-faint transition-colors hover:text-ink">
+          <Link href="/updates" className="focus-ring text-[12.5px] text-ink-dim transition-colors hover:text-ink">
             更新記錄
           </Link>
           {authed && (
-            <Link href="/feedback" className="focus-ring text-[12.5px] text-ink-faint transition-colors hover:text-ink">
+            <Link href="/feedback" className="focus-ring text-[12.5px] text-ink-dim transition-colors hover:text-ink">
               意見回饋
             </Link>
           )}
@@ -105,7 +105,7 @@ export function SiteHeader({ authed = true, active, roleLabel }: SiteHeaderProps
             <Link
               href="/updates"
               onClick={() => setMenuOpen(false)}
-              className="focus-ring px-2.5 text-[12.5px] text-ink-faint"
+              className="focus-ring px-2.5 text-[12.5px] text-ink-dim"
             >
               更新記錄
             </Link>
@@ -113,7 +113,7 @@ export function SiteHeader({ authed = true, active, roleLabel }: SiteHeaderProps
               <Link
                 href="/feedback"
                 onClick={() => setMenuOpen(false)}
-                className="focus-ring px-2.5 text-[12.5px] text-ink-faint"
+                className="focus-ring px-2.5 text-[12.5px] text-ink-dim"
               >
                 意見回饋
               </Link>

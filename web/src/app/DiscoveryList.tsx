@@ -60,7 +60,7 @@ export function DiscoveryList({ competitions, authed }: { competitions: Competit
             </p>
           </div>
           <div className="flex flex-none items-center gap-3">
-            <Link href="/organizers" className="focus-ring text-[12.5px] text-ink-faint transition-colors hover:text-ink">
+            <Link href="/organizers" className="focus-ring text-[12.5px] text-ink-dim transition-colors hover:text-ink">
               看看主辦人
             </Link>
             <Link
