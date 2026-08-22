@@ -1194,3 +1194,19 @@ DB-02/DB-03 的五項檢查都已經加進 `web/scripts/security-regression.mjs`
 ### 下一步
 
 DB-01(security regression CI 直接握有正式環境 service_role)還沒處理——報告建議切出獨立 staging Supabase+B2 環境,這是真正的新基礎設施投資(可能有費用),留給使用者決定要不要投入。第二輪報告其餘的 P2/P3 項目(手機 IA 重新設計、多輪時程獨立化、PlatformAdmin 靜默失敗、routable admin URL、vote IP fraud signal 化等)還沒排優先序。
+
+## 08-22:DB-01——security-regression 改走需要人工審核的 GitHub Environment
+
+問使用者後選擇零成本緩解,不建新的 staging 基礎設施。細節見 [ADR-0033](docs/adr/0033-db01-ci-secret-required-reviewer.md)。
+
+先釐清真實風險範圍:這個 repo 是公開的但只有一位維護者,GitHub 對 fork PR 本來就不會帶 repository secrets(平台內建行為),所以報告講的「陌生人開惡意 PR 偷 secret」在這個 repo 現況下不成立;真正殘留的風險是供應鏈型的(某個 npm 依賴被植入惡意 postinstall script)。
+
+修法:`gh api` 建立新的 GitHub Environment(`ci-security-test`,public repo 免費可用 required-reviewer 保護規則,reviewer 是使用者本人),把三個憑證從 repo-level secrets 移到這個 environment 專屬 secrets 再刪掉 repo-level 副本,`.github/workflows/ci.yml` 拆成 `build`(不變,自動跑)跟 `security-test`(`needs: build`,綁定這個 environment,每次觸發都要手動核准才會真的執行)兩個 job。沒有加進 branch protection 的必要檢查,避免擋住既有的快速迭代工作流程(ADR-0016)。
+
+**真實驗證**:推送後用 `gh api` 直接查證 `security-test` job 的狀態真的是 `"waiting"`,不是自動執行;手動核准這次(驗證用,說明用途)後確認正常執行、正確讀到 environment secrets、`npm run test:security` 在 CI 上 20/20 通過。
+
+至此第二輪稽核報告點名的三個 P1(DB-01/02/03)全部處理完成並實機驗證。
+
+### 下一步
+
+第二輪報告其餘的 P2/P3 項目(手機後台 IA 重新設計、多輪時程獨立化、PlatformAdmin 操作靜默失敗、routable admin URL、vote IP fraud signal 化、Judge/Organizer 匿名文案精確化等)還沒排優先序,規模都不小,需要使用者決定下一步方向。
