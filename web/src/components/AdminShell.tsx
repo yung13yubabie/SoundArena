@@ -7,6 +7,7 @@ import { Icon } from "@/lib/icons";
 import { Switch } from "@/components/Switch";
 import { EmptyState } from "@/components/EmptyState";
 import { createClient } from "@/lib/supabase/client";
+import { reportClientError } from "@/lib/clientErrorReport";
 
 type Section =
   | "review"
@@ -133,6 +134,7 @@ export function AdminShell({
       .then(({ data, error }) => {
         if (error) {
           console.error("[AdminShell] failed to load platform competitions:", error);
+          reportClientError("AdminShell.loadPlatformCompetitions", error.message).catch(() => {});
           setPlatformError("載入失敗，請重新整理頁面再試一次");
           return;
         }
@@ -151,6 +153,7 @@ export function AdminShell({
       .then(({ data, error }) => {
         if (error) {
           console.error("[AdminShell] failed to load organizers:", error);
+          reportClientError("AdminShell.loadOrganizers", error.message).catch(() => {});
           setOrganizersError("載入失敗，請重新整理頁面再試一次");
           return;
         }
@@ -168,6 +171,7 @@ export function AdminShell({
       .then(({ data, error }) => {
         if (error) {
           console.error("[AdminShell] failed to load feedback:", error);
+          reportClientError("AdminShell.loadFeedback", error.message).catch(() => {});
           setFeedbackError("載入失敗，請重新整理頁面再試一次");
           return;
         }

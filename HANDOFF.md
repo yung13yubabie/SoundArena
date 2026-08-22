@@ -1132,8 +1132,18 @@ SA-003 剩下的三項(quota/孤兒檔案回收/MIME驗證)還沒排優先序。
 | SA-010 | 已修復(ADR-0025) |
 | SA-005 | **暫緩**——需使用者提供 Resend/Discord 憑證才能繼續 |
 | SA-011 | **暫緩**——需使用者決定要不要冒風險推送 auth config |
-| SA-012(觀測性) | 尚未處理 |
+| SA-012(觀測性) | 部分處理(ADR-0028) |
+
+## 08-22:SA-012 觀測性——修掉真正看不到的那一半
+
+按 `/goal` 處理審計報告最後一項。細節見 [ADR-0028](docs/adr/0028-sa012-client-error-visibility.md)。
+
+盤點全站 7 處 `console.error` 後發現:伺服器端(Server Action/Route Handler)的錯誤本來就會被 Vercel function log 捕捉,已經滿足「單一 dashboard 可見」,只是操作者可能不知道去哪看,不是沒做。真正看不到的是 `AdminShell.tsx`(client component)三處讀取失敗——只出現在觸發錯誤的那個使用者自己的瀏覽器 devtools,PlatformAdmin 完全不會知道。新增 `reportClientError()` Server Action,這三處在原本的瀏覽器端 log 之外,fire-and-forget 把錯誤也送回伺服器端 log,操作者才有機會在 Vercel dashboard 發現。
+
+**誠實記錄沒解決的部分**:主動 alert(P1 出事時通知操作者)需要外部服務或已擱置的 Discord/Resend,跟 SA-005 同一個阻塞點;完整的 request/release context 沒有系統性補上,需要更大規模的 structured logging 規範,這輪沒有展開。SA-012 只能算部分處理,不是完整解決。
+
+`tsc`/`eslint`/`build` 全程乾淨,已 commit、push、`vercel --prod` 上線。
 
 ### 下一步
 
-SA-012(觀測性,無現成 Sentry 等帳號)還沒處理,规模跟做法需要使用者一起判斷。SA-005/SA-011 等使用者決定。其餘全數完成。
+第三方稽核報告目前可獨立處理的項目都已完成或明確標記邊界。SA-005(通知寄送)、SA-011(auth config 風險決定)持續暫緩,等使用者提供憑證/做決定。SA-012 的主動 alert 半部同樣卡在需要外部服務。沒有其他待處理的稽核項目。
