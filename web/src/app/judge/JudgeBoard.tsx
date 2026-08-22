@@ -19,6 +19,8 @@ export interface JudgeSubmission {
   registrationId: string;
   eliminated: boolean;
   values: Record<string, number>;
+  processDoc: string | null;
+  ethicalSourcingDeclared: boolean;
 }
 
 export function JudgeBoard({
@@ -33,7 +35,17 @@ export function JudgeBoard({
   const [subs, setSubs] = useState(submissions);
   const [showFormula, setShowFormula] = useState(false);
   const [savingKey, setSavingKey] = useState<string | null>(null);
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [isPending, startTransition] = useTransition();
+
+  const toggleExpanded = (submissionId: string) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(submissionId)) next.delete(submissionId);
+      else next.add(submissionId);
+      return next;
+    });
+  };
 
   const weightSum = scoreItems.filter((i) => i.kind === "weighted").reduce((s, i) => s + (i.weightPercent ?? 0), 0);
   const totals = useMemo(() => computeRanking(scoreItems, subs), [scoreItems, subs]);
@@ -84,6 +96,27 @@ export function JudgeBoard({
               >
                 {s.eliminated ? "已標記淘汰(點擊還原)" : "標記本輪淘汰"}
               </button>
+            </div>
+
+            <div className="border-t border-panel-border px-3.5 py-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  onClick={() => toggleExpanded(s.id)}
+                  className="text-[11.5px] text-accent underline underline-offset-3"
+                >
+                  {expandedIds.has(s.id) ? "收起" : "展開"}創作過程說明（Process Doc）
+                </button>
+                {s.ethicalSourcingDeclared && (
+                  <span className="rounded-full border border-ok/35 bg-ok/8 px-2.25 py-0.75 text-[10.5px] text-ok">
+                    已聲明使用公平訓練工具（自申制，未經平台驗證）
+                  </span>
+                )}
+              </div>
+              {expandedIds.has(s.id) && (
+                <div className="mt-2 max-h-64 overflow-y-auto whitespace-pre-wrap rounded-[10px] border border-panel-border bg-black/20 p-3 text-[12.5px] leading-relaxed text-ink-dim">
+                  {s.processDoc?.trim() ? s.processDoc : "（參賽者未提供創作過程說明）"}
+                </div>
+              )}
             </div>
 
             <div className="overflow-x-auto">

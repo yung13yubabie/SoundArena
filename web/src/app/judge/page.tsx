@@ -24,6 +24,8 @@ interface JudgeSubmissionRow {
   title: string | null;
   registration_id: string;
   registration_status: string;
+  process_doc: string | null;
+  ethical_sourcing_declared: boolean;
 }
 
 function one<T>(value: T | T[] | null): T | null {
@@ -184,6 +186,8 @@ export default async function JudgePage({
       registrationId: s.registration_id,
       eliminated: s.registration_status === "eliminated",
       values,
+      processDoc: s.process_doc,
+      ethicalSourcingDeclared: s.ethical_sourcing_declared,
     };
   });
 

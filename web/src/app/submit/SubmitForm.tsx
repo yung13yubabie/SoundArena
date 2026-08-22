@@ -43,6 +43,8 @@ export function SubmitForm({ options }: { options: RoundOption[] }) {
   const [state, setState] = useState<ParseState>("idle");
   const [result, setResult] = useState<ParseResult | null>(null);
   const [lyrics, setLyrics] = useState("");
+  const [processDoc, setProcessDoc] = useState("");
+  const [ethicalSourcingDeclared, setEthicalSourcingDeclared] = useState(false);
   const [allowPublicPlayback, setAllowPublicPlayback] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [pending, setPending] = useState(false);
@@ -148,6 +150,8 @@ export function SubmitForm({ options }: { options: RoundOption[] }) {
       lyrics,
       allowPublicPlayback,
       audioObjectKey,
+      processDoc,
+      ethicalSourcingDeclared,
     });
     setPending(false);
     if ("error" in result) {
@@ -350,6 +354,26 @@ export function SubmitForm({ options }: { options: RoundOption[] }) {
                 onChange={(e) => setLyrics(e.target.value)}
               />
             </div>
+
+            <div className="mb-5">
+              <label className="mb-1.5 block text-[12.5px] font-semibold text-ink-dim">創作過程說明（Process Doc，選填）</label>
+              <textarea
+                className="min-h-37.5 w-full resize-y rounded-[10px] border border-panel-border bg-black/25 px-3.5 py-2.5 text-[13.5px] leading-relaxed text-ink outline-none focus:border-accent/50"
+                placeholder="逐工具、逐 prompt 交代創作過程：用了哪些 AI 工具、下了什麼提示詞、中間失敗/修改/驚喜的地方。如果這場比賽有評「AI 使用方式」的項目，評審會看這份說明來評分。"
+                value={processDoc}
+                maxLength={20000}
+                onChange={(e) => setProcessDoc(e.target.value)}
+              />
+            </div>
+
+            <label className="mb-5 flex items-center gap-2 text-[12.5px] text-ink-dim">
+              <input
+                type="checkbox"
+                checked={ethicalSourcingDeclared}
+                onChange={(e) => setEthicalSourcingDeclared(e.target.checked)}
+              />
+              我聲明本作品主要使用的 AI 工具標榜公平訓練、尊重版權（自主聲明，平台不驗證）
+            </label>
 
             <label className="mb-5 flex items-center gap-2 text-[12.5px] text-ink-dim">
               <input

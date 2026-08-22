@@ -12,6 +12,7 @@ type ActionResult = { success: true } | { error: string };
 
 const MAX_TITLE_LENGTH = 200;
 const MAX_LYRICS_LENGTH = 30000;
+const MAX_PROCESS_DOC_LENGTH = 20000;
 
 export type RequestAudioUploadResult = { success: true; uploadUrl: string; objectKey: string } | { error: string };
 
@@ -120,6 +121,8 @@ export interface SubmitEntryInput {
   lyrics: string;
   allowPublicPlayback: boolean;
   audioObjectKey: string | null;
+  processDoc: string;
+  ethicalSourcingDeclared: boolean;
 }
 
 export async function submitEntry(input: SubmitEntryInput): Promise<ActionResult> {
@@ -132,6 +135,7 @@ export async function submitEntry(input: SubmitEntryInput): Promise<ActionResult
   const trimmedTitle = input.title.trim();
   if (trimmedTitle.length > MAX_TITLE_LENGTH) return { error: `標題最長 ${MAX_TITLE_LENGTH} 字` };
   if (input.lyrics.length > MAX_LYRICS_LENGTH) return { error: `歌詞最長 ${MAX_LYRICS_LENGTH} 字` };
+  if (input.processDoc.length > MAX_PROCESS_DOC_LENGTH) return { error: `創作過程說明最長 ${MAX_PROCESS_DOC_LENGTH} 字` };
 
   // 不信任 client 傳來的 sharerHandle——資安複查發現舊版直接相信 client,攻擊者可以
   // 跳過 verifySunoSharer() 帶假身份送出投稿。這裡在伺服器端重新呼叫 Suno API 驗證一次。
@@ -157,6 +161,8 @@ export async function submitEntry(input: SubmitEntryInput): Promise<ActionResult
     p_lyrics: input.lyrics,
     p_allow_public_playback: input.allowPublicPlayback,
     p_audio_object_key: input.audioObjectKey,
+    p_process_doc: input.processDoc.trim() || null,
+    p_ethical_sourcing_declared: input.ethicalSourcingDeclared,
   });
 
   if (error) {

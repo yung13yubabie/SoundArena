@@ -1008,4 +1008,22 @@ Discord OAuth 重新設計需要先跟使用者確認範圍才動手。實際發
 
 ### 下一步
 
-SA-003(上傳檔案大小未綁進簽章 + 沒有 provisional upload 生命週期)跟 SA-004(CI 缺乏 RLS/多租戶安全回歸測試)是報告裡剩下的兩個 P1,規模都比這輪大——SA-003 需要新表追蹤 upload intent/quota/orphan GC,SA-004 需要一整套 Role × Resource × Action 測試矩陣。哪個先做、做到多深,需要使用者決定。P2 清單(SA-006/007/008/009/013 等)也還沒排優先序。
+使用者選定下一輪先做 SA-003(上傳檔案大小未綁進簽章 + 沒有 provisional upload 生命週期)——需要新表追蹤 upload intent/quota/orphan GC,規模比 SA-001/SA-002 大,還沒動手。SA-004(CI 缺乏 RLS/多租戶安全回歸測試)、P2 清單(SA-006/007/008/009/013 等)也還沒排優先序。
+
+## 08-22:評審評「AI 使用方式」/ 觀眾投票評「整體吸引力」雙軌評分機制
+
+使用者要求把評分機制重新定位——評審跟觀眾投票不能混在同一套邏輯裡:評審只評「AI 的使用方式」(技術新意、歌曲工藝紮實度、人本創作過程、倫理數據來源、過程透明度),觀眾投票評「整體吸引力」。細節見 [ADR-0021](docs/adr/0021-ai-judging-criteria-and-process-doc.md)。
+
+`/speckit.specify` 這個 CLAUDE.md 提到的 skill 在這個環境沒裝上(試了幾個常見名稱都是 unknown skill),改用 `AskUserQuestion` 手動問清楚幾個關鍵決策再動手:評審分數跟觀眾投票分數依然走既有加權總分模式合併(不強制拆兩個獨立排名)、Process Doc 用自由長文字欄位(不做結構化表單)、倫理數據來源用自申制標籤(平台不驗證任何工具白名單)、新評分模式只當新的 score_item_templates 選項(不遷移既有比賽)。
+
+**資料模型**:`submissions` 新增 `process_doc`(選填,20000 字上限)跟 `ethical_sourcing_declared` 兩欄;`score_item_templates` 新增 5 個模板(`ai_technical_novelty`/`craftsmanship`/`human_process`/`ethical_sourcing`/`process_transparency`),既有的模板選擇 UI 是動態讀表渲染,不用改前端就能選到。`submit_entry()` 加兩個新參數(先 drop 舊簽章再建立,避開重載陷阱)。`judge_submissions_for_round()`(ADR-0020 的匿名安全 RPC)延伸回傳這兩個新欄位——**這裡踩到一個新的 Postgres 限制**:`RETURNS TABLE` 的輸出欄位改變時 `create or replace` 會直接報錯「無法改變既有函式的回傳型別」,參數列表沒變也一樣要先 drop 再重建。
+
+**應用層**:投稿表單新增 Process Doc 長文字欄位跟倫理聲明勾選框;`JudgeBoard.tsx` 每張作品卡片新增可展開的創作過程說明區塊(預設收起)跟倫理聲明徽章。
+
+**真實 PoC(6/6 通過)**:驗證新模板存在、主辦人能把新模板加進評分規則、`submit_entry()` 正確存入兩個新欄位(獨立複查)、超長 process_doc 被 DB 拒絕、`judge_submissions_for_round()` 正確回傳且仍不洩漏任何身份欄位。過程中一次測試失敗(對全新空 scoring_rule 直接加單一模板撞到「weighted 項目總和須為100%」),追查後確認是 `20260816010347` 從第一天就有的既有 deferred constraint trigger,不是這次新功能的 bug——PoC 補上跟真實 `createCompetition()` 流程一致的 baseline 種子資料後通過。
+
+`tsc`/`eslint`/`build` 全程乾淨,已 commit、push、`vercel --prod` 上線。
+
+### 下一步
+
+新評分模板已經可以在 `/admin/format` 使用,但目前沒有真實比賽套用過,實際排版/UX(Process Doc 展開區塊在作品很多時的可讀性、5 個新項目 + 舊項目同時存在時的權重分配 UX)還沒有真人測過。SA-003 仍是下一個待處理的稽核項目。
