@@ -30,14 +30,14 @@ export function ReviewQueue({ rows }: { rows: ReviewRow[] }) {
 
   return (
     <div>
-      <div className="grid grid-cols-[1fr_140px_220px] gap-4 px-4 py-3.5 text-[11px] tracking-wide text-ink-faint uppercase">
+      <div className="hidden grid-cols-[1fr_140px_220px] gap-4 px-4 py-3.5 text-[11px] tracking-wide text-ink-faint uppercase md:grid">
         <div>投稿</div>
         <div>身份比對</div>
         <div className="text-right">操作</div>
       </div>
       {rows.map((r) => (
         <div key={r.id} className="glass mb-1.5 px-4 py-3.5">
-          <div className="grid grid-cols-[1fr_140px_220px] items-center gap-4">
+          <div className="grid grid-cols-1 items-start gap-2.5 md:grid-cols-[1fr_140px_220px] md:items-center md:gap-4">
             <div className="text-[13px]">
               {r.title}
               <div className="text-[11px] text-ink-faint">

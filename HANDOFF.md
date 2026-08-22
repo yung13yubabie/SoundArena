@@ -1256,3 +1256,15 @@ ADR-0033 的 DB-01 設計刻意讓 `security-test` job 每次觸發都停在「�
 ### 下一步
 
 第二輪報告剩餘 P2/P3(DB-04 AdminShell 手機版面、DB-05 固定桌面 grid、DB-07 routable admin URL、DB-09 多輪時程獨立化、DB-12 導覽命名、DB-13 vote IP fraud signal 化)可依 `/goal` 繼續分批進行。`remove_round()` 輪次保護缺口仍待使用者決定。
+
+## 08-22:DB-05——後台固定寬度 grid 在窄螢幕下溢位
+
+`/goal` 繼續處理。細節見 [ADR-0037](docs/adr/0037-db05-fixed-desktop-grids.md)。
+
+`ScheduleForm.tsx`/`ReviewQueue.tsx`/`RegistrationReviewQueue.tsx` 用固定 px 寬度的 CSS grid(如 `grid-cols-[1fr_140px_220px]`),手機寬度下欄位加總超過可用空間,一定溢位或擠壓。`ProfileForm.tsx`/`SubmitForm.tsx` 早就在用「手機單欄、`md:` 才套固定欄寬」的慣例,只是沒套用到這三個檔案,是遺漏不是設計差異——這次比照既有慣例補上。`AdminFormatClient.tsx` 的計分項目清單(5 欄裡 4 欄是緊密相關的控制項組合)沒辦法簡單堆成單欄,改用比較保守的 `overflow-x-auto` 容器化捲動(跟 `AdminShell.tsx` 全站比賽表格同一套手法),不重新設計排版。
+
+**誠實記錄驗證限制**:這個環境的 `claude-in-chrome` `resize_window` 工具本 session 稍早已確認不會真的改變畫面渲染尺寸,沒有可靠方式在這裡做真實手機寬度的視覺驗證——這批修改是照專案既有已驗證慣例機械套用,`tsc`/`eslint`/`build` 全程乾淨,但**沒有**親眼確認過渲染結果,需要使用者實機或裝置模擬器複查一次。
+
+### 下一步
+
+第二輪報告剩餘 P2/P3(DB-04 AdminShell 手機側欄/視角切換版面、DB-07 routable admin URL、DB-09 多輪時程獨立化、DB-12 導覽命名、DB-13 vote IP fraud signal 化)、`remove_round()` 輪次保護缺口、CI 審核流程安排,都還等使用者決定或複查。

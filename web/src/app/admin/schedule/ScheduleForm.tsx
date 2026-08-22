@@ -129,7 +129,7 @@ export function ScheduleForm({
         {PHASE_FIELDS.map((p) => (
           <div
             key={p.label}
-            className="grid grid-cols-[140px_1fr_1fr] items-center gap-4 border-b border-panel-border py-3.5 last:border-b-0"
+            className="grid grid-cols-1 items-center gap-2.5 border-b border-panel-border py-3.5 last:border-b-0 md:grid-cols-[140px_1fr_1fr] md:gap-4"
           >
             <div className="text-[13.5px] font-semibold">{p.label}</div>
             <div>
@@ -152,7 +152,7 @@ export function ScheduleForm({
             </div>
           </div>
         ))}
-        <div className="grid grid-cols-[140px_1fr_1fr] items-center gap-4 py-3.5">
+        <div className="grid grid-cols-1 items-center gap-2.5 py-3.5 md:grid-cols-[140px_1fr_1fr] md:gap-4">
           <div className="text-[13.5px] font-semibold">報名截止</div>
           <div>
             <label className="mb-1.25 block text-[10.5px] tracking-wide text-ink-faint uppercase">最晚報名日</label>

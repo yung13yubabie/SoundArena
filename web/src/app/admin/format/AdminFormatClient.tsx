@@ -151,32 +151,38 @@ function ScoreEditor({
       {items.length === 0 && (
         <EmptyState icon="inbox" title="沒有啟用任何計分項目" sub="至少要保留一個項目，比賽才有分數可以排名" />
       )}
-      {items.map((it) => (
-        <div key={it.id} className="grid grid-cols-[1fr_110px_90px_90px_32px] items-center gap-2.5 py-2">
-          <span className="text-[12.5px]">{it.label}</span>
-          <select
-            value={it.kind}
-            onChange={(e) => setKind(it.id, e.target.value as ScoreItemData["kind"])}
-            className="w-full rounded-lg border border-panel-border bg-black/25 px-2.25 py-1.75 text-[12.5px] text-ink [color-scheme:dark]"
-          >
-            <option value="weighted">加權計分（計入100%）</option>
-            <option value="bonus">額外加分（不封頂）</option>
-          </select>
-          <input
-            type="number"
-            min="0"
-            max="100"
-            value={it.weightPercent ?? ""}
-            onChange={(e) => setWeight(it.id, Number(e.target.value))}
-            disabled={it.kind !== "weighted"}
-            className="w-full rounded-lg border border-panel-border bg-black/25 px-2.25 py-1.75 text-[12.5px] text-ink disabled:opacity-40"
-          />
-          <span className="text-[11px] text-ink-faint">%</span>
-          <button title="移除此計分項目" onClick={() => removeItem(it.id)} className="text-ink-dim hover:text-ink">
-            <Icon name="close" size={14} />
-          </button>
+      {items.length > 0 && (
+        <div className="overflow-x-auto">
+          <div className="min-w-[420px]">
+            {items.map((it) => (
+              <div key={it.id} className="grid grid-cols-[1fr_110px_90px_90px_32px] items-center gap-2.5 py-2">
+                <span className="text-[12.5px]">{it.label}</span>
+                <select
+                  value={it.kind}
+                  onChange={(e) => setKind(it.id, e.target.value as ScoreItemData["kind"])}
+                  className="w-full rounded-lg border border-panel-border bg-black/25 px-2.25 py-1.75 text-[12.5px] text-ink [color-scheme:dark]"
+                >
+                  <option value="weighted">加權計分（計入100%）</option>
+                  <option value="bonus">額外加分（不封頂）</option>
+                </select>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={it.weightPercent ?? ""}
+                  onChange={(e) => setWeight(it.id, Number(e.target.value))}
+                  disabled={it.kind !== "weighted"}
+                  className="w-full rounded-lg border border-panel-border bg-black/25 px-2.25 py-1.75 text-[12.5px] text-ink disabled:opacity-40"
+                />
+                <span className="text-[11px] text-ink-faint">%</span>
+                <button title="移除此計分項目" onClick={() => removeItem(it.id)} className="text-ink-dim hover:text-ink">
+                  <Icon name="close" size={14} />
+                </button>
+              </div>
+            ))}
+          </div>
         </div>
-      ))}
+      )}
       {availableTemplates.length > 0 && (
         <div className="mt-2.5 flex items-center gap-2">
           <select
