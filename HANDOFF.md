@@ -1425,3 +1425,17 @@ grilling 過程中使用者兩次糾正我的初版提案:(1)循環賽不能重�
 ### 下一步
 
 賽制細節填空剩下:單敗/雙敗淘汰(需要獨立設計對戰配對邏輯,見上面的使用者修正)、循環賽(傳統兩兩對戰)、月/週期累積制(沿用%淘汰機制,但「整場合計%」的細節要再確認)。這些都還沒開始。
+
+## 08-23:月/週期累積制——分數逐週期累加
+
+使用者選「根基/簡單的」開始,判斷是月/週期累積制——可以直接沿用剛做完的%淘汰機制,不用像單雙敗淘汰/循環賽整套重蓋對戰邏輯。細節見 [ADR-0047](docs/adr/0047-periodic-accumulation-cumulative-scoring.md)。grilling 三題確認:①一個「週期」= 一個既有的輪次(round),不另外蓋新資料結構;②每個週期都要重新投稿(呼應 SPEC.md「每輪皆須重新投稿」),分數逐週期加總,不是同一首歌貫穿整段累積;③淘汰不是只在最後一個週期才發生,是每個週期都依「連同之前週期加總後的累積分數」篩掉一些人。
+
+`lib/judgeScoring.ts` 新增 `getPeriodicAccumulationStageRoundIds()`(往前追溯連續掛 `periodic_accumulation` 積木的輪次,回傳累積賽段涵蓋哪些輪次;不是累積制回傳 null)+ `mergeJudgeScoringData()`(把賽段內好幾個輪次的評分資料,依 registrationId、逐個 score_item id 加總)。`judge/actions.ts` 的 `finalizeRoundResults()` 改成先判斷這輪是不是累積賽段的一部分,是的話合併整個賽段的分數才算排名,不是的話維持 ADR-0045 的單輪次邏輯不變。
+
+真實 PoC 分兩層:手動複製演算法邏輯對照真實資料庫驗證核心情境(5/5);用 `npx tsx` 真的 `import` `judgeScoring.ts`/`ranking.ts` 這兩支正式程式碼驗證(不是重寫一份邏輯來測),4/4 通過,途中連續抓到三個 PoC 腳本本身的時間/權限設定錯誤並逐一修正(不是程式碼的 bug)。`security-regression.mjs` 新增 1 項,50/50 通過。`tsc`/`eslint`/`build` 全程乾淨。
+
+**已知限制**:`mergeJudgeScoringData()` 假設賽段內的輪次共用同一份計分規則,沒有處理某個週期有自己 ScoringRule override 的情況。**尚未驗證**:`/admin/format` 沒有任何 UI 提示「這是累積賽段,分數會延續前面週期」,`EliminationPercentPanel` 可以正常填但沒有特別說明,容易誤會成跟單輪淘汰一樣——留給下次調整賽制頁 UI 時處理。
+
+### 下一步
+
+賽制細節填空剩下循環賽(傳統兩兩對戰)、單/雙敗淘汰(需要獨立設計對戰配對邏輯,見上面的使用者修正)。這兩個都需要真的對戰配對資料結構,不能沿用%淘汰機制,還沒開始。

@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { toFriendlyError } from "@/lib/actionError";
 import { dispatchPendingTeamNotifications } from "@/lib/notifications";
 import { computeRanking } from "@/lib/ranking";
-import { getJudgeScoringData } from "@/lib/judgeScoring";
+import { getJudgeScoringData, getPeriodicAccumulationStageRoundIds, mergeJudgeScoringData } from "@/lib/judgeScoring";
 
 type ActionResult = { success: true } | { error: string };
 
@@ -69,15 +69,22 @@ export async function finalizeRoundResults(roundId: string): Promise<ActionResul
 
   let eliminateIds: string[] = [];
   if (round.elimination_percent && round.elimination_percent > 0) {
-    const [{ data: activeRegs }, { scoreItems, submissions }] = await Promise.all([
+    // 月/週期累積制:排名不是只看這一輪自己的分數,是看這個週期累積賽段從頭到
+    // 現在所有週期的分數總和(見 lib/judgeScoring.ts 的說明)。不是累積制的輪次
+    // 維持原本的單輪次排名,行為不變。
+    const stageRoundIds = await getPeriodicAccumulationStageRoundIds(supabase, round.competition_id, roundId);
+    const roundIdsToScore = stageRoundIds ?? [roundId];
+
+    const [{ data: activeRegs }, perRoundData] = await Promise.all([
       supabase.from("registrations").select("id").eq("competition_id", round.competition_id).eq("status", "active"),
-      getJudgeScoringData(supabase, round.competition_id, roundId),
+      Promise.all(roundIdsToScore.map((rid) => getJudgeScoringData(supabase, round.competition_id, rid))),
     ]);
 
     const activeIds = (activeRegs ?? []).map((r) => r.id);
+    const { scoreItems, values } = mergeJudgeScoringData(perRoundData);
     const ranking = computeRanking(
       scoreItems,
-      submissions.map((s) => ({ id: s.registrationId, values: s.values })),
+      Array.from(values.entries()).map(([id, v]) => ({ id, values: v })),
     );
     const totalByRegistration = new Map(ranking.map((r) => [r.id, r.total]));
 

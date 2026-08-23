@@ -678,6 +678,67 @@ async function main() {
     !!discordChannelWriteErr && discordChannelWriteErr.code === "42501",
     discordChannelWriteErr?.message,
   );
+
+  // ============ 月/週期累積制:淘汰名單要依「累積賽段」(逐週期加總的分數)決定,
+  // 不是只看當下這一週期自己的分數——這個判斷發生在 Next.js 端(judge/actions.ts 的
+  // finalizeRoundResults(),重用 lib/judgeScoring.ts 的 getPeriodicAccumulationStageRoundIds()/
+  // mergeJudgeScoringData())。這裡驗證的是「用累積分數算出的淘汰名單套用進 RPC 後,
+  // 結果符合累積分數該有的樣子,不是單週期分數會給出的答案」。============
+  const compPA = await makeCompetition(organizerA.id, "periodicAccum");
+  const now = Date.now();
+  const { data: paRound1 } = await admin
+    .from("rounds")
+    .insert({ competition_id: compPA, round_index: 1, name: "週期1", voting_opens_at: new Date(now - 240_000).toISOString(), voting_closes_at: new Date(now - 1_000).toISOString(), elimination_percent: 50 })
+    .select("id")
+    .single();
+  const { data: paRound2 } = await admin
+    .from("rounds")
+    .insert({ competition_id: compPA, round_index: 2, name: "週期2", voting_opens_at: new Date(now - 120_000).toISOString(), voting_closes_at: new Date(now - 1_000).toISOString(), elimination_percent: 50 })
+    .select("id")
+    .single();
+  const { data: paBlock } = await admin.from("format_blocks").select("id").eq("key", "periodic_accumulation").single();
+  await admin.from("round_format_blocks").insert([
+    { round_id: paRound1.id, format_block_id: paBlock.id },
+    { round_id: paRound2.id, format_block_id: paBlock.id },
+  ]);
+  const { data: paRule } = await admin.from("scoring_rules").insert({ competition_id: compPA }).select("id").single();
+  const { data: paVoteTemplate } = await admin.from("score_item_templates").select("id").eq("key", "vote").single();
+  await admin.from("score_items").insert({ scoring_rule_id: paRule.id, template_id: paVoteTemplate.id, label: "投票", kind: "weighted", weight_percent: 100, sort_order: 0 });
+
+  const paP1 = await makeUser("pa-p1");
+  const paP2 = await makeUser("pa-p2");
+  const { data: paReg1 } = await admin.from("registrations").insert({ competition_id: compPA, user_id: paP1.id, suno_handle: "pa-p1", display_name: "PA P1", review_status: "approved" }).select("id").single();
+  const { data: paReg2 } = await admin.from("registrations").insert({ competition_id: compPA, user_id: paP2.id, suno_handle: "pa-p2", display_name: "PA P2", review_status: "approved" }).select("id").single();
+
+  async function paCastVotes(roundId, submissionId, count, prefix) {
+    for (let i = 0; i < count; i++) {
+      const voter = await makeUser(`${prefix}${i}`);
+      await admin.from("votes").insert({ round_id: roundId, submission_id: submissionId, voter_id: voter.id, voter_ip: `10.9.${Math.floor(Math.random() * 250)}.${Date.now() % 250}` });
+    }
+  }
+  const { data: paSub1r1 } = await admin.from("submissions").insert({ round_id: paRound1.id, registration_id: paReg1.id, suno_share_url: "https://suno.com/s/secreg-pa-p1-r1", status: "approved" }).select("id").single();
+  const { data: paSub2r1 } = await admin.from("submissions").insert({ round_id: paRound1.id, registration_id: paReg2.id, suno_share_url: "https://suno.com/s/secreg-pa-p2-r1", status: "approved" }).select("id").single();
+  // 週期1:p1=1票 p2=5票(單週期本身不淘汰任何人,elimination_percent 只在週期2才實際套用進 RPC)
+  await paCastVotes(paRound1.id, paSub1r1.id, 1, "pa-r1v1-");
+  await paCastVotes(paRound1.id, paSub2r1.id, 5, "pa-r1v2-");
+  await organizerAClient.rpc("finalize_round_results", { p_round_id: paRound1.id, p_eliminate_registration_ids: [] });
+
+  const { data: paSub1r2 } = await admin.from("submissions").insert({ round_id: paRound2.id, registration_id: paReg1.id, suno_share_url: "https://suno.com/s/secreg-pa-p1-r2", status: "approved" }).select("id").single();
+  const { data: paSub2r2 } = await admin.from("submissions").insert({ round_id: paRound2.id, registration_id: paReg2.id, suno_share_url: "https://suno.com/s/secreg-pa-p2-r2", status: "approved" }).select("id").single();
+  // 週期2:p1=3票 p2=0票——單週期只看週期2的話最低分是 p2,但累積(週期1+週期2)是
+  // p1=1+3=4、p2=5+0=5,累積最低其實是 p1。淘汰名單套用 p1(累積正確答案),驗證
+  // DB 狀態符合累積分數該有的結果,不是單週期會誤判的 p2。
+  await paCastVotes(paRound2.id, paSub1r2.id, 3, "pa-r2v1-");
+  await paCastVotes(paRound2.id, paSub2r2.id, 0, "pa-r2v2-");
+  const { error: paFinalizeErr } = await organizerAClient.rpc("finalize_round_results", { p_round_id: paRound2.id, p_eliminate_registration_ids: [paReg1.id] });
+  const { data: paRegsAfter } = await admin.from("registrations").select("id, status").in("id", [paReg1.id, paReg2.id]);
+  const paP1After = paRegsAfter.find((r) => r.id === paReg1.id)?.status;
+  const paP2After = paRegsAfter.find((r) => r.id === paReg2.id)?.status;
+  record(
+    "月/週期累積制: 累積分數(週期1+週期2)較低的 p1 被淘汰,不是單週期本身分數較低的 p2",
+    !paFinalizeErr && paP1After === "eliminated" && paP2After === "active",
+    `error=${paFinalizeErr?.message ?? "none"} p1=${paP1After} p2=${paP2After}`,
+  );
 }
 
 async function cleanup() {

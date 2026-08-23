@@ -113,3 +113,61 @@ export async function getJudgeScoringData(
 
   return { scoreItems, submissions };
 }
+
+// grilling 確認的設計:月/週期累積制的「一個週期」就是一個既有的輪次(round),
+// 分數逐週期累加——這一輪的排名不是只看這一輪自己的分數,是看「這個週期累積賽段」
+// 從頭到現在所有週期的分數總和。這裡回傳「這個週期累積賽段」包含哪些輪次(連續
+// 往前追溯,直到遇到第一個沒有選 periodic_accumulation 的輪次為止),不是
+// periodic_accumulation 就回傳 null(呼叫端維持原本的單輪次邏輯)。
+export async function getPeriodicAccumulationStageRoundIds(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: SupabaseClient<any>,
+  competitionId: string,
+  roundId: string,
+): Promise<string[] | null> {
+  const { data: rounds } = await supabase.from("rounds").select("id, round_index").eq("competition_id", competitionId).order("round_index");
+  const roundList = (rounds ?? []) as { id: string; round_index: number }[];
+  const currentIndex = roundList.findIndex((r) => r.id === roundId);
+  if (currentIndex === -1) return null;
+
+  const { data: blockRows } = await supabase
+    .from("round_format_blocks")
+    .select("round_id, format_blocks(key)")
+    .in(
+      "round_id",
+      roundList.map((r) => r.id),
+    );
+  const periodicRoundIds = new Set(
+    (blockRows ?? [])
+      .filter((b) => (Array.isArray(b.format_blocks) ? b.format_blocks[0] : b.format_blocks)?.key === "periodic_accumulation")
+      .map((b) => b.round_id as string),
+  );
+
+  if (!periodicRoundIds.has(roundId)) return null;
+
+  const stageIds: string[] = [];
+  for (let i = currentIndex; i >= 0; i--) {
+    if (!periodicRoundIds.has(roundList[i].id)) break;
+    stageIds.unshift(roundList[i].id);
+  }
+  return stageIds;
+}
+
+// 合併「週期累積賽段」裡好幾個輪次的評分資料——同一個 registration 在不同週期
+// 的分數逐項(score_item id)加總。要求這個賽段裡的輪次共用同一份計分規則
+// (沒有各自覆寫),不然不同週期的 score_item id 對不起來,加總會失真——這是
+// 已知限制,見 ADR。
+export function mergeJudgeScoringData(perRoundData: JudgeScoringData[]): { scoreItems: JudgeScoreItemData[]; values: Map<string, Record<string, number>> } {
+  const scoreItems = perRoundData[0]?.scoreItems ?? [];
+  const values = new Map<string, Record<string, number>>();
+  for (const { submissions } of perRoundData) {
+    for (const s of submissions) {
+      const acc = values.get(s.registrationId) ?? {};
+      for (const [itemId, value] of Object.entries(s.values)) {
+        acc[itemId] = (acc[itemId] ?? 0) + value;
+      }
+      values.set(s.registrationId, acc);
+    }
+  }
+  return { scoreItems, values };
+}
