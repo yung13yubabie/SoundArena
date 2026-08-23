@@ -193,7 +193,16 @@ export async function addRound(competitionId: string): Promise<ActionResult> {
 export async function removeRound(roundId: string): Promise<ActionResult> {
   const supabase = await createClient();
   const { error } = await supabase.rpc("remove_round", { p_round_id: roundId });
-  if (error) return { error: toFriendlyError(error) };
+  if (error) {
+    return {
+      error: toFriendlyError(error, [
+        {
+          test: (m) => m.includes("already has real submissions"),
+          friendly: "這一輪已經有真實投稿，無法自助移除——請透過「意見回饋」聯繫平台管理員協助處理",
+        },
+      ]),
+    };
+  }
   revalidatePath("/admin/format");
   return { success: true };
 }

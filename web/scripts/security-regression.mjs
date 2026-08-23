@@ -361,6 +361,42 @@ async function main() {
   record("DB-08: 一般 authenticated 角色無法直接讀 audio_pending_deletion", !!db08DirectReadErr, db08DirectReadErr?.message);
 
   await admin.from("audio_pending_deletion").delete().in("object_key", [dbo8FakeKeyA, dbo8FakeKeyB]);
+
+  // ============ remove_round(): 一般 organizer 不能移除已有真實投稿的中間輪次,
+  // PlatformAdmin 可以強制;首輪/末輪任何人都不能移除。獨立建一個比賽測試,避免
+  // 干擾 compA 上面其他測試已經用掉的輪次順序。 ============
+  const compRR = await makeCompetition(organizerA.id, "removeRound");
+  const { data: rrR1 } = await admin.from("rounds").insert({ competition_id: compRR, round_index: 1, name: "初賽" }).select("id").single();
+  const { data: rrR2 } = await admin.from("rounds").insert({ competition_id: compRR, round_index: 2, name: "複賽" }).select("id").single();
+  await admin.from("rounds").insert({ competition_id: compRR, round_index: 3, name: "決賽" });
+  const { data: rrReg } = await admin
+    .from("registrations")
+    .insert({ competition_id: compRR, user_id: organizerA.id, suno_handle: "rr-handle", display_name: "RemoveRound 測試" })
+    .select("id")
+    .single();
+  await admin.from("submissions").insert({ round_id: rrR2.id, registration_id: rrReg.id, suno_share_url: "https://suno.com/s/removeround", status: "approved" });
+
+  const { error: rrBlockedErr } = await organizerAClient.rpc("remove_round", { p_round_id: rrR2.id });
+  record(
+    "remove_round(): 一般 organizer 移除有真實投稿的中間輪次被擋下",
+    !!rrBlockedErr && rrBlockedErr.message.includes("already has real submissions"),
+    rrBlockedErr?.message,
+  );
+
+  const { error: rrForceErr } = await platformAdminClient.rpc("remove_round", { p_round_id: rrR2.id });
+  const { data: rrR2After } = await admin.from("rounds").select("id").eq("id", rrR2.id).maybeSingle();
+  record(
+    "remove_round(): PlatformAdmin 可強制移除有真實投稿的中間輪次",
+    !rrForceErr && rrR2After === null,
+    `error=${rrForceErr?.message ?? "none"}`,
+  );
+
+  const { error: rrFirstRoundErr } = await platformAdminClient.rpc("remove_round", { p_round_id: rrR1.id });
+  record(
+    "remove_round(回歸): 就算是 PlatformAdmin 也不能移除第一輪",
+    !!rrFirstRoundErr && rrFirstRoundErr.message.includes("初賽與決賽不可移除"),
+    rrFirstRoundErr?.message,
+  );
 }
 
 async function cleanup() {
