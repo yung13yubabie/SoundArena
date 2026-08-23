@@ -1285,6 +1285,16 @@ ADR-0033 的 DB-01 設計刻意讓 `security-test` job 每次觸發都停在「�
 
 **批次 1(DB-12 + DB-13)已完成**:`SiteHeader.tsx` 導覽命名 + `competitions/page.tsx`/`register/page.tsx`/`status/page.tsx` 對應文案 + `vote/actions.ts` IP 衝突錯誤訊息。`tsc`/`eslint`/`build` 全乾淨,commit `caec902`、push、`vercel --prod` 部署(第一次 deploy 遇到暫時性的「Not authorized」,重跑一次就成功,不是真的授權失效)。
 
+**批次 2(DB-04 手機下拉選單,commit `4dd90c7`)**:`AdminShell.tsx` 側欄手機隱藏(`hidden md:block`),新增頁面頂部的手機專用下拉列(視角切換 + 比賽選擇 + 分頁選擇),重用既有的 `viewpoint`/`section`/`goTo` 狀態跟處理函式,不重複導覽邏輯。
+
+**批次 3(`remove_round()` 資料保護,commit `771074d`,見 [ADR-0038](docs/adr/0038-remove-round-data-protection.md))**:比照 `delete_competition()` 模式,一般 organizer 不能移除有真實投稿的中間輪次、PlatformAdmin 可強制。真實 PoC 第一版就抓到更深的根因——`remove_round()` 最上層權限檢查本來就沒有 PlatformAdmin 例外,從一開始就進不去,forward-fix 補上。`security-regression.mjs` 新增 3 項,27/27 通過。
+
+**批次 4(建立比賽確認步驟 + 賽制頁常駐提醒,commit `cf66210`)**:`CreateCompetitionForm.tsx` 改成兩步驟——填完資料先看確認畫面(會建立哪幾輪)才真的送出,不再靜默直接建立。`AdminFormatClient.tsx` 在比賽還沒有任何真實報名時,常駐顯示目前輪次清單摘要 + 「開放報名後鎖定」提醒。
+
+**批次 5(報名頁顯示輪次時程表,commit `38a6209`)**:`/register` 原本完全不顯示任何輪次/時程資訊給報名者,新增查詢 + `RoundSchedulePanel` 元件顯示每輪的投稿/投票起訖時間。
+
+批次 2~5 全部 `tsc`/`eslint`/`build` 乾淨,`vercel --prod` 部署後正式環境都確認 200。
+
 ### 下一步
 
-繼續批次 2(DB-04 手機下拉選單)起,依序做完批次 3~8,全部做完後統一跑 `/codex:adversarial-review`(需使用者自己輸入指令觸發)。
+繼續批次 6(`ScheduleForm` 改 `datetime-local`)起,依序做完批次 7(每輪獨立時程)、8(分享訊息編輯按鈕),全部做完後統一跑 `/codex:adversarial-review`(需使用者自己輸入指令觸發)。
