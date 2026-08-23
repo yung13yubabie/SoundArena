@@ -668,6 +668,16 @@ async function main() {
     !!swapCrossRoundErr && swapCrossRoundErr.message.includes("does not belong to the same round"),
     swapCrossRoundErr?.message,
   );
+
+  // ============ Discord 頻道系統:discord_channel_id 只能由 service_role(建立比賽時
+  // 真的呼叫 Discord API 拿到 channel id 之後)寫入,不開放給 authenticated 直接改——
+  // 讓使用者能自己改這個值,等於能讓自己的比賽指向任意頻道。============
+  const { error: discordChannelWriteErr } = await organizerAClient.from("competitions").update({ discord_channel_id: "9999999999" }).eq("id", compA);
+  record(
+    "Discord 頻道: authenticated 不能直接改自己比賽的 discord_channel_id",
+    !!discordChannelWriteErr && discordChannelWriteErr.code === "42501",
+    discordChannelWriteErr?.message,
+  );
 }
 
 async function cleanup() {

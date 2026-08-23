@@ -2,10 +2,12 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/service";
 import { toFriendlyError } from "@/lib/actionError";
 import { deleteAudioObject } from "@/lib/storage";
 import { planAudioRetention } from "@/lib/audioRetention";
 import { dispatchPendingTeamNotifications } from "@/lib/notifications";
+import { createCompetitionChannel, grantDiscordChannelAccess } from "@/lib/discord";
 
 type ActionResult = { success: true } | { error: string };
 
@@ -67,12 +69,31 @@ export async function createCompetition(formData: FormData): Promise<ActionResul
   if (!name) return { error: "請填寫比賽名稱" };
   if (name.length > 200) return { error: "比賽名稱最長 200 字" };
 
-  const { error } = await supabase.rpc("create_competition_full", {
+  const { data: competitionId, error } = await supabase.rpc("create_competition_full", {
     p_name: name,
     p_slug: slugify(name),
     p_default_anonymous: defaultAnonymous,
   });
   if (error) return { error: toFriendlyError(error) };
+
+  // 建立比賽自動開一個私人 Discord 頻道——最佳努力,失敗不影響比賽本身已經建立成功。
+  // discord_channel_id 不開放給 authenticated 直接寫(見 migration 說明),用 service
+  // client 才能寫入;讀主辦人 discord_user_id 同理,那個欄位對 authenticated 也不開放讀取。
+  try {
+    const guildId = process.env.DISCORD_GUILD_ID;
+    if (guildId && competitionId) {
+      const channelId = await createCompetitionChannel(guildId, name);
+      const service = createServiceClient();
+      await service.from("competitions").update({ discord_channel_id: channelId }).eq("id", competitionId);
+
+      const { data: organizerProfile } = await service.from("profiles").select("discord_user_id").eq("id", user.id).maybeSingle();
+      if (organizerProfile?.discord_user_id) {
+        await grantDiscordChannelAccess(channelId, organizerProfile.discord_user_id);
+      }
+    }
+  } catch {
+    // Discord 頻道建立/授權失敗不影響比賽本身已經建立成功
+  }
 
   revalidatePath("/admin/format");
   revalidatePath("/");

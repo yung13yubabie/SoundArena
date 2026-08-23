@@ -6,6 +6,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { parseSunoHandle } from "@/lib/suno";
 import { toFriendlyError } from "@/lib/actionError";
 import { dispatchNotificationEvent } from "@/lib/notifications";
+import { grantDiscordChannelAccess } from "@/lib/discord";
 
 type ActionResult = { success: true } | { error: string };
 
@@ -66,6 +67,22 @@ export async function registerForCompetition(formData: FormData): Promise<Action
     if (eventId) await dispatchNotificationEvent(createServiceClient(), eventId);
   } catch {
     // 通知事件建立/送出失敗不影響報名本身已經成功
+  }
+
+  // 報名成功後自動加入這場比賽的 Discord 頻道(最佳努力,失敗不影響報名成功)——
+  // 只有 Discord 登入且比賽有開頻道的人適用,Google 登入的人自然沒有 discord_user_id,
+  // 安靜跳過。
+  try {
+    const service = createServiceClient();
+    const [{ data: competition }, { data: profile }] = await Promise.all([
+      service.from("competitions").select("discord_channel_id").eq("id", competitionId).maybeSingle(),
+      service.from("profiles").select("discord_user_id").eq("id", user.id).maybeSingle(),
+    ]);
+    if (competition?.discord_channel_id && profile?.discord_user_id) {
+      await grantDiscordChannelAccess(competition.discord_channel_id, profile.discord_user_id);
+    }
+  } catch {
+    // Discord 頻道加入失敗不影響報名本身已經成功
   }
 
   revalidatePath("/register");
