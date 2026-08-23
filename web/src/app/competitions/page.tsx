@@ -35,7 +35,7 @@ export default async function CompetitionsPage({
           <div className="mb-7">
             <h1 className="font-display text-[30px]">選一場比賽瀏覽作品</h1>
             <p className="mt-1.5 max-w-[680px] text-sm leading-relaxed text-ink-dim">
-              從活動頁點「試聽作品」會直接帶到這裡；也可以在下面直接選。
+              從探索比賽頁點「試聽作品」會直接帶到這裡；也可以在下面直接選。
             </p>
           </div>
           {!competitions || competitions.length === 0 ? (
@@ -69,7 +69,7 @@ export default async function CompetitionsPage({
       <div>
         <SiteHeader authed={authed} active="competitions" />
         <div className="mx-auto max-w-[1180px] px-5 md:px-11 pt-10 pb-24">
-          <EmptyState icon="alert" title="找不到這場比賽" sub="連結可能有誤，回活動頁重新找一次" />
+          <EmptyState icon="alert" title="找不到這場比賽" sub="連結可能有誤，回探索比賽頁重新找一次" />
         </div>
       </div>
     );

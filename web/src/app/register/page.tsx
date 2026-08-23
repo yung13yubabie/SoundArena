@@ -37,7 +37,7 @@ export default async function RegisterPage({
           <div className="mb-7">
             <h1 className="font-display text-[30px]">選一場比賽報名</h1>
             <p className="mt-1.5 max-w-[680px] text-sm leading-relaxed text-ink-dim">
-              從活動頁點「查看並報名」會直接帶到這裡；也可以在下面直接選。
+              從探索比賽頁點「查看並報名」會直接帶到這裡；也可以在下面直接選。
             </p>
           </div>
           {!openCompetitions || openCompetitions.length === 0 ? (
@@ -75,7 +75,7 @@ export default async function RegisterPage({
       <div>
         <SiteHeader authed active="events" />
         <div className="mx-auto max-w-[1180px] px-5 md:px-11 pt-10 pb-24">
-          <EmptyState icon="alert" title="找不到這場比賽" sub="連結可能有誤，回活動頁重新找一次" />
+          <EmptyState icon="alert" title="找不到這場比賽" sub="連結可能有誤，回探索比賽頁重新找一次" />
         </div>
       </div>
     );

@@ -14,8 +14,8 @@ interface SiteHeaderProps {
 // 評審評分已收進「管理後台」(AdminShell)底下,不是獨立的頂層導覽項——
 // SPEC.md 第5節:評分角色是該場比賽 Organizer 底下的權限分工,不是全站角色。
 const NAV_ITEMS: Array<{ key: SiteHeaderProps["active"]; label: string; href: string }> = [
-  { key: "events", label: "活動", href: "/" },
-  { key: "competitions", label: "比賽", href: "/competitions" },
+  { key: "events", label: "探索比賽", href: "/" },
+  { key: "competitions", label: "作品試聽", href: "/competitions" },
   { key: "vote", label: "投票", href: "/vote" },
   { key: "results", label: "結果", href: "/results" },
   { key: "submit", label: "上傳作品", href: "/submit" },

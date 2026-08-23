@@ -126,7 +126,7 @@ export default async function StatusPage() {
         </div>
 
         {regs.length === 0 ? (
-          <EmptyState icon="inbox" title="你還沒有報名任何比賽" sub="先去活動頁報名一場比賽，這裡就會出現投稿進度" />
+          <EmptyState icon="inbox" title="你還沒有報名任何比賽" sub="先去探索比賽頁報名一場比賽，這裡就會出現投稿進度" />
         ) : (
           <StatusSubmissionsList
             registrations={regs.map(

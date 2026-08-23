@@ -45,7 +45,7 @@ export async function castVote(roundId: string, submissionId: string, aiUsageRat
     return {
       error: toFriendlyError(error, [
         { test: (_m, c) => c === "23505", friendly: (error.message.includes("voter_ip")
-          ? "這個網路連線本輪已經投過票了（同網路只能投一票，避免灌票）"
+          ? "這個網路連線本輪已經投過票了（同網路只能投一票，避免灌票）——如果你是跟朋友共用 wifi，可以試試切換成行動網路再投一次"
           : "你這輪已經投過票了") },
         { test: (m) => m.includes("cannot vote for your own submission"), friendly: "不能投給自己的作品" },
         { test: (m) => m.includes("not approved for voting"), friendly: "這個作品還沒有審核通過，不能投票" },
