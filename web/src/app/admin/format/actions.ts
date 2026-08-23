@@ -192,7 +192,7 @@ export async function addRound(competitionId: string): Promise<ActionResult> {
 
 export async function removeRound(roundId: string): Promise<ActionResult> {
   const supabase = await createClient();
-  const { error } = await supabase.rpc("remove_round", { p_round_id: roundId });
+  const { data: orphanedAudioKeys, error } = await supabase.rpc("remove_round", { p_round_id: roundId });
   if (error) {
     return {
       error: toFriendlyError(error, [
@@ -203,6 +203,19 @@ export async function removeRound(roundId: string): Promise<ActionResult> {
       ]),
     };
   }
+
+  // Codex adversarial review 抓到:一般 organizer 移除的輪次必定沒有真實投稿(RPC 端
+  // 已擋),這裡通常是空陣列;只有 PlatformAdmin 強制移除有真實投稿的輪次才會真的
+  // 帶音檔 key——盡力立即清 B2,清不掉也沒關係,audio_pending_deletion 追蹤紀錄已經
+  // 在 RPC 那邊寫入,cleanup-audio cron 會兜底重試(見 ADR-0035/DB-08 同一套模式)。
+  for (const key of orphanedAudioKeys ?? []) {
+    try {
+      await deleteAudioObject(key);
+    } catch {
+      // 留給 cron 重試,見上方註解
+    }
+  }
+
   revalidatePath("/admin/format");
   return { success: true };
 }

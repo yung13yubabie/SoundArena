@@ -1303,6 +1303,14 @@ ADR-0033 的 DB-01 設計刻意讓 `security-test` job 每次觸發都停在「�
 
 批次 6~8 全部 `tsc`/`eslint`/`build` 乾淨,`vercel --prod` 部署後正式環境都確認 200。**8 個規劃批次(DB-12/DB-13/DB-04/`remove_round()`/建立比賽確認/報名頁時程表/DB-09a/DB-09b/DB-09c——實際上因為 grilling 過程中追加項目,總共完成的工作比原本規劃的 8 批更多)全部完成。**
 
+## 08-23:Codex adversarial review 抓到——`remove_round()` 強制移除漏了 B2 音檔追蹤
+
+使用者跑 `/codex:adversarial-review`(基準 `881639e` 到批次 8 完成的 HEAD),結果 `needs-attention`。細節見 [ADR-0040](docs/adr/0040-codex-review-remove-round-audio-orphan.md)。
+
+批次 3(ADR-0038)修 `remove_round()` 時只顧著補資料保護,沒有比照同一個 session 稍早(ADR-0035/DB-08)建立的 `audio_pending_deletion` 追蹤慣例——PlatformAdmin 強制移除有真實投稿的輪次時,cascade 刪掉投稿的同時,`audio_object_key` 沒有留下任何追蹤紀錄,B2 音檔會變成永久孤兒。這是同一類問題在這個 session 內第三次出現(`delete_own_submission()`/`delete_competition()`/現在的 `remove_round()`),每次新增一個會 cascade 刪 `submissions` 的路徑都要記得套用同一套追蹤機制。
+
+修法比照既有模式:回傳型別改成 `text[]`,真的刪除前先寫進 `audio_pending_deletion`(`reason='round_delete'`),Next.js action 盡力立即清 B2,cron 兜底重試。一次性 PoC(5/5)+ `security-regression.mjs` 新增 1 項,30/30 通過。`tsc`/`eslint`/`build` 全程乾淨。
+
 ### 下一步
 
-按 `/goal`(「CODEX REVIEW 留到最後」)指示,現在要請使用者輸入 `/codex:adversarial-review` 對整批改動做最後複查(這個指令 `disable-model-invocation: true`,只能使用者自己觸發)。`remove_round()` 查證時額外發現的 `is_platform_admin()` 缺口已經在批次 3 一併修掉;第二輪稽核報告目前已知的所有項目(含 grilling 確認的追加需求)都已處理完畢,只剩 SA-005(需 Resend/Discord 憑證)、SA-011(auth config 風險決定)維持暫緩。
+第二輪稽核報告(含 grilling 確認的追加需求)目前已知的所有項目都已處理完畢並通過 adversarial review 複查,只剩 SA-005(需 Resend/Discord 憑證)、SA-011(auth config 風險決定)維持暫緩,以及 CI 的 `security-test` 審核流程需要使用者自己上 GitHub 處理累積的待審核 run。

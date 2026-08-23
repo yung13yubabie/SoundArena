@@ -374,7 +374,8 @@ async function main() {
     .insert({ competition_id: compRR, user_id: organizerA.id, suno_handle: "rr-handle", display_name: "RemoveRound 測試" })
     .select("id")
     .single();
-  await admin.from("submissions").insert({ round_id: rrR2.id, registration_id: rrReg.id, suno_share_url: "https://suno.com/s/removeround", status: "approved" });
+  const rrAudioKey = `secreg-rr/${Date.now()}.mp3`;
+  await admin.from("submissions").insert({ round_id: rrR2.id, registration_id: rrReg.id, suno_share_url: "https://suno.com/s/removeround", audio_object_key: rrAudioKey, status: "approved" });
 
   const { error: rrBlockedErr } = await organizerAClient.rpc("remove_round", { p_round_id: rrR2.id });
   record(
@@ -383,13 +384,23 @@ async function main() {
     rrBlockedErr?.message,
   );
 
-  const { error: rrForceErr } = await platformAdminClient.rpc("remove_round", { p_round_id: rrR2.id });
+  const { data: rrReturnedKeys, error: rrForceErr } = await platformAdminClient.rpc("remove_round", { p_round_id: rrR2.id });
   const { data: rrR2After } = await admin.from("rounds").select("id").eq("id", rrR2.id).maybeSingle();
   record(
     "remove_round(): PlatformAdmin 可強制移除有真實投稿的中間輪次",
     !rrForceErr && rrR2After === null,
     `error=${rrForceErr?.message ?? "none"}`,
   );
+
+  // Codex adversarial review 抓到:強制移除的輪次底下投稿的 audio_object_key 沒有
+  // 被追蹤,B2 音檔會變成永久孤兒(見 ADR-0035/DB-08 的 audio_pending_deletion)。
+  const { data: rrPendingRows } = await admin.from("audio_pending_deletion").select("id, reason").eq("object_key", rrAudioKey);
+  record(
+    "remove_round(): 強制移除輪次底下投稿的 audio_object_key 寫進 audio_pending_deletion",
+    Array.isArray(rrReturnedKeys) && rrReturnedKeys.includes(rrAudioKey) && (rrPendingRows ?? []).length === 1 && rrPendingRows[0].reason === "round_delete",
+    `returned=${JSON.stringify(rrReturnedKeys)} rows=${(rrPendingRows ?? []).length}`,
+  );
+  await admin.from("audio_pending_deletion").delete().eq("object_key", rrAudioKey);
 
   const { error: rrFirstRoundErr } = await platformAdminClient.rpc("remove_round", { p_round_id: rrR1.id });
   record(
