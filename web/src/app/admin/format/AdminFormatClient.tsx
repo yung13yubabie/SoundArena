@@ -6,6 +6,7 @@ import { AdminShell } from "@/components/AdminShell";
 import { EmptyState } from "@/components/EmptyState";
 import { Switch } from "@/components/Switch";
 import { Icon } from "@/lib/icons";
+import { toDatetimeLocalInput, fromDatetimeLocalInput } from "@/lib/datetimeLocal";
 import {
   updateCompetitionMeta,
   toggleFormatBlock,
@@ -17,6 +18,7 @@ import {
   addScoreItem,
   setRoundAnonymity,
   setAllRoundsAnonymity,
+  setRoundScheduleOverride,
   deleteCompetition,
   cleanupNonFinalistAudio,
 } from "./actions";
@@ -50,6 +52,10 @@ export interface RoundData {
   isAnonymous: boolean;
   themeConfig: ThemeConfig | null;
   scoringRule: { id: string; items: ScoreItemData[] } | null;
+  submissionOpensAt: string | null;
+  submissionClosesAt: string | null;
+  votingOpensAt: string | null;
+  votingClosesAt: string | null;
 }
 
 export interface CompetitionData {
@@ -436,6 +442,114 @@ function RoundFormatCard({
           {round.locked === "preliminary"
             ? "初賽與決賽是固定頭尾，不可移除，但賽制積木可自訂。"
             : "決賽為固定尾，不可移除，但賽制積木可自訂。"}
+        </div>
+      )}
+
+      <RoundScheduleOverridePanel round={round} />
+    </div>
+  );
+}
+
+// DB-09(b) grilling 確認:多輪比賽的投稿/投票時間預設全部輪次共用「時程設定」頁
+// 套用的同一組值,這裡讓單一輪次可以選填專屬時程(例如兩輪之間留空檔休息)。不填
+// 就維持沿用整體時程;填了之後,如果又跑一次「時程設定」頁的整體套用,會把這裡的
+// 專屬設定蓋掉——沒有另外做「鎖定不被覆蓋」的機制,這是刻意的簡化。
+function RoundScheduleOverridePanel({ round }: { round: RoundData }) {
+  const [expanded, setExpanded] = useState(false);
+  const [submissionStart, setSubmissionStart] = useState(() => toDatetimeLocalInput(round.submissionOpensAt));
+  const [submissionEnd, setSubmissionEnd] = useState(() => toDatetimeLocalInput(round.submissionClosesAt));
+  const [votingStart, setVotingStart] = useState(() => toDatetimeLocalInput(round.votingOpensAt));
+  const [votingEnd, setVotingEnd] = useState(() => toDatetimeLocalInput(round.votingClosesAt));
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSave() {
+    setSaving(true);
+    setError(null);
+    const result = await setRoundScheduleOverride(round.id, {
+      submissionOpensAt: fromDatetimeLocalInput(submissionStart),
+      submissionClosesAt: fromDatetimeLocalInput(submissionEnd),
+      votingOpensAt: fromDatetimeLocalInput(votingStart),
+      votingClosesAt: fromDatetimeLocalInput(votingEnd),
+    });
+    setSaving(false);
+    if ("error" in result) {
+      setError(result.error);
+    } else {
+      setSaved(true);
+    }
+  }
+
+  return (
+    <div className="mt-3.5 border-t border-panel-border pt-3">
+      <button
+        onClick={() => setExpanded((v) => !v)}
+        className="flex items-center gap-1.5 text-[12px] font-semibold text-ink-dim hover:text-ink"
+      >
+        <Icon name="chevron" size={11} className={expanded ? "rotate-90" : ""} />
+        本輪專屬時程（選填，不填就沿用「時程設定」頁的整體設定）
+      </button>
+      {expanded && (
+        <div className="mt-2.5 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+          <div>
+            <label className="mb-1 block text-[10.5px] tracking-wide text-ink-faint uppercase">投稿開始</label>
+            <input
+              type="datetime-local"
+              value={submissionStart}
+              onChange={(e) => {
+                setSubmissionStart(e.target.value);
+                setSaved(false);
+              }}
+              className="w-full rounded-lg border border-panel-border bg-black/25 px-2.5 py-2 text-[12.5px] text-ink [color-scheme:dark]"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-[10.5px] tracking-wide text-ink-faint uppercase">投稿結束</label>
+            <input
+              type="datetime-local"
+              value={submissionEnd}
+              onChange={(e) => {
+                setSubmissionEnd(e.target.value);
+                setSaved(false);
+              }}
+              className="w-full rounded-lg border border-panel-border bg-black/25 px-2.5 py-2 text-[12.5px] text-ink [color-scheme:dark]"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-[10.5px] tracking-wide text-ink-faint uppercase">投票開始</label>
+            <input
+              type="datetime-local"
+              value={votingStart}
+              onChange={(e) => {
+                setVotingStart(e.target.value);
+                setSaved(false);
+              }}
+              className="w-full rounded-lg border border-panel-border bg-black/25 px-2.5 py-2 text-[12.5px] text-ink [color-scheme:dark]"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-[10.5px] tracking-wide text-ink-faint uppercase">投票結束</label>
+            <input
+              type="datetime-local"
+              value={votingEnd}
+              onChange={(e) => {
+                setVotingEnd(e.target.value);
+                setSaved(false);
+              }}
+              className="w-full rounded-lg border border-panel-border bg-black/25 px-2.5 py-2 text-[12.5px] text-ink [color-scheme:dark]"
+            />
+          </div>
+          {error && <p className="col-span-full text-[12px] text-bad">儲存失敗：{error}</p>}
+          <div className="col-span-full">
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="rounded-[9px] border border-panel-border bg-white/[0.04] px-3.5 py-1.75 text-[12px] font-semibold text-ink disabled:opacity-45"
+            >
+              {saving ? "儲存中…" : saved ? "已儲存" : "儲存本輪時程"}
+            </button>
+          </div>
         </div>
       )}
     </div>

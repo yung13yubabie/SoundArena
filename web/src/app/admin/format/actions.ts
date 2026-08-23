@@ -207,6 +207,28 @@ export async function removeRound(roundId: string): Promise<ActionResult> {
   return { success: true };
 }
 
+export interface RoundScheduleOverrideInput {
+  submissionOpensAt: string;
+  submissionClosesAt: string;
+  votingOpensAt: string;
+  votingClosesAt: string;
+}
+
+export async function setRoundScheduleOverride(roundId: string, input: RoundScheduleOverrideInput): Promise<ActionResult> {
+  const supabase = await createClient();
+  const orNull = (v: string) => (v === "" ? null : v);
+  const { error } = await supabase.rpc("set_round_schedule_override", {
+    p_round_id: roundId,
+    p_submission_opens_at: orNull(input.submissionOpensAt),
+    p_submission_closes_at: orNull(input.submissionClosesAt),
+    p_voting_opens_at: orNull(input.votingOpensAt),
+    p_voting_closes_at: orNull(input.votingClosesAt),
+  });
+  if (error) return { error: toFriendlyError(error) };
+  revalidatePath("/admin/format");
+  return { success: true };
+}
+
 export async function deleteCompetition(competitionId: string): Promise<ActionResult> {
   const supabase = await createClient();
   const { data: orphanedAudioKeys, error } = await supabase.rpc("delete_competition", {

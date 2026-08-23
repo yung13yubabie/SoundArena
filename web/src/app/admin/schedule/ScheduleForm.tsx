@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { AdminShell } from "@/components/AdminShell";
 import { Icon } from "@/lib/icons";
+import { toDatetimeLocalInput, fromDatetimeLocalInput, formatLocalForDisplay } from "@/lib/datetimeLocal";
 import { saveSchedule, type ScheduleInput } from "./actions";
 
 type Dates = Omit<ScheduleInput, "competitionId" | "roundIds">
@@ -23,21 +24,6 @@ const PHASE_FIELDS: Array<{ label: string; startKey: keyof Dates; endKey: keyof 
   { label: "公布期", startKey: "announcementStart", endKey: "announcementEnd" },
 ];
 
-// DB-09 資安複查(第二輪稽核):原本 <input type="date"> 只精確到日,改成
-// datetime-local 需要處理瀏覽器本地時區換算——datetime-local 的 value 是
-// 沒有時區資訊的「牆上時鐘」字串,直接原樣送給 Postgres 會被當成 UTC 解讀,
-// 造成時區換算錯誤。這裡統一用瀏覽器自己的 Date 物件做換算。
-function toDatetimeLocalInput(iso: string): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
-function fromDatetimeLocalInput(value: string): string {
-  return value === "" ? "" : new Date(value).toISOString();
-}
-
 function initialDatesToLocal(initial: Dates): Dates {
   return {
     promotionStart: toDatetimeLocalInput(initial.promotionStart),
@@ -50,15 +36,6 @@ function initialDatesToLocal(initial: Dates): Dates {
     announcementEnd: toDatetimeLocalInput(initial.announcementEnd),
     registrationDeadline: toDatetimeLocalInput(initial.registrationDeadline),
   };
-}
-
-// dates 這時候存的是 datetime-local 格式(YYYY-MM-DDTHH:mm，本地時區的純文字),
-// 不需要再經過 Date 物件轉換就能直接重新排版顯示。
-function formatLocalForDisplay(value: string): string {
-  if (!value) return "（尚未設定）";
-  const [datePart, timePart] = value.split("T");
-  const [, month, day] = datePart.split("-");
-  return timePart ? `${Number(month)}/${Number(day)} ${timePart}` : `${Number(month)}/${Number(day)}`;
 }
 
 function buildShareMessage(competitionName: string, competitionId: string, dates: Dates, origin: string): string {
@@ -170,7 +147,7 @@ export function ScheduleForm({
       <div className="mb-7">
         <h1 className="font-display text-[30px]">賽事時程 — {competitionName}</h1>
         <p className="mt-1.5 max-w-[680px] text-sm leading-relaxed text-ink-dim">
-          設定宣傳、投稿、投票、公布四個階段的起訖日期與時間，時間衝突會立即提示。投稿／投票期會套用到目前每一輪。
+          設定宣傳、投稿、投票、公布四個階段的起訖日期與時間，時間衝突會立即提示。投稿／投票期預設套用到目前每一輪；如果某一輪需要不同時間（例如兩輪之間要休息幾天），可以到「賽制建立」頁那一輪底下設定專屬時程——但之後如果又在這裡重新套用整體時程，會把那個專屬設定蓋掉。
         </p>
       </div>
 

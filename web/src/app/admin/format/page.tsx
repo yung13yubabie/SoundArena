@@ -89,7 +89,7 @@ export default async function AdminFormatPage({
 
   const { data: rounds } = await supabase
     .from("rounds")
-    .select("id, round_index, name, is_anonymous")
+    .select("id, round_index, name, is_anonymous, submission_opens_at, submission_closes_at, voting_opens_at, voting_closes_at")
     .eq("competition_id", competition.id)
     .order("round_index");
 
@@ -151,6 +151,10 @@ export default async function AdminFormatPage({
         ? { themeType: themedRoundConfig.theme_type ?? "keyword", themeValue: themedRoundConfig.theme_value }
         : null,
       scoringRule: overrideRule ? { id: overrideRule.id, items: toScoreItems(overrideRule.score_items ?? []) } : null,
+      submissionOpensAt: r.submission_opens_at,
+      submissionClosesAt: r.submission_closes_at,
+      votingOpensAt: r.voting_opens_at,
+      votingClosesAt: r.voting_closes_at,
     };
   });
 

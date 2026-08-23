@@ -397,6 +397,31 @@ async function main() {
     !!rrFirstRoundErr && rrFirstRoundErr.message.includes("初賽與決賽不可移除"),
     rrFirstRoundErr?.message,
   );
+
+  // ============ DB-09(b): set_round_schedule_override() 讓單一輪次可以有專屬時程,
+  // 陌生人不能設定別人比賽的輪次。 ============
+  const compRSO = await makeCompetition(organizerA.id, "roundScheduleOverride");
+  const { data: rsoR1 } = await admin.from("rounds").insert({ competition_id: compRSO, round_index: 1, name: "R1" }).select("id").single();
+  const rsoWindow = {
+    p_submission_opens_at: "2026-09-01T02:00:00.000Z",
+    p_submission_closes_at: "2026-09-05T14:00:00.000Z",
+    p_voting_opens_at: "2026-09-06T02:00:00.000Z",
+    p_voting_closes_at: "2026-09-10T14:00:00.000Z",
+  };
+  const { error: rsoSetErr } = await organizerAClient.rpc("set_round_schedule_override", { p_round_id: rsoR1.id, ...rsoWindow });
+  const { data: rsoAfter } = await admin.from("rounds").select("submission_opens_at").eq("id", rsoR1.id).single();
+  record(
+    "DB-09(b): organizer 可設定自己輪次的專屬時程",
+    !rsoSetErr && new Date(rsoAfter.submission_opens_at).getTime() === new Date(rsoWindow.p_submission_opens_at).getTime(),
+    `error=${rsoSetErr?.message ?? "none"}`,
+  );
+
+  const { error: rsoStrangerErr } = await organizerBClient.rpc("set_round_schedule_override", { p_round_id: rsoR1.id, ...rsoWindow });
+  record(
+    "DB-09(b): 陌生人不能設定別人比賽的輪次專屬時程",
+    !!rsoStrangerErr && rsoStrangerErr.message.includes("insufficient permission"),
+    rsoStrangerErr?.message,
+  );
 }
 
 async function cleanup() {
