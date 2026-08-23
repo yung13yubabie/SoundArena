@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { Icon } from "@/lib/icons";
 import { computeRanking } from "@/lib/ranking";
-import { saveScore, setEliminated } from "./actions";
+import { saveScore, setEliminated, finalizeRoundResults } from "./actions";
 
 export interface JudgeScoreItem {
   id: string;
@@ -27,16 +27,36 @@ export function JudgeBoard({
   roundId,
   scoreItems,
   submissions,
+  votingClosesAt,
+  resultsFinalizedAt,
 }: {
   roundId: string;
   scoreItems: JudgeScoreItem[];
   submissions: JudgeSubmission[];
+  votingClosesAt: string | null;
+  resultsFinalizedAt: string | null;
 }) {
   const [subs, setSubs] = useState(submissions);
   const [showFormula, setShowFormula] = useState(false);
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const [finalized, setFinalized] = useState(resultsFinalizedAt);
+  const [finalizeError, setFinalizeError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  const votingClosed = votingClosesAt !== null && new Date(votingClosesAt) <= new Date();
+
+  const confirmResults = () => {
+    setFinalizeError(null);
+    startTransition(async () => {
+      const result = await finalizeRoundResults(roundId);
+      if ("error" in result) {
+        setFinalizeError(result.error);
+        return;
+      }
+      setFinalized(new Date().toISOString());
+    });
+  };
 
   const toggleExpanded = (submissionId: string) => {
     setExpandedIds((prev) => {
@@ -74,6 +94,26 @@ export function JudgeBoard({
 
   return (
     <div>
+      <div className="glass mb-3.5 flex flex-wrap items-center justify-between gap-2.5 px-4 py-3.5">
+        <div className="text-[12.5px] leading-relaxed text-ink-dim">
+          {finalized ? (
+            <>本輪結果已確認,若這一輪之後接著隊伍賽,系統會依此開始分組。</>
+          ) : votingClosed ? (
+            <>投票已截止,確認淘汰名單無誤後按下「確認本輪結果」——如果下一輪是隊伍賽,分組要等這個動作完成才會開始。</>
+          ) : (
+            <>投票尚未截止,先完成評分與淘汰標記,投票截止後才能確認本輪結果。</>
+          )}
+          {finalizeError && <div className="mt-1 text-bad">{finalizeError}</div>}
+        </div>
+        <button
+          onClick={confirmResults}
+          disabled={isPending || !votingClosed || !!finalized}
+          className="rounded-[9px] border border-accent/40 bg-accent/12 px-3.5 py-1.75 text-[12px] font-semibold text-accent disabled:opacity-40"
+        >
+          {finalized ? "已確認本輪結果" : "確認本輪結果"}
+        </button>
+      </div>
+
       {ranked.map((s, rank) => {
         const t = totalById.get(s.id)!;
         return (

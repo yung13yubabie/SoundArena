@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { toFriendlyError } from "@/lib/actionError";
+import { dispatchPendingTeamNotifications } from "@/lib/notifications";
 
 type ActionResult = { success: true } | { error: string };
 
@@ -40,6 +41,29 @@ export async function setEliminated(
     p_eliminated: eliminated,
   });
   if (error) return { error: toFriendlyError(error) };
+
+  revalidatePath("/judge");
+  revalidatePath("/status");
+  return { success: true };
+}
+
+// 確認本輪結果——這是團隊分組(下一輪若為隊伍賽)真正等待的訊號,不能用
+// voting_closes_at 代替,因為投票截止到主辦人實際標完淘汰名單之間有空窗期。
+export async function finalizeRoundResults(roundId: string): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("finalize_round_results", { p_round_id: roundId });
+  if (error) return { error: toFriendlyError(error) };
+
+  try {
+    const { data: round } = await supabase.from("rounds").select("competition_id").eq("id", roundId).single();
+    if (round?.competition_id) {
+      await supabase.rpc("check_and_form_pending_teams", { p_competition_id: round.competition_id });
+      await dispatchPendingTeamNotifications([round.competition_id]);
+    }
+  } catch {
+    // 確認結果後的立即分組嘗試失敗不影響「確認本輪結果」本身已經成功,留給訪客造訪
+    // /status、/admin/format 時的 lazy check 兜底
+  }
 
   revalidatePath("/judge");
   revalidatePath("/status");

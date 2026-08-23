@@ -2,6 +2,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { sendDiscordDm } from "./discord";
 import { sendEmail } from "./email";
+import { createServiceClient } from "./supabase/service";
 
 // Vercel 系統環境變數,不用手動設定——正式網址(不含 https://),不管在哪個部署
 // 觸發都能可靠連回正式站,見 Vercel 官方文件「System environment variables」。
@@ -17,7 +18,7 @@ function siteOrigin(): string {
 function eventUrl(eventType: string): string {
   const origin = siteOrigin();
   if (eventType === "registration_confirmed") return `${origin}/submit`;
-  if (eventType === "submission_confirmed" || eventType === "organizer_message") return `${origin}/status`;
+  if (eventType === "submission_confirmed" || eventType === "organizer_message" || eventType === "team_assigned") return `${origin}/status`;
   return origin;
 }
 
@@ -73,4 +74,23 @@ export async function dispatchNotificationEvent(supabase: SupabaseClient, eventI
   }
 
   await supabase.from("notification_events").update({ status: "sent", sent_at: new Date().toISOString() }).eq("id", eventId);
+}
+
+// 團隊分組(check_and_form_pending_teams)是造訪頁面時順便觸發,不是使用者主動送出的
+// 動作,不像 register/submit 那樣呼叫端本來就知道剛剛建立了哪一筆事件——分組一次可能
+// 同時通知一整場比賽的所有參賽者,不只當下這位訪客。這裡把「該場比賽還沒送出的
+// team_assigned 通知」一次掃過去、立即嘗試送出,失敗的留給每日 cron 兜底,跟其他事件
+// 一致。
+export async function dispatchPendingTeamNotifications(competitionIds: string[]): Promise<void> {
+  if (competitionIds.length === 0) return;
+  const service = createServiceClient();
+  const { data: events } = await service
+    .from("notification_events")
+    .select("id")
+    .eq("event_type", "team_assigned")
+    .eq("status", "pending")
+    .in("competition_id", competitionIds);
+  for (const event of events ?? []) {
+    await dispatchNotificationEvent(service, event.id);
+  }
 }

@@ -533,6 +533,86 @@ async function main() {
 
   const { data: omEventId, error: omSendErr } = await organizerAClient.rpc("create_organizer_message_event", { p_registration_id: omReg.id, p_message: "測試訊息" });
   record("SA-012(回歸): 主辦人可以對自己比賽的參賽者發訊息", !omSendErr && !!omEventId, omSendErr?.message);
+
+  // ============ 團隊分組:form_team_groups_for_round() 只掛 'team' 積木(不搭配
+  // 'lottery',現實 UI 對 grouping 這個 category 是單選)也要能觸發;冪等;
+  // finalize_round_results() 的權限/時間閘;swap_team_member() 的權限/同輪次檢查。
+  // ============
+  const compTL = await makeCompetition(organizerA.id, "teamLottery");
+  await admin.from("competitions").update({ registration_closes_at: new Date(Date.now() - 60_000).toISOString() }).eq("id", compTL);
+  const { data: tlRound1 } = await admin.from("rounds").insert({ competition_id: compTL, round_index: 1, name: "初選" }).select("id").single();
+  const { data: tlRound2 } = await admin.from("rounds").insert({ competition_id: compTL, round_index: 2, name: "決賽" }).select("id").single();
+  const { data: tlTeamBlock } = await admin.from("format_blocks").select("id").eq("key", "team").single();
+  await admin.from("round_format_blocks").insert({ round_id: tlRound1.id, format_block_id: tlTeamBlock.id, config: { team_size: 2 } });
+  const tlRegIds = [];
+  for (let i = 0; i < 3; i++) {
+    const u = await makeUser(`tlp${i}`);
+    const { data: r } = await admin
+      .from("registrations")
+      .insert({ competition_id: compTL, user_id: u.id, suno_handle: `tl-p${i}`, display_name: `TL P${i}`, review_status: "approved" })
+      .select("id")
+      .single();
+    tlRegIds.push(r.id);
+  }
+
+  const { error: tlFormErr } = await organizerAClient.rpc("form_team_groups_for_round", { p_round_id: tlRound1.id });
+  const { data: tlTeamsAfterForm } = await admin.from("teams").select("id").eq("round_id", tlRound1.id);
+  record(
+    "團隊分組: 只掛 'team' 積木(無 'lottery')也能觸發,3 人/每隊 2 人 → 分成 2 隊",
+    !tlFormErr && (tlTeamsAfterForm ?? []).length === 2,
+    `error=${tlFormErr?.message ?? "none"} teams=${(tlTeamsAfterForm ?? []).length}`,
+  );
+
+  await organizerAClient.rpc("form_team_groups_for_round", { p_round_id: tlRound1.id });
+  const { data: tlTeamsAfterRepeat } = await admin.from("teams").select("id").eq("round_id", tlRound1.id);
+  record("團隊分組: 重複呼叫是冪等的,不會分兩次", (tlTeamsAfterRepeat ?? []).length === 2, `teams=${(tlTeamsAfterRepeat ?? []).length}`);
+
+  const { error: finalizeTooEarlyErr } = await organizerAClient.rpc("finalize_round_results", { p_round_id: roundA.id });
+  record(
+    "確認本輪結果: 投票還沒截止不能確認",
+    !!finalizeTooEarlyErr && finalizeTooEarlyErr.message.includes("before its voting has closed"),
+    finalizeTooEarlyErr?.message,
+  );
+
+  const { error: finalizeStrangerErr } = await organizerBClient.rpc("finalize_round_results", { p_round_id: evRound.id });
+  record(
+    "確認本輪結果: 陌生人不能確認別人比賽的輪次結果",
+    !!finalizeStrangerErr && finalizeStrangerErr.message.includes("insufficient permission"),
+    finalizeStrangerErr?.message,
+  );
+
+  const { error: finalizeOkErr } = await organizerAClient.rpc("finalize_round_results", { p_round_id: evRound.id });
+  const { data: evRoundAfterFinalize } = await admin.from("rounds").select("results_finalized_at").eq("id", evRound.id).single();
+  record(
+    "確認本輪結果: 投票已截止,主辦人可以確認自己比賽的輪次結果",
+    !finalizeOkErr && !!evRoundAfterFinalize?.results_finalized_at,
+    finalizeOkErr?.message,
+  );
+
+  const tlOtherTeam = (
+    await admin.from("teams").select("id").eq("round_id", tlRound1.id).neq(
+      "id",
+      (await admin.from("team_members").select("team_id").eq("registration_id", tlRegIds[0]).single()).data.team_id,
+    )
+  ).data[0];
+  const { error: swapStrangerErr } = await organizerBClient.rpc("swap_team_member", { p_registration_id: tlRegIds[0], p_new_team_id: tlOtherTeam.id });
+  record(
+    "換組: 陌生人不能操作別人比賽的隊伍",
+    !!swapStrangerErr && swapStrangerErr.message.includes("insufficient permission"),
+    swapStrangerErr?.message,
+  );
+
+  const { error: swapOkErr } = await organizerAClient.rpc("swap_team_member", { p_registration_id: tlRegIds[0], p_new_team_id: tlOtherTeam.id });
+  const { data: tlAfterSwap } = await admin.from("team_members").select("team_id").eq("registration_id", tlRegIds[0]).single();
+  record("換組: 主辦人可以換組,換組結果正確反映到指定隊伍", !swapOkErr && tlAfterSwap?.team_id === tlOtherTeam.id, swapOkErr?.message);
+
+  const { data: tlForeignTeam } = await admin.from("teams").insert({ round_id: tlRound2.id, name: "決賽假隊伍" }).select("id").single();
+  const { error: swapCrossRoundErr } = await organizerAClient.rpc("swap_team_member", { p_registration_id: tlRegIds[1], p_new_team_id: tlForeignTeam.id });
+  record(
+    "換組: 不能把成員換去不同輪次的隊伍",
+    !!swapCrossRoundErr && swapCrossRoundErr.message.includes("does not belong to the same round"),
+    swapCrossRoundErr?.message,
+  );
 }
 
 async function cleanup() {

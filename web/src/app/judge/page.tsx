@@ -87,7 +87,7 @@ export default async function JudgePage({
 
   const { data: rounds } = await supabase
     .from("rounds")
-    .select("id, round_index, name")
+    .select("id, round_index, name, voting_closes_at, results_finalized_at")
     .eq("competition_id", competition.id)
     .order("round_index");
 
@@ -232,7 +232,13 @@ export default async function JudgePage({
       {submissions.length === 0 ? (
         <EmptyState icon="inbox" title="目前沒有待評分作品" sub="等待本輪投稿審核完成後,待評分清單才會出現作品" />
       ) : (
-        <JudgeBoard roundId={round.id} scoreItems={scoreItems} submissions={submissions} />
+        <JudgeBoard
+          roundId={round.id}
+          scoreItems={scoreItems}
+          submissions={submissions}
+          votingClosesAt={round.voting_closes_at}
+          resultsFinalizedAt={round.results_finalized_at}
+        />
       )}
     </AdminShell>
   );

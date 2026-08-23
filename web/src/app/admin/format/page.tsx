@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getManageableCompetitions } from "@/lib/manageableCompetitions";
 import { redirectToLogin } from "@/lib/loginRedirect";
 import { CreateCompetitionForm } from "./CreateCompetitionForm";
+import { dispatchPendingTeamNotifications } from "@/lib/notifications";
 import {
   AdminFormatClient,
   type CompetitionData,
@@ -33,8 +34,25 @@ interface FormatBlockRow {
   format_blocks: { key: string; category: "elimination" | "grouping" | "special" } | null;
 }
 
+interface TeamMemberRow {
+  registration_id: string;
+  registrations: { display_name: string } | { display_name: string }[] | null;
+}
+
+interface TeamRow {
+  id: string;
+  round_id: string;
+  name: string;
+  team_members: TeamMemberRow[];
+}
+
 function oneTemplate(value: ScoreItemRow["score_item_templates"]) {
   return Array.isArray(value) ? value[0] : value;
+}
+
+function oneDisplayName(value: TeamMemberRow["registrations"]): string {
+  const row = Array.isArray(value) ? value[0] : value;
+  return row?.display_name ?? "（未命名參賽者）";
 }
 
 function toScoreItems(rows: ScoreItemRow[]): ScoreItemData[] {
@@ -87,6 +105,15 @@ export default async function AdminFormatPage({
 
   const competitionList = myCompetitions.map((c) => ({ id: c.id, name: c.name }));
 
+  // 團隊分組沒有天然的使用者動作可以掛「立即嘗試」,改成主辦人造訪賽制頁時順便檢查——
+  // 見 status/page.tsx 同一處的說明,完全冪等,失敗也不影響這頁的顯示。
+  try {
+    await supabase.rpc("check_and_form_pending_teams", { p_competition_id: competition.id });
+    await dispatchPendingTeamNotifications([competition.id]);
+  } catch {
+    // 分組檢查/送出通知失敗不影響賽制頁本身的顯示
+  }
+
   const { data: rounds } = await supabase
     .from("rounds")
     .select("id, round_index, name, is_anonymous, submission_opens_at, submission_closes_at, voting_opens_at, voting_closes_at")
@@ -95,19 +122,32 @@ export default async function AdminFormatPage({
 
   const roundIds = (rounds ?? []).map((r) => r.id);
 
-  const [{ data: blockRows }, { data: scoringRuleRows }, { data: catalogRows }, { data: scoreTemplateRows }, { count: registrationCount }] =
-    await Promise.all([
-      roundIds.length
-        ? supabase.from("round_format_blocks").select("round_id, config, format_blocks(key, category)").in("round_id", roundIds)
-        : Promise.resolve({ data: [] as FormatBlockRow[] }),
-      supabase
-        .from("scoring_rules")
-        .select("id, round_id, score_items(id, label, kind, weight_percent, sort_order, score_item_templates(key))")
-        .eq("competition_id", competition.id),
-      supabase.from("format_blocks").select("key, label, category").order("category").order("key"),
-      supabase.from("score_item_templates").select("key, label, default_kind").order("label"),
-      supabase.from("registrations").select("id", { count: "exact", head: true }).eq("competition_id", competition.id),
-    ]);
+  const [
+    { data: blockRows },
+    { data: scoringRuleRows },
+    { data: catalogRows },
+    { data: scoreTemplateRows },
+    { count: registrationCount },
+    { data: teamRows },
+  ] = await Promise.all([
+    roundIds.length
+      ? supabase.from("round_format_blocks").select("round_id, config, format_blocks(key, category)").in("round_id", roundIds)
+      : Promise.resolve({ data: [] as FormatBlockRow[] }),
+    supabase
+      .from("scoring_rules")
+      .select("id, round_id, score_items(id, label, kind, weight_percent, sort_order, score_item_templates(key))")
+      .eq("competition_id", competition.id),
+    supabase.from("format_blocks").select("key, label, category").order("category").order("key"),
+    supabase.from("score_item_templates").select("key, label, default_kind").order("label"),
+    supabase.from("registrations").select("id", { count: "exact", head: true }).eq("competition_id", competition.id),
+    roundIds.length
+      ? supabase
+          .from("teams")
+          .select("id, round_id, name, team_members(registration_id, registrations(display_name))")
+          .in("round_id", roundIds)
+          .order("name")
+      : Promise.resolve({ data: [] as TeamRow[] }),
+  ]);
 
   const formatBlockCatalog: FormatBlockCatalog = { elimination: [], grouping: [], special: [] };
   for (const row of catalogRows ?? []) {
@@ -123,6 +163,7 @@ export default async function AdminFormatPage({
   const blocks = (blockRows ?? []) as unknown as FormatBlockRow[];
   const scoringRules = (scoringRuleRows ?? []) as unknown as ScoringRuleRow[];
   const defaultRule = scoringRules.find((r) => r.round_id === null);
+  const teams = (teamRows ?? []) as unknown as TeamRow[];
 
   const indices = (rounds ?? []).map((r) => r.round_index);
   const minIdx = Math.min(...indices);
@@ -137,6 +178,7 @@ export default async function AdminFormatPage({
     const themedRoundConfig = specialBlocks.find((b) => b.format_blocks!.key === "themed_round")?.config as
       | { theme_type?: "keyword" | "genre"; theme_value?: string }
       | undefined;
+    const teamConfig = roundBlocks.find((b) => b.format_blocks!.key === "team")?.config as { team_size?: number } | undefined;
     const overrideRule = scoringRules.find((sr) => sr.round_id === r.id) ?? null;
 
     return {
@@ -150,6 +192,17 @@ export default async function AdminFormatPage({
       themeConfig: themedRoundConfig?.theme_value
         ? { themeType: themedRoundConfig.theme_type ?? "keyword", themeValue: themedRoundConfig.theme_value }
         : null,
+      teamSize: teamConfig?.team_size ?? null,
+      teams: teams
+        .filter((t) => t.round_id === r.id)
+        .map((t) => ({
+          id: t.id,
+          name: t.name,
+          members: t.team_members.map((m) => ({
+            registrationId: m.registration_id,
+            displayName: oneDisplayName(m.registrations),
+          })),
+        })),
       scoringRule: overrideRule ? { id: overrideRule.id, items: toScoreItems(overrideRule.score_items ?? []) } : null,
       submissionOpensAt: r.submission_opens_at,
       submissionClosesAt: r.submission_closes_at,

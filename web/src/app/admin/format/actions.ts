@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { toFriendlyError } from "@/lib/actionError";
 import { deleteAudioObject } from "@/lib/storage";
 import { planAudioRetention } from "@/lib/audioRetention";
+import { dispatchPendingTeamNotifications } from "@/lib/notifications";
 
 type ActionResult = { success: true } | { error: string };
 
@@ -368,4 +369,29 @@ export async function cleanupNonFinalistAudio(competitionId: string): Promise<Cl
 
   revalidatePath("/admin/format");
   return { success: true, cleared };
+}
+
+export async function swapTeamMember(registrationId: string, newTeamId: string): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("swap_team_member", {
+    p_registration_id: registrationId,
+    p_new_team_id: newTeamId,
+  });
+  if (error) return { error: toFriendlyError(error) };
+
+  try {
+    const { data: team } = await supabase
+      .from("teams")
+      .select("round_id, rounds(competition_id)")
+      .eq("id", newTeamId)
+      .single();
+    const round = team?.rounds as { competition_id: string } | { competition_id: string }[] | null;
+    const competitionId = Array.isArray(round) ? round[0]?.competition_id : round?.competition_id;
+    if (competitionId) await dispatchPendingTeamNotifications([competitionId]);
+  } catch {
+    // 換組後的通知立即送出失敗不影響換組本身已經成功,留給每日 cron 兜底
+  }
+
+  revalidatePath("/admin/format");
+  return { success: true };
 }

@@ -6,6 +6,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { type SubmissionState } from "@/lib/submissionStateMeta";
 import { PrivacyPanel, type PrivacyRegistration, type PrivacySubmission } from "./PrivacyPanel";
 import { DisplayNameEditor } from "./DisplayNameEditor";
+import { dispatchPendingTeamNotifications } from "@/lib/notifications";
 import {
   StatusSubmissionsList,
   type StatusRegistration,
@@ -89,7 +90,16 @@ export default async function StatusPage() {
     .limit(20);
 
   const regs = (registrations ?? []) as unknown as RegistrationRow[];
-  const competitionIds = regs.map((r) => r.competition_id);
+  const competitionIds = [...new Set(regs.map((r) => r.competition_id))];
+
+  // 團隊分組沒有天然的使用者動作可以掛「立即嘗試」,改成造訪這個頁面時順便檢查——
+  // 完全冪等,條件不成立就什麼都不做,失敗也不影響這頁本身的顯示。
+  try {
+    await Promise.all(competitionIds.map((id) => supabase.rpc("check_and_form_pending_teams", { p_competition_id: id })));
+    await dispatchPendingTeamNotifications(competitionIds);
+  } catch {
+    // 分組檢查/送出通知失敗不影響「我的投稿」頁本身的顯示
+  }
 
   const { data: rounds } = competitionIds.length
     ? await supabase

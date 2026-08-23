@@ -21,6 +21,7 @@ import {
   setRoundScheduleOverride,
   deleteCompetition,
   cleanupNonFinalistAudio,
+  swapTeamMember,
 } from "./actions";
 
 export interface ScoreItemData {
@@ -42,6 +43,17 @@ export interface ThemeConfig {
   themeValue: string;
 }
 
+export interface TeamMemberData {
+  registrationId: string;
+  displayName: string;
+}
+
+export interface TeamData {
+  id: string;
+  name: string;
+  members: TeamMemberData[];
+}
+
 export interface RoundData {
   id: string;
   name: string;
@@ -51,6 +63,8 @@ export interface RoundData {
   special: string[];
   isAnonymous: boolean;
   themeConfig: ThemeConfig | null;
+  teamSize: number | null;
+  teams: TeamData[];
   scoringRule: { id: string; items: ScoreItemData[] } | null;
   submissionOpensAt: string | null;
   submissionClosesAt: string | null;
@@ -305,6 +319,99 @@ function ThemedRoundConfigPanel({ roundId, initial }: { roundId: string; initial
   );
 }
 
+function TeamConfigPanel({ roundId, initialTeamSize }: { roundId: string; initialTeamSize: number | null }) {
+  const [teamSize, setTeamSize] = useState(initialTeamSize ?? 3);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  async function handleSave() {
+    setSaving(true);
+    await saveFormatBlockConfig(roundId, "team", { team_size: teamSize });
+    setSaving(false);
+    setSaved(true);
+  }
+
+  return (
+    <div className="glass mt-2 mb-3.5 px-4 py-3.5">
+      <div className="mb-2.5 text-[11.5px] leading-relaxed text-ink-faint">
+        每隊人數——報名截止（或前一輪確認結果）後，系統會自動把還在比賽中的參賽者隨機分成這個人數的隊伍，並發訊息通知每個人自己的隊伍。人數除不盡時，最後一隊人數較少。
+      </div>
+      <div className="flex items-center gap-2">
+        <input
+          type="number"
+          min="2"
+          value={teamSize}
+          onChange={(e) => {
+            setTeamSize(Number(e.target.value));
+            setSaved(false);
+          }}
+          className="w-24 rounded-[10px] border border-panel-border bg-black/25 px-3.5 py-2 text-[13px] text-ink outline-none focus:border-accent/50"
+        />
+        <span className="text-[12.5px] text-ink-dim">人 / 隊</span>
+        <button
+          onClick={handleSave}
+          disabled={saving || teamSize < 2}
+          className="rounded-[10px] bg-gradient-to-r from-[#ff9457] via-accent to-accent-2 px-3.5 py-2 text-[12.5px] font-semibold text-[#1a0e08] disabled:opacity-45"
+        >
+          {saving ? "儲存中…" : saved ? "已儲存" : "儲存"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function TeamRosterPanel({ teams }: { teams: TeamData[] }) {
+  const [isPending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  if (teams.length === 0) {
+    return (
+      <div className="glass mt-2 mb-3.5 px-4 py-3.5 text-[12px] leading-relaxed text-ink-faint">
+        還沒有分組——會在報名截止（或前一輪確認結果）後自動進行，不需要手動觸發。
+      </div>
+    );
+  }
+
+  const move = (registrationId: string, newTeamId: string) => {
+    setError(null);
+    startTransition(async () => {
+      const result = await swapTeamMember(registrationId, newTeamId);
+      if ("error" in result) setError(result.error);
+    });
+  };
+
+  return (
+    <div className="glass mt-2 mb-3.5 px-4 py-3.5">
+      <div className="mb-2.5 text-[11.5px] text-ink-faint">目前分組——可以用下拉選單手動換組，換組後會通知異動雙方</div>
+      {error && <p className="mb-2.5 text-[12px] text-bad">{error}</p>}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {teams.map((team) => (
+          <div key={team.id} className="rounded-[10px] border border-panel-border bg-white/[0.02] p-3">
+            <div className="mb-1.5 text-[12.5px] font-semibold">{team.name}</div>
+            {team.members.map((m) => (
+              <div key={m.registrationId} className="flex items-center justify-between gap-2 py-1">
+                <span className="text-[12.5px]">{m.displayName}</span>
+                <select
+                  value={team.id}
+                  disabled={isPending}
+                  onChange={(e) => move(m.registrationId, e.target.value)}
+                  className="rounded-lg border border-panel-border bg-black/25 px-2 py-1 text-[11.5px] text-ink [color-scheme:dark] disabled:opacity-45"
+                >
+                  {teams.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function RoundFormatCard({
   round,
   competitionId,
@@ -424,6 +531,12 @@ function RoundFormatCard({
       </div>
 
       {round.special.includes("themed_round") && <ThemedRoundConfigPanel roundId={round.id} initial={round.themeConfig} />}
+      {round.grouping === "team" && (
+        <>
+          <TeamConfigPanel roundId={round.id} initialTeamSize={round.teamSize} />
+          <TeamRosterPanel teams={round.teams} />
+        </>
+      )}
 
       <div className="mt-3.5 flex items-center gap-2.5 border-t border-panel-border pt-2.5">
         <Switch on={!!round.scoringRule} label="此輪是否使用獨立評分規則" onClick={toggleOverride} />
