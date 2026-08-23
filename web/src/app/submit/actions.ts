@@ -8,6 +8,7 @@ import { toFriendlyError } from "@/lib/actionError";
 import { parseSunoShareUrl } from "@/lib/suno";
 import { createUploadUrl, deleteAudioObject, getObjectHeadBytes } from "@/lib/storage";
 import { ALLOWED_AUDIO_TYPES, MAX_AUDIO_FILE_SIZE, matchesAudioMagicBytes } from "@/lib/audioUpload";
+import { dispatchNotificationEvent } from "@/lib/notifications";
 
 type ActionResult = { success: true } | { error: string };
 
@@ -226,7 +227,9 @@ export async function submitEntry(input: SubmitEntryInput): Promise<ActionResult
   }
 
   // 通知事件是附加動作,失敗不該讓投稿本身失敗(見 register/actions.ts 同樣的慣例)。
-  // title/body 不再由這裡組字串傳過去,見 register/actions.ts 同一處的說明。
+  // title/body 不再由這裡組字串傳過去,見 register/actions.ts 同一處的說明。SA-005:
+  // 事件建立後立即嘗試送出,失敗留給每日 cron(dispatch-notifications)重試——同一套
+  // 理由見 register/actions.ts 同一處的說明。
   try {
     if (user && submissionId) {
       const { data: registration } = await supabase
@@ -235,16 +238,17 @@ export async function submitEntry(input: SubmitEntryInput): Promise<ActionResult
         .eq("id", input.registrationId)
         .maybeSingle();
       if (registration) {
-        await supabase.rpc("create_notification_event", {
+        const { data: eventId } = await supabase.rpc("create_notification_event", {
           p_user_id: user.id,
           p_competition_id: registration.competition_id,
           p_event_type: "submission_confirmed",
           p_resource_id: submissionId,
         });
+        if (eventId) await dispatchNotificationEvent(serviceClient, eventId);
       }
     }
   } catch {
-    // 通知事件建立失敗不影響投稿本身已經成功
+    // 通知事件建立/送出失敗不影響投稿本身已經成功
   }
 
   revalidatePath("/submit");

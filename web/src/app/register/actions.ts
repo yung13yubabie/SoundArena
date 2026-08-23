@@ -2,8 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/service";
 import { parseSunoHandle } from "@/lib/suno";
 import { toFriendlyError } from "@/lib/actionError";
+import { dispatchNotificationEvent } from "@/lib/notifications";
 
 type ActionResult = { success: true } | { error: string };
 
@@ -50,15 +52,20 @@ export async function registerForCompetition(formData: FormData): Promise<Action
   // title/body 不再由這裡組字串傳過去——ADR-0015 第 4 項的完整修法:呼叫端只傳
   // event_type + resource_id,實際文案由 create_notification_event() 自己產生,
   // 呼叫端無法注入任意內容。
+  //
+  // SA-005:事件建立後立即嘗試送出(Vercel Hobby 方案 cron 一天只能跑一次,純靠
+  // cron 兜底的話通知可能要等將近一天才送到)——這裡是最佳努力,失敗了事件還在
+  // notification_events 保持 pending,交給每日 cron(dispatch-notifications)重試。
   try {
-    await supabase.rpc("create_notification_event", {
+    const { data: eventId } = await supabase.rpc("create_notification_event", {
       p_user_id: user.id,
       p_competition_id: competitionId,
       p_event_type: "registration_confirmed",
       p_resource_id: registration.id,
     });
+    if (eventId) await dispatchNotificationEvent(createServiceClient(), eventId);
   } catch {
-    // 通知事件建立失敗不影響報名本身已經成功
+    // 通知事件建立/送出失敗不影響報名本身已經成功
   }
 
   revalidatePath("/register");
