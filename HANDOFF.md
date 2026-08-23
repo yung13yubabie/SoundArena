@@ -1268,3 +1268,23 @@ ADR-0033 的 DB-01 設計刻意讓 `security-test` job 每次觸發都停在「�
 ### 下一步
 
 第二輪報告剩餘 P2/P3(DB-04 AdminShell 手機側欄/視角切換版面、DB-07 routable admin URL、DB-09 多輪時程獨立化、DB-12 導覽命名、DB-13 vote IP fraud signal 化)、`remove_round()` 輪次保護缺口、CI 審核流程安排,都還等使用者決定或複查。
+
+## 08-23:用 `mattpocock-skills:grilling` 逐項確認剩餘 P2/P3,分批執行(commit caec902 起)
+
+用 grilling skill 跟使用者逐項確認上面列的待決項目,SA-005/SA-011 維持暫緩不動。確認結果:
+
+- CI 審核流程:使用者自己上 GitHub 點核准,不自動化。
+- `remove_round()`:一般主辦人完全擋下有真實資料的輪次移除,PlatformAdmin 可強制(比照 `delete_competition()`);另外加碼——賽制頁在報名開放前常駐顯示輪次摘要提醒、建立比賽送出前加確認步驟、`/register` 頁面顯示輪次/時程表給報名者看。
+- DB-04:手機版側欄隱藏,改成頁面頂部下拉選單。
+- DB-07:維持現狀不做(PlatformAdmin 是使用者自己用的內部工具,不需要書籤/分享)。
+- DB-09:三件分開處理——(a) `ScheduleForm` 改 `datetime-local`(b) 每輪可選填獨立時程,不填沿用整體時程(c) 分享訊息加「編輯」按鈕可手動微調。
+- DB-12:「活動」→「探索比賽」,「比賽」→「作品試聽」。
+- DB-13:維持 IP 硬擋,錯誤文案加引導切換行動網路。
+
+規劃 8 個批次(見對話紀錄),每批跑完原本要過 `/codex:review`,後來發現這個指令 `disable-model-invocation: true`,我沒辦法自己觸發、只能請使用者自己輸入——改用 `/codex:adversarial-review` 也一樣有這個限制。使用者後續改用 `/goal` 指示「CODEX REVIEW 留到最後」,所以後面批次不再逐批停下等 review,全部做完再一次跑。
+
+**批次 1(DB-12 + DB-13)已完成**:`SiteHeader.tsx` 導覽命名 + `competitions/page.tsx`/`register/page.tsx`/`status/page.tsx` 對應文案 + `vote/actions.ts` IP 衝突錯誤訊息。`tsc`/`eslint`/`build` 全乾淨,commit `caec902`、push、`vercel --prod` 部署(第一次 deploy 遇到暫時性的「Not authorized」,重跑一次就成功,不是真的授權失效)。
+
+### 下一步
+
+繼續批次 2(DB-04 手機下拉選單)起,依序做完批次 3~8,全部做完後統一跑 `/codex:adversarial-review`(需使用者自己輸入指令觸發)。
