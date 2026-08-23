@@ -1295,6 +1295,14 @@ ADR-0033 的 DB-01 設計刻意讓 `security-test` job 每次觸發都停在「�
 
 批次 2~5 全部 `tsc`/`eslint`/`build` 乾淨,`vercel --prod` 部署後正式環境都確認 200。
 
+**批次 6(DB-09a 時程時間精度,commit `90e5c75`,見 [ADR-0039](docs/adr/0039-db09-schedule-time-precision-and-per-round-override.md))**:`ScheduleForm.tsx` 全部欄位從 `type="date"` 改成 `type="datetime-local"`,新增本地時區 ↔ UTC ISO 換算(datetime-local 的 value 沒有時區資訊,直接送給 Postgres 會被當 UTC 解讀)。真實 PoC 驗證 Asia/Taipei 往返換算無偏移。
+
+**批次 7(DB-09b 每輪獨立時程,commit `4d6421c`,同一份 ADR)**:新增 `set_round_schedule_override()` RPC,讓單一輪次能有專屬投稿/投票時間,不填就沿用「時程設定」頁整體套用的值——沒有另外做「鎖定不被覆蓋」機制,UI 文案有提醒這個限制。轉換邏輯抽成共用的 `web/src/lib/datetimeLocal.ts`。真實 PoC(6/6)+ `security-regression.mjs` 新增 2 項,29/29 通過。
+
+**批次 8(DB-09c 分享訊息可編輯,commit `c0f422f`)**:`ShareMessagePanel` 加「編輯」按鈕,可以在自動產生的文字上手動微調再複製,不想要手動版本可以「還原自動版本」。
+
+批次 6~8 全部 `tsc`/`eslint`/`build` 乾淨,`vercel --prod` 部署後正式環境都確認 200。**8 個規劃批次(DB-12/DB-13/DB-04/`remove_round()`/建立比賽確認/報名頁時程表/DB-09a/DB-09b/DB-09c——實際上因為 grilling 過程中追加項目,總共完成的工作比原本規劃的 8 批更多)全部完成。**
+
 ### 下一步
 
-繼續批次 6(`ScheduleForm` 改 `datetime-local`)起,依序做完批次 7(每輪獨立時程)、8(分享訊息編輯按鈕),全部做完後統一跑 `/codex:adversarial-review`(需使用者自己輸入指令觸發)。
+按 `/goal`(「CODEX REVIEW 留到最後」)指示,現在要請使用者輸入 `/codex:adversarial-review` 對整批改動做最後複查(這個指令 `disable-model-invocation: true`,只能使用者自己觸發)。`remove_round()` 查證時額外發現的 `is_platform_admin()` 缺口已經在批次 3 一併修掉;第二輪稽核報告目前已知的所有項目(含 grilling 確認的追加需求)都已處理完畢,只剩 SA-005(需 Resend/Discord 憑證)、SA-011(auth config 風險決定)維持暫緩。
