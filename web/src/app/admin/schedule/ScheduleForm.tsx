@@ -62,8 +62,11 @@ function ShareMessagePanel({
   dates: Dates;
 }) {
   const [copied, setCopied] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [customMessage, setCustomMessage] = useState<string | null>(null);
   const origin = typeof window !== "undefined" ? window.location.origin : "";
-  const message = buildShareMessage(competitionName, competitionId, dates, origin);
+  const autoMessage = buildShareMessage(competitionName, competitionId, dates, origin);
+  const message = customMessage ?? autoMessage;
 
   async function handleCopy() {
     await navigator.clipboard.writeText(message);
@@ -71,21 +74,59 @@ function ShareMessagePanel({
     setTimeout(() => setCopied(false), 2000);
   }
 
+  function startEditing() {
+    setCustomMessage(message);
+    setEditing(true);
+  }
+
+  function resetToAuto() {
+    setCustomMessage(null);
+    setEditing(false);
+  }
+
   return (
     <div className="glass mt-6 p-5">
-      <div className="mb-1.5 text-[13.5px] font-semibold">分享文字</div>
+      <div className="mb-1.5 flex items-center justify-between">
+        <div className="text-[13.5px] font-semibold">分享文字</div>
+        {!editing && (
+          <button onClick={startEditing} className="text-[11.5px] text-ink-dim hover:text-ink">
+            編輯
+          </button>
+        )}
+      </div>
       <p className="mb-3 text-[11.5px] text-ink-dim">
-        整合報名連結與目前設定的時程，可以直接複製貼到 LINE / Discord 群組公告。內容會隨上面的時程設定即時更新。
+        {editing
+          ? "手動微調中，不會再隨時程設定自動更新——想改回自動產生的版本可以按「還原自動版本」。"
+          : "整合報名連結與目前設定的時程，可以直接複製貼到 LINE / Discord 群組公告。內容會隨上面的時程設定即時更新，也可以按「編輯」手動微調。"}
       </p>
-      <pre className="mb-3 whitespace-pre-wrap rounded-[10px] border border-panel-border bg-black/25 p-3.5 text-[12.5px] text-ink">
-        {message}
-      </pre>
-      <button
-        onClick={handleCopy}
-        className="rounded-[10px] border border-panel-border bg-white/[0.04] px-4 py-2 text-[12.5px] font-semibold text-ink"
-      >
-        {copied ? "已複製" : "複製文字"}
-      </button>
+      {editing ? (
+        <textarea
+          value={customMessage ?? ""}
+          onChange={(e) => setCustomMessage(e.target.value)}
+          rows={8}
+          className="mb-3 w-full whitespace-pre-wrap rounded-[10px] border border-panel-border bg-black/25 p-3.5 text-[12.5px] text-ink outline-none focus:border-accent/50"
+        />
+      ) : (
+        <pre className="mb-3 whitespace-pre-wrap rounded-[10px] border border-panel-border bg-black/25 p-3.5 text-[12.5px] text-ink">
+          {message}
+        </pre>
+      )}
+      <div className="flex gap-2">
+        <button
+          onClick={handleCopy}
+          className="rounded-[10px] border border-panel-border bg-white/[0.04] px-4 py-2 text-[12.5px] font-semibold text-ink"
+        >
+          {copied ? "已複製" : "複製文字"}
+        </button>
+        {editing && (
+          <button
+            onClick={resetToAuto}
+            className="rounded-[10px] border border-panel-border bg-white/[0.04] px-4 py-2 text-[12.5px] text-ink-dim"
+          >
+            還原自動版本
+          </button>
+        )}
+      </div>
     </div>
   );
 }
