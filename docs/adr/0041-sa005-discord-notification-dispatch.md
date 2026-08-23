@@ -22,9 +22,11 @@
 
 **新增檔案**:`web/src/lib/discord.ts`(開 DM 頻道 + 送訊息)、`web/src/lib/email.ts`(Resend REST API,先用 `onboarding@resend.dev`,之後換正式網域只需改一個常數)、`web/src/lib/notifications.ts`(共用的 `dispatchNotificationEvent()`,兩種管道共用同一套「沒有送達目的地 → 永久 failed;API 呼叫失敗 → 留 pending 給 cron 重試」邏輯)。
 
+**通知內文附上對應頁面連結**(使用者追加要求):報名成功導去投稿頁(`/submit?competition=<id>`,下一步該做的動作),投稿成功導去進度頁(`/status`)。正式網址用 Vercel 系統環境變數 `VERCEL_PROJECT_PRODUCTION_URL`(不用手動維護,官方文件明確說明這個變數就是設計來給「不管在哪個部署都要能可靠連回正式站」這種情境用),本機開發環境沒有這個變數,需要在正式部署後才能真的驗證這段。
+
 ## 驗證
 
-DB 端邏輯真實 PoC(4/4):`create_notification_event()` 正確回傳 uuid、正確判斷 channel、沒有 `discord_user_id` 時正確標記永久 `failed`。真實端對端 PoC(3/3,對使用者本人的真實 Discord 帳號):建立事件 → 真的開 DM 頻道 → 真的送出訊息,使用者在 Discord 收到真實私訊確認。`web/scripts/security-regression.mjs` 完整跑過(30/30,確認 RPC 簽章變更沒有破壞既有安全邊界)。`tsc`/`eslint`/`build` 全程乾淨。
+DB 端邏輯真實 PoC(4/4):`create_notification_event()` 正確回傳 uuid、正確判斷 channel、沒有 `discord_user_id` 時正確標記永久 `failed`。真實端對端 PoC(3/3,對使用者本人的真實 Discord 帳號):建立事件 → 真的開 DM 頻道 → 真的送出訊息,使用者在 Discord 收到真實私訊確認。加上連結欄位後,對**正式環境**額外跑一次真實 PoC(2/2):直接呼叫部署後的 `/api/cron/dispatch-notifications` endpoint,確認 `VERCEL_PROJECT_PRODUCTION_URL` 在真實部署裡正確解析、事件狀態正確轉成 `sent`。`web/scripts/security-regression.mjs` 完整跑過(30/30,確認 RPC 簽章變更沒有破壞既有安全邊界)。`tsc`/`eslint`/`build` 全程乾淨。
 
 ## 誠實記錄還沒做的部分
 

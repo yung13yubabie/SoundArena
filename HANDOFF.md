@@ -1314,3 +1314,21 @@ ADR-0033 的 DB-01 設計刻意讓 `security-test` job 每次觸發都停在「�
 ### 下一步
 
 第二輪稽核報告(含 grilling 確認的追加需求)目前已知的所有項目都已處理完畢並通過 adversarial review 複查,只剩 SA-005(需 Resend/Discord 憑證)、SA-011(auth config 風險決定)維持暫緩,以及 CI 的 `security-test` 審核流程需要使用者自己上 GitHub 處理累積的待審核 run。
+
+## 08-23:CI 審核流程代為處理 + SA-005 第一批(Discord 通知真的送出去)
+
+使用者明確要求代為處理 CI 累積的待審核 run,並開始推進 SA-005。
+
+**CI 審核**:18 個等待審核的 run 裡,只有對應目前 HEAD 的最新一個(commit `ea742a8`)有意義,核准並確認真的跑完通過;其餘 17 個是已被後續 commit 取代的中間狀態,標記拒絕清掉。
+
+**SA-005 憑證取得過程**(使用者操作,過程中排除幾個 Discord 平台限制):Resend 帳號用個人 Gmail 註冊即可,不需要企業信箱;Email 寄件位址先用 Resend 預設的 `onboarding@resend.dev`,不用等網域驗證(查證確認這個專案的 Vercel 帳號目前 0 個網域,`no-reply@soundarena.com` 需要先真的買下這個網域)。Discord bot 邀請卡了兩輪:先是 URL Generator 自動帶入舊的本機開發用 redirect_uri 導致回呼失敗,改用不含 redirect_uri 的手動組合邀請連結繞過;接著撞到 Application 的「Requires OAuth2 Code Grant」開關擋下簡單邀請,查了官方支援文章確認 Discord 私訊使用者的前提是 bot 跟對方要有共同伺服器(平台本身的限制,純一對一私訊不存在),兩者都排除後成功邀請 bot 加入使用者建立的真實伺服器,`DISCORD_GUILD_ID`/`RESEND_API_KEY` 補進本機與 Vercel production 環境變數。
+
+**SA-005 第一批(Discord 私訊通知)**:細節見 [ADR-0041](docs/adr/0041-sa005-discord-notification-dispatch.md)。查證發現 `notification_events` 這套架構(ADR-0009)本來就完整運作,`submitEntry()`/`registerForCompetition()` 早就在呼叫 `create_notification_event()`,缺的只是「真的送出去」的 sender。順便補上兩個從建置以來就沒填的缺口:`profiles.discord_user_id` 從沒被寫入過、`DISCORD_GUILD_ID` 從沒被真正填上。查證發現這個專案在 Vercel Hobby 方案(cron 一天只能跑一次,±59 分鐘誤差),改成「事件建立當下立即嘗試發送,失敗才留給每日 cron 兜底重試」,比照這個 session 已經在用的 B2 清理模式。使用者追加要求通知內文附上對應頁面連結,用 Vercel 系統環境變數 `VERCEL_PROJECT_PRODUCTION_URL` 可靠產生正式網址。
+
+真實 PoC 三層驗證:DB 端邏輯(4/4)、對使用者本人真實 Discord 帳號的端對端測試(3/3,真的收到私訊確認)、加連結後對正式環境的額外驗證(2/2,直接打正式環境的 cron endpoint)。`security-regression.mjs` 完整跑過(30/30,RPC 簽章變更沒有破壞既有邊界)。`tsc`/`eslint`/`build` 全程乾淨。
+
+**誠實記錄**:Email 管道的 sender 邏輯已經寫好且跟 Discord 共用同一套 dispatch 邏輯,但沒有真實寄過一封信驗證,這批的真人驗證只涵蓋 Discord。
+
+### 下一步
+
+使用者在這輪對話丟出一大批新想法,還沒排優先序,待下一步確認範圍後再動手:(1)比賽流程大改(雙敗淘汰、復活賽、組隊賽亂數分組、月週期累積制/循環賽細節、評分範本選項化、移除影片評分、投票限制未參賽的登入使用者)(2)人本創作過程/倫理數據來源欄位移到投稿頁(選填)(3)後台顯示已投稿/未投稿名單 + 用 mail/DC 發提醒(4)建立比賽後投稿頁列出詳細時程表/評分準則(5)投稿貼 Suno 連結自動爬資料、讀取 Suno 匯出檔案 meta(曲風/歌詞)自動帶入(6)首頁動態效果(參考 bilibili.com/stableaudio.com)(7)首頁補主辦人資訊、賽事歷史。SA-005 的 email 管道實際寄信驗證、「建立比賽自動接入 Discord 討論頻道」也還沒排進去。
