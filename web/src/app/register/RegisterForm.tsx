@@ -17,14 +17,55 @@ interface ExistingRegistration {
   review_note: string | null;
 }
 
+interface RoundSchedule {
+  name: string;
+  submissionOpensAt: string | null;
+  submissionClosesAt: string | null;
+  votingOpensAt: string | null;
+  votingClosesAt: string | null;
+}
+
 interface RegisterFormProps {
   competitionId: string;
   competitionName: string;
   existing: ExistingRegistration | null;
   registrationClosed: boolean;
+  rounds: RoundSchedule[];
 }
 
-export function RegisterForm({ competitionId, competitionName, existing, registrationClosed }: RegisterFormProps) {
+// 只精確到日期的舊資料(午夜 00:00)不特別顯示時間，避免看起來像「截止時間就是
+// 凌晨 0 點」；已經填了具體時間的欄位才連時間一起顯示。
+function formatRoundDate(iso: string | null): string {
+  if (!iso) return "未設定";
+  const d = new Date(iso);
+  const hasTime = d.getHours() !== 0 || d.getMinutes() !== 0;
+  return d.toLocaleString("zh-TW", {
+    month: "numeric",
+    day: "numeric",
+    ...(hasTime ? { hour: "2-digit", minute: "2-digit" } : {}),
+  });
+}
+
+function RoundSchedulePanel({ rounds }: { rounds: RoundSchedule[] }) {
+  if (rounds.length === 0) return null;
+  return (
+    <div className="glass mb-5 max-w-[560px] p-5">
+      <div className="mb-2.5 text-[13px] font-semibold">賽制時程</div>
+      <div className="flex flex-col gap-2">
+        {rounds.map((r) => (
+          <div key={r.name} className="text-[12px] leading-relaxed text-ink-dim">
+            <span className="font-semibold text-ink">{r.name}</span>
+            {" — "}
+            投稿 {formatRoundDate(r.submissionOpensAt)} ~ {formatRoundDate(r.submissionClosesAt)}，投票{" "}
+            {formatRoundDate(r.votingOpensAt)} ~ {formatRoundDate(r.votingClosesAt)}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export function RegisterForm({ competitionId, competitionName, existing, registrationClosed, rounds }: RegisterFormProps) {
   const [nickname, setNickname] = useState("");
   const [sunoHandle, setSunoHandle] = useState("");
   const [submitted, setSubmitted] = useState(false);
@@ -129,6 +170,8 @@ export function RegisterForm({ competitionId, competitionName, existing, registr
             投票開始前可自行刪除投稿並重新上傳；比賽完全結束後，只有最終排名前三名的音檔會保留在站內，其餘參賽者的音檔將會清除（Suno 連結不受影響）。
           </p>
         </div>
+
+        <RoundSchedulePanel rounds={rounds} />
 
         <div className="glass max-w-[560px] p-7">
           <label className="mb-1.5 block text-[12.5px] font-semibold text-ink-dim">

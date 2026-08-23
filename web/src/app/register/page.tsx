@@ -60,7 +60,7 @@ export default async function RegisterPage({
     );
   }
 
-  const [{ data: competition }, { data: existing }] = await Promise.all([
+  const [{ data: competition }, { data: existing }, { data: rounds }] = await Promise.all([
     supabase.from("competitions").select("id, name, registration_closes_at").eq("id", competitionId).maybeSingle(),
     supabase
       .from("registrations")
@@ -68,6 +68,11 @@ export default async function RegisterPage({
       .eq("competition_id", competitionId)
       .eq("user_id", userId)
       .maybeSingle(),
+    supabase
+      .from("rounds")
+      .select("round_index, name, submission_opens_at, submission_closes_at, voting_opens_at, voting_closes_at")
+      .eq("competition_id", competitionId)
+      .order("round_index"),
   ]);
 
   if (!competition) {
@@ -84,12 +89,21 @@ export default async function RegisterPage({
   const registrationClosed =
     !!competition.registration_closes_at && new Date(competition.registration_closes_at) < new Date();
 
+  const roundSchedule = (rounds ?? []).map((r) => ({
+    name: r.name,
+    submissionOpensAt: r.submission_opens_at,
+    submissionClosesAt: r.submission_closes_at,
+    votingOpensAt: r.voting_opens_at,
+    votingClosesAt: r.voting_closes_at,
+  }));
+
   return (
     <RegisterForm
       competitionId={competition.id}
       competitionName={competition.name}
       existing={existing}
       registrationClosed={registrationClosed}
+      rounds={roundSchedule}
     />
   );
 }
