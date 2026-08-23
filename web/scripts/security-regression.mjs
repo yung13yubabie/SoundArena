@@ -499,6 +499,40 @@ async function main() {
       ccFixItems.reduce((sum, i) => sum + Number(i.weight_percent), 0) === 100,
     `error=${ccFixErr?.message ?? "none"} items=${JSON.stringify(ccFixItems)}`,
   );
+
+  // ============ SA-012: create_organizer_message_event() 讓主辦人直接對參賽者發訊息,
+  // 陌生人不能對別人比賽的參賽者發、已取消訂閱通知的參賽者不能被發。============
+  const compOM = await makeCompetition(organizerA.id, "organizerMessage");
+  const omParticipant = await makeUser("omparticipant");
+  await admin.auth.admin.updateUserById(omParticipant.id, { app_metadata: { provider: "discord" } });
+  await admin.from("profiles").update({ discord_user_id: "111111111111111111" }).eq("id", omParticipant.id);
+  const { data: omReg } = await admin
+    .from("registrations")
+    .insert({ competition_id: compOM, user_id: omParticipant.id, suno_handle: "om-participant", display_name: "OM Participant", review_status: "approved" })
+    .select("id")
+    .single();
+  const { data: omOptedOutReg } = await admin
+    .from("registrations")
+    .insert({ competition_id: compOM, user_id: judgeOnly.id, suno_handle: "om-optedout", display_name: "OM OptedOut", review_status: "approved", notifications_enabled: false })
+    .select("id")
+    .single();
+
+  const { error: omStrangerErr } = await organizerBClient.rpc("create_organizer_message_event", { p_registration_id: omReg.id, p_message: "測試訊息" });
+  record(
+    "SA-012: 陌生人不能對別人比賽的參賽者發訊息",
+    !!omStrangerErr && omStrangerErr.message.includes("insufficient permission"),
+    omStrangerErr?.message,
+  );
+
+  const { error: omOptedOutErr } = await organizerAClient.rpc("create_organizer_message_event", { p_registration_id: omOptedOutReg.id, p_message: "測試訊息" });
+  record(
+    "SA-012: 已取消訂閱通知的參賽者無法被發訊息",
+    !!omOptedOutErr && omOptedOutErr.message.includes("disabled notifications"),
+    omOptedOutErr?.message,
+  );
+
+  const { data: omEventId, error: omSendErr } = await organizerAClient.rpc("create_organizer_message_event", { p_registration_id: omReg.id, p_message: "測試訊息" });
+  record("SA-012(回歸): 主辦人可以對自己比賽的參賽者發訊息", !omSendErr && !!omEventId, omSendErr?.message);
 }
 
 async function cleanup() {

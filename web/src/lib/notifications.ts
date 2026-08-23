@@ -14,7 +14,7 @@ function siteOrigin(): string {
 function eventUrl(eventType: string, competitionId: string): string {
   const origin = siteOrigin();
   if (eventType === "registration_confirmed") return `${origin}/submit?competition=${competitionId}`;
-  if (eventType === "submission_confirmed") return `${origin}/status`;
+  if (eventType === "submission_confirmed" || eventType === "organizer_message") return `${origin}/status`;
   return origin;
 }
 

@@ -6,6 +6,7 @@ import { AdminShell } from "@/components/AdminShell";
 import { EmptyState } from "@/components/EmptyState";
 import { ReviewQueue, type ReviewRow } from "./ReviewQueue";
 import { RegistrationReviewQueue, type PendingRegistration } from "./RegistrationReviewQueue";
+import { ParticipantRoster, type ParticipantRow } from "./ParticipantRoster";
 
 interface RegistrationRow {
   id: string;
@@ -85,6 +86,34 @@ export default async function AdminReviewPage({
   const { data: rounds } = await supabase.from("rounds").select("id").eq("competition_id", competition.id);
   const roundIds = (rounds ?? []).map((r) => r.id);
 
+  // SA-012 追加需求:主辦人要能看到「已投稿/未投稿」名單並直接傳訊息——approved
+  // 的報名者才算真正的參賽者(pending_review 的已經在上面那個審核清單處理)。
+  const { data: approvedRegistrations } = await supabase
+    .from("registrations")
+    .select("id, display_name, suno_handle")
+    .eq("competition_id", competition.id)
+    .eq("review_status", "approved")
+    .order("display_name");
+
+  const { data: allSubmissions } = roundIds.length
+    ? await supabase.from("submissions").select("registration_id, round_id").in("round_id", roundIds)
+    : { data: [] };
+
+  const submittedRoundsByRegistration = new Map<string, Set<string>>();
+  for (const s of allSubmissions ?? []) {
+    const set = submittedRoundsByRegistration.get(s.registration_id) ?? new Set<string>();
+    set.add(s.round_id);
+    submittedRoundsByRegistration.set(s.registration_id, set);
+  }
+
+  const participantRows: ParticipantRow[] = ((approvedRegistrations ?? []) as unknown as RegistrationRow[]).map((r) => ({
+    registrationId: r.id,
+    displayName: r.display_name,
+    sunoHandle: r.suno_handle,
+    submittedRounds: submittedRoundsByRegistration.get(r.id)?.size ?? 0,
+    totalRounds: roundIds.length,
+  }));
+
   const { data: submissions } = roundIds.length
     ? await supabase
         .from("submissions")
@@ -130,12 +159,24 @@ export default async function AdminReviewPage({
         )}
       </div>
 
-      <div>
+      <div className="mb-8">
         <h2 className="mb-3 text-[15px] font-semibold">投稿審核</h2>
         {rows.length === 0 ? (
           <EmptyState icon="inbox" title="目前沒有待審核的投稿" sub="投稿者送出投稿並通過身份比對後，會出現在這個清單" />
         ) : (
           <ReviewQueue rows={rows} />
+        )}
+      </div>
+
+      <div>
+        <h2 className="mb-3 text-[15px] font-semibold">參賽者名單</h2>
+        <p className="mb-3 max-w-[680px] text-[12px] leading-relaxed text-ink-dim">
+          已核准報名的參賽者，可以看到每個人的投稿進度，也能直接傳訊息給對方（透過對方登入時用的 Discord／Email）。
+        </p>
+        {participantRows.length === 0 ? (
+          <EmptyState icon="users" title="目前還沒有核准通過的參賽者" sub="報名審核通過後，會出現在這個清單" />
+        ) : (
+          <ParticipantRoster rows={participantRows} />
         )}
       </div>
     </AdminShell>
