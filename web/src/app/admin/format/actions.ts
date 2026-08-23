@@ -18,10 +18,11 @@ function slugify(name: string): string {
   return `${base || "competition"}-${suffix}`;
 }
 
+// ADR-0042:video_traffic 範本已經移除(SoundArena 沒有任何影片功能,這個選項
+// 從建置以來就沒有真正的計分邏輯)——拿掉之後把權重併進 external_vote,維持總和 100%。
 const DEFAULT_SCORE_ITEMS = [
   { templateKey: "vote", label: "投票", weightPercent: 40, sortOrder: 0 },
-  { templateKey: "video_traffic", label: "影片流量", weightPercent: 25, sortOrder: 1 },
-  { templateKey: "external_vote", label: "外部投票", weightPercent: 35, sortOrder: 2 },
+  { templateKey: "external_vote", label: "外部投票", weightPercent: 60, sortOrder: 1 },
 ];
 
 async function insertDefaultScoreItems(

@@ -14,4 +14,10 @@
 
 ## 驗證
 
-真實 PoC(3/3,對正式 Supabase 環境):`vote` 範本正確算進參賽者互投的那一票、`external_vote` 正確排除那一票只算外部票。過程中抓到一個 PoC 腳本自己的 bug——兩個 weighted 計分項目分開各自 `insert()`,各自的交易裡權重總和不到 100%,撞上既有的 deferred constraint 卻沒檢查 insert 的 error,靜默失敗,改成同一次 `insert([...])` 陣列送出後才抓到真正的結果。`web/scripts/security-regression.mjs` 新增對應 2 項長期守護,32/32 通過。`tsc`/`eslint`/`build` 全程乾淨,純 SQL 改動,沒有動 TypeScript。
+真實 PoC(3/3,對正式 Supabase 環境):`vote` 範本正確算進參賽者互投的那一票、`external_vote` 正確排除那一票只算外部票。過程中抓到一個 PoC 腳本自己的 bug——兩個 weighted 計分項目分開各自 `insert()`,各自的交易裡權重總和不到 100%,撞上既有的 deferred constraint 卻沒檢查 insert 的 error,靜默失敗,改成同一次 `insert([...])` 陣列送出後才抓到真正的結果。`web/scripts/security-regression.mjs` 新增對應 2 項長期守護,32/32 通過。
+
+## 追加修復:`create_competition_full()` 跟 `DEFAULT_SCORE_ITEMS` 也寫死引用 video_traffic
+
+第一版部署後手動檢查前端才發現:`web/src/app/admin/format/actions.ts` 的 `DEFAULT_SCORE_ITEMS`(每輪獨立評分規則的預設項目)跟 `create_competition_full()` RPC(**新比賽建立的真正路徑**,ADR-0024/SA-008)都各自寫死引用 `video_traffic` 這個 key。範本刪掉後這兩處不會直接報錯(`template_id` 是 nullable FK),但每個新建立的比賽都會多一個 `template_id=null` 的孤兒「影片流量」計分項目——又變回死選項,只是換一種方式壞掉。
+
+兩處都改成拿掉 `video_traffic`、把 25% 權重併進 `external_vote`(投票 40% + 外部投票 60% = 100%)。真實 PoC(5/5):`create_competition_full()` 正常建立、新比賽只有 2 個計分項目、沒有任何孤兒項目、權重總和仍是 100%。`security-regression.mjs` 新增 1 項長期守護,33/33 通過。`tsc`/`eslint`/`build` 全程乾淨。

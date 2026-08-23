@@ -479,6 +479,26 @@ async function main() {
   const evExtVoteScore = (evScores ?? []).find((s) => s.submission_id === evSubmission.id && s.score_item_id === evExtVoteItem.id);
   record("external_vote: vote 範本算全部票(含參賽者互投)", Number(evVoteScore?.raw_value) === 2, `raw_value=${evVoteScore?.raw_value}`);
   record("external_vote: 只算非參賽者的票", Number(evExtVoteScore?.raw_value) === 1, `raw_value=${evExtVoteScore?.raw_value}`);
+
+  // ============ 移除 video_traffic 範本後,create_competition_full() 也要跟著改
+  // (原本寫死引用這個 key)——確認新建立的比賽不會產生孤兒計分項目、權重總和仍是
+  // 100%。這是抓到的真實 bug(第一次修 external_vote 時漏改這支 RPC)。============
+  const { data: ccFixCompId, error: ccFixErr } = await organizerAClient.rpc("create_competition_full", {
+    p_name: `SecReg CC Fix ${Date.now()}`,
+    p_slug: `secreg-ccfix-${Date.now()}`,
+    p_default_anonymous: true,
+  });
+  if (ccFixCompId) cleanupCompetitionIds.push(ccFixCompId);
+  const { data: ccFixRule } = await admin.from("scoring_rules").select("id").eq("competition_id", ccFixCompId).is("round_id", null).single();
+  const { data: ccFixItems } = await admin.from("score_items").select("weight_percent, template_id").eq("scoring_rule_id", ccFixRule.id);
+  record(
+    "create_competition_full(): 移除 video_traffic 後新比賽不產生孤兒計分項目,權重總和仍是 100%",
+    !ccFixErr &&
+      (ccFixItems ?? []).length === 2 &&
+      ccFixItems.every((i) => i.template_id !== null) &&
+      ccFixItems.reduce((sum, i) => sum + Number(i.weight_percent), 0) === 100,
+    `error=${ccFixErr?.message ?? "none"} items=${JSON.stringify(ccFixItems)}`,
+  );
 }
 
 async function cleanup() {
