@@ -4,34 +4,8 @@ import { getManageableCompetitions } from "@/lib/manageableCompetitions";
 import { redirectToLogin } from "@/lib/loginRedirect";
 import { AdminShell } from "@/components/AdminShell";
 import { EmptyState } from "@/components/EmptyState";
+import { getJudgeScoringData } from "@/lib/judgeScoring";
 import { JudgeBoard, type JudgeSubmission, type JudgeScoreItem } from "./JudgeBoard";
-
-interface ScoreItemRow {
-  id: string;
-  label: string;
-  kind: "weighted" | "bonus";
-  weight_percent: number | null;
-  score_item_templates: { key: string } | { key: string }[] | null;
-}
-
-interface ScoringRuleRow {
-  id: string;
-  round_id: string | null;
-  score_items: ScoreItemRow[];
-}
-
-interface JudgeSubmissionRow {
-  submission_id: string;
-  title: string | null;
-  registration_id: string;
-  registration_status: string;
-  process_doc: string | null;
-  ethical_sourcing_declared: boolean;
-}
-
-function one<T>(value: T | T[] | null): T | null {
-  return Array.isArray(value) ? (value[0] ?? null) : value;
-}
 
 export default async function JudgePage({
   searchParams,
@@ -87,7 +61,7 @@ export default async function JudgePage({
 
   const { data: rounds } = await supabase
     .from("rounds")
-    .select("id, round_index, name, voting_closes_at, results_finalized_at")
+    .select("id, round_index, name, voting_closes_at, results_finalized_at, elimination_percent")
     .eq("competition_id", competition.id)
     .order("round_index");
 
@@ -137,30 +111,10 @@ export default async function JudgePage({
     );
   }
 
-  // judge_submissions_for_round() 是匿名安全的 RPC(ADR-0020 SA-001):只回傳
-  // 評分需要的欄位,不像直接查 registrations 那樣會把 user_id/display_name/
-  // suno_handle 整列露出來給 judge 權限的協作者。
-  const [{ data: scoringRuleRows }, { data: submissionRows }, { data: votes }] = await Promise.all([
-    supabase
-      .from("scoring_rules")
-      .select("id, round_id, score_items(id, label, kind, weight_percent, score_item_templates(key))")
-      .eq("competition_id", competition.id),
-    supabase.rpc("judge_submissions_for_round", { p_round_id: round.id }),
-    supabase.from("votes").select("submission_id, ai_usage_rating").eq("round_id", round.id),
-  ]);
+  const { scoreItems: scoringDataItems, submissions: rawSubmissions } = await getJudgeScoringData(supabase, competition.id, round.id);
+  const scoreItems: JudgeScoreItem[] = scoringDataItems;
 
-  const scoringRules = (scoringRuleRows ?? []) as unknown as ScoringRuleRow[];
-  const scoringRule = scoringRules.find((sr) => sr.round_id === round.id) ?? scoringRules.find((sr) => sr.round_id === null);
-
-  const scoreItems: JudgeScoreItem[] = (scoringRule?.score_items ?? []).map((si) => ({
-    id: si.id,
-    label: si.label,
-    kind: si.kind,
-    weightPercent: si.weight_percent,
-    templateKey: one(si.score_item_templates)?.key ?? null,
-  }));
-
-  if (!scoringRule || scoreItems.length === 0) {
+  if (scoreItems.length === 0) {
     return (
       <AdminShell
       active="judge"
@@ -174,52 +128,21 @@ export default async function JudgePage({
     );
   }
 
-  const voteCounts = new Map<string, number>();
-  const ratingSums = new Map<string, { sum: number; count: number }>();
-  for (const v of votes ?? []) {
-    voteCounts.set(v.submission_id, (voteCounts.get(v.submission_id) ?? 0) + 1);
-    if (v.ai_usage_rating !== null) {
-      const acc = ratingSums.get(v.submission_id) ?? { sum: 0, count: 0 };
-      acc.sum += v.ai_usage_rating;
-      acc.count += 1;
-      ratingSums.set(v.submission_id, acc);
-    }
-  }
-  const avgRating = (submissionId: string) => {
-    const acc = ratingSums.get(submissionId);
-    return acc && acc.count > 0 ? acc.sum / acc.count : 0;
-  };
+  const submissions: JudgeSubmission[] = rawSubmissions.map((s, idx) => ({
+    id: s.submissionId,
+    label: `匿名作品 #${String(idx + 1).padStart(2, "0")}`,
+    registrationId: s.registrationId,
+    eliminated: s.registrationStatus === "eliminated",
+    values: s.values,
+    processDoc: s.processDoc,
+    ethicalSourcingDeclared: s.ethicalSourcingDeclared,
+  }));
 
-  const submissionsRaw = (submissionRows ?? []) as unknown as JudgeSubmissionRow[];
-  const submissionIds = submissionsRaw.map((s) => s.submission_id);
-
-  const { data: scoreRows } = submissionIds.length
-    ? await supabase.from("submission_scores").select("submission_id, score_item_id, raw_value").in("submission_id", submissionIds)
-    : { data: [] };
-
-  const scoreByKey = new Map((scoreRows ?? []).map((s) => [`${s.submission_id}:${s.score_item_id}`, s.raw_value]));
-
-  const submissions: JudgeSubmission[] = submissionsRaw.map((s, idx) => {
-    const values: Record<string, number> = {};
-    for (const item of scoreItems) {
-      if (item.templateKey === "vote") {
-        values[item.id] = voteCounts.get(s.submission_id) ?? 0;
-      } else if (item.templateKey === "audience_ai_usage_rating") {
-        values[item.id] = avgRating(s.submission_id);
-      } else {
-        values[item.id] = scoreByKey.get(`${s.submission_id}:${item.id}`) ?? 0;
-      }
-    }
-    return {
-      id: s.submission_id,
-      label: `匿名作品 #${String(idx + 1).padStart(2, "0")}`,
-      registrationId: s.registration_id,
-      eliminated: s.registration_status === "eliminated",
-      values,
-      processDoc: s.process_doc,
-      ethicalSourcingDeclared: s.ethical_sourcing_declared,
-    };
-  });
+  const { count: activeRegistrationCount } = await supabase
+    .from("registrations")
+    .select("id", { count: "exact", head: true })
+    .eq("competition_id", competition.id)
+    .eq("status", "active");
 
   return (
     <AdminShell
@@ -238,6 +161,8 @@ export default async function JudgePage({
           submissions={submissions}
           votingClosesAt={round.voting_closes_at}
           resultsFinalizedAt={round.results_finalized_at}
+          eliminationPercent={round.elimination_percent}
+          activeRegistrationCount={activeRegistrationCount ?? 0}
         />
       )}
     </AdminShell>

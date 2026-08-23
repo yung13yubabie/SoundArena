@@ -107,6 +107,14 @@ export async function setAllRoundsAnonymity(competitionId: string, isAnonymous: 
   return { success: true };
 }
 
+export async function setRoundEliminationPercent(roundId: string, percent: number | null): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("set_round_elimination_percent", { p_round_id: roundId, p_percent: percent });
+  if (error) return { error: toFriendlyError(error) };
+  revalidatePath("/admin/format");
+  return { success: true };
+}
+
 export async function toggleFormatBlock(
   roundId: string,
   category: "elimination" | "grouping" | "special",

@@ -29,12 +29,16 @@ export function JudgeBoard({
   submissions,
   votingClosesAt,
   resultsFinalizedAt,
+  eliminationPercent,
+  activeRegistrationCount,
 }: {
   roundId: string;
   scoreItems: JudgeScoreItem[];
   submissions: JudgeSubmission[];
   votingClosesAt: string | null;
   resultsFinalizedAt: string | null;
+  eliminationPercent: number | null;
+  activeRegistrationCount: number;
 }) {
   const [subs, setSubs] = useState(submissions);
   const [showFormula, setShowFormula] = useState(false);
@@ -67,6 +71,9 @@ export function JudgeBoard({
     });
   };
 
+  const estimatedEliminateCount =
+    eliminationPercent && eliminationPercent > 0 ? Math.floor((eliminationPercent / 100) * activeRegistrationCount) : 0;
+
   const weightSum = scoreItems.filter((i) => i.kind === "weighted").reduce((s, i) => s + (i.weightPercent ?? 0), 0);
   const totals = useMemo(() => computeRanking(scoreItems, subs), [scoreItems, subs]);
   const totalById = new Map(totals.map((t) => [t.id, t]));
@@ -97,11 +104,18 @@ export function JudgeBoard({
       <div className="glass mb-3.5 flex flex-wrap items-center justify-between gap-2.5 px-4 py-3.5">
         <div className="text-[12.5px] leading-relaxed text-ink-dim">
           {finalized ? (
-            <>本輪結果已確認,若這一輪之後接著隊伍賽,系統會依此開始分組。</>
+            <>本輪結果已確認,若這一輪之後接著隊伍賽,系統會依此開始分組。之後若還要調整淘汰名單,用下方每張作品的「標記本輪淘汰」按鈕手動處理。</>
           ) : votingClosed ? (
-            <>投票已截止,確認淘汰名單無誤後按下「確認本輪結果」——如果下一輪是隊伍賽,分組要等這個動作完成才會開始。</>
+            eliminationPercent && eliminationPercent > 0 ? (
+              <>
+                投票已截止,這輪設定自動淘汰 {eliminationPercent}%——依目前 {activeRegistrationCount} 位在賽人數,按下「確認本輪結果」會自動淘汰分數最低的約{" "}
+                {estimatedEliminateCount} 人(依當下即時分數計算,含未投稿者)。如果下一輪是隊伍賽,分組要等這個動作完成才會開始。
+              </>
+            ) : (
+              <>投票已截止,這輪沒有設定自動淘汰百分比,淘汰名單需要自己用下方「標記本輪淘汰」手動處理。按下「確認本輪結果」——如果下一輪是隊伍賽,分組要等這個動作完成才會開始。</>
+            )
           ) : (
-            <>投票尚未截止,先完成評分與淘汰標記,投票截止後才能確認本輪結果。</>
+            <>投票尚未截止,先完成評分,投票截止後才能確認本輪結果。</>
           )}
           {finalizeError && <div className="mt-1 text-bad">{finalizeError}</div>}
         </div>

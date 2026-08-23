@@ -535,15 +535,15 @@ async function main() {
   record("SA-012(回歸): 主辦人可以對自己比賽的參賽者發訊息", !omSendErr && !!omEventId, omSendErr?.message);
 
   // ============ 團隊分組:form_team_groups_for_round() 只掛 'team' 積木(不搭配
-  // 'lottery',現實 UI 對 grouping 這個 category 是單選)也要能觸發;冪等;
-  // finalize_round_results() 的權限/時間閘;swap_team_member() 的權限/同輪次檢查。
-  // ============
+  // 'lottery',現實 UI 對 grouping 這個 category 是單選)也要能觸發;冪等;group_count
+  // 均分打散演算法;finalize_round_results() 的權限/時間閘/冪等保護;swap_team_member()
+  // 的權限/同輪次檢查。============
   const compTL = await makeCompetition(organizerA.id, "teamLottery");
   await admin.from("competitions").update({ registration_closes_at: new Date(Date.now() - 60_000).toISOString() }).eq("id", compTL);
   const { data: tlRound1 } = await admin.from("rounds").insert({ competition_id: compTL, round_index: 1, name: "初選" }).select("id").single();
   const { data: tlRound2 } = await admin.from("rounds").insert({ competition_id: compTL, round_index: 2, name: "決賽" }).select("id").single();
   const { data: tlTeamBlock } = await admin.from("format_blocks").select("id").eq("key", "team").single();
-  await admin.from("round_format_blocks").insert({ round_id: tlRound1.id, format_block_id: tlTeamBlock.id, config: { team_size: 2 } });
+  await admin.from("round_format_blocks").insert({ round_id: tlRound1.id, format_block_id: tlTeamBlock.id, config: { group_count: 2 } });
   const tlRegIds = [];
   for (let i = 0; i < 3; i++) {
     const u = await makeUser(`tlp${i}`);
@@ -556,37 +556,92 @@ async function main() {
   }
 
   const { error: tlFormErr } = await organizerAClient.rpc("form_team_groups_for_round", { p_round_id: tlRound1.id });
-  const { data: tlTeamsAfterForm } = await admin.from("teams").select("id").eq("round_id", tlRound1.id);
+  const { data: tlTeamsAfterForm } = await admin.from("teams").select("id, team_members(registration_id)").eq("round_id", tlRound1.id);
+  const tlSizes = (tlTeamsAfterForm ?? []).map((t) => t.team_members.length).sort((a, b) => b - a);
   record(
-    "團隊分組: 只掛 'team' 積木(無 'lottery')也能觸發,3 人/每隊 2 人 → 分成 2 隊",
-    !tlFormErr && (tlTeamsAfterForm ?? []).length === 2,
-    `error=${tlFormErr?.message ?? "none"} teams=${(tlTeamsAfterForm ?? []).length}`,
+    "團隊分組: 只掛 'team' 積木(無 'lottery')也能觸發,3 人分 2 組 → 均分打散為 2、1",
+    !tlFormErr && (tlTeamsAfterForm ?? []).length === 2 && JSON.stringify(tlSizes) === JSON.stringify([2, 1]),
+    `error=${tlFormErr?.message ?? "none"} sizes=${JSON.stringify(tlSizes)}`,
   );
 
   await organizerAClient.rpc("form_team_groups_for_round", { p_round_id: tlRound1.id });
   const { data: tlTeamsAfterRepeat } = await admin.from("teams").select("id").eq("round_id", tlRound1.id);
   record("團隊分組: 重複呼叫是冪等的,不會分兩次", (tlTeamsAfterRepeat ?? []).length === 2, `teams=${(tlTeamsAfterRepeat ?? []).length}`);
 
-  const { error: finalizeTooEarlyErr } = await organizerAClient.rpc("finalize_round_results", { p_round_id: roundA.id });
+  const { error: finalizeTooEarlyErr } = await organizerAClient.rpc("finalize_round_results", { p_round_id: roundA.id, p_eliminate_registration_ids: [] });
   record(
     "確認本輪結果: 投票還沒截止不能確認",
     !!finalizeTooEarlyErr && finalizeTooEarlyErr.message.includes("before its voting has closed"),
     finalizeTooEarlyErr?.message,
   );
 
-  const { error: finalizeStrangerErr } = await organizerBClient.rpc("finalize_round_results", { p_round_id: evRound.id });
+  const { error: finalizeStrangerErr } = await organizerBClient.rpc("finalize_round_results", { p_round_id: evRound.id, p_eliminate_registration_ids: [] });
   record(
     "確認本輪結果: 陌生人不能確認別人比賽的輪次結果",
     !!finalizeStrangerErr && finalizeStrangerErr.message.includes("insufficient permission"),
     finalizeStrangerErr?.message,
   );
 
-  const { error: finalizeOkErr } = await organizerAClient.rpc("finalize_round_results", { p_round_id: evRound.id });
+  const { error: finalizeOkErr } = await organizerAClient.rpc("finalize_round_results", { p_round_id: evRound.id, p_eliminate_registration_ids: [] });
   const { data: evRoundAfterFinalize } = await admin.from("rounds").select("results_finalized_at").eq("id", evRound.id).single();
   record(
     "確認本輪結果: 投票已截止,主辦人可以確認自己比賽的輪次結果",
     !finalizeOkErr && !!evRoundAfterFinalize?.results_finalized_at,
     finalizeOkErr?.message,
+  );
+
+  const { error: finalizeRepeatErr } = await organizerAClient.rpc("finalize_round_results", { p_round_id: evRound.id, p_eliminate_registration_ids: [] });
+  record(
+    "確認本輪結果: 冪等保護,同一輪不能重複確認",
+    !!finalizeRepeatErr && finalizeRepeatErr.message.includes("already been finalized"),
+    finalizeRepeatErr?.message,
+  );
+
+  // ============ 淘汰配額自動化:每輪填 elimination_percent,確認結果時系統依即時分數
+  // 自動淘汰墊底的百分比人數(排名計算在 Next.js 端做,這裡只驗證 RPC 正確套用算好
+  // 的名單、不屬於這場比賽的 id 安靜忽略)。============
+  const compElimQuota = await makeCompetition(organizerA.id, "elimQuota");
+  const { data: eqRound } = await admin
+    .from("rounds")
+    .insert({ competition_id: compElimQuota, round_index: 1, name: "初選", voting_opens_at: new Date(Date.now() - 60_000).toISOString(), voting_closes_at: new Date(Date.now() - 1_000).toISOString(), elimination_percent: 25 })
+    .select("id")
+    .single();
+  const eqRegIds = [];
+  for (let i = 0; i < 4; i++) {
+    const u = await makeUser(`eqp${i}`);
+    const { data: r } = await admin
+      .from("registrations")
+      .insert({ competition_id: compElimQuota, user_id: u.id, suno_handle: `eq-p${i}`, display_name: `EQ P${i}`, review_status: "approved" })
+      .select("id")
+      .single();
+    eqRegIds.push(r.id);
+  }
+  // 4 人 × 25% = floor(1) = 1 人該被淘汰,指定 eqRegIds[0] 為算好的淘汰名單。
+  const { error: eqFinalizeErr } = await organizerAClient.rpc("finalize_round_results", { p_round_id: eqRound.id, p_eliminate_registration_ids: [eqRegIds[0]] });
+  const { data: eqRegsAfter } = await admin.from("registrations").select("id, status, eliminated_in_round_id").in("id", eqRegIds);
+  const eqEliminated = (eqRegsAfter ?? []).filter((r) => r.status === "eliminated").map((r) => r.id);
+  record(
+    "淘汰配額: finalize_round_results 正確套用算好的淘汰名單,只淘汰指定的那一人",
+    !eqFinalizeErr && eqEliminated.length === 1 && eqEliminated[0] === eqRegIds[0] && eqRegsAfter.find((r) => r.id === eqRegIds[0]).eliminated_in_round_id === eqRound.id,
+    `error=${eqFinalizeErr?.message ?? "none"} eliminated=${JSON.stringify(eqEliminated)}`,
+  );
+  record(
+    "淘汰配額: 沒被指定的其餘報名者維持 active",
+    (eqRegsAfter ?? []).filter((r) => r.id !== eqRegIds[0]).every((r) => r.status === "active"),
+  );
+
+  const { data: eqForeignReg } = await admin.from("registrations").select("id").eq("competition_id", compTL).limit(1).single();
+  const { data: eqRound2 } = await admin
+    .from("rounds")
+    .insert({ competition_id: compElimQuota, round_index: 2, name: "決賽", voting_opens_at: new Date(Date.now() - 120_000).toISOString(), voting_closes_at: new Date(Date.now() - 1_000).toISOString() })
+    .select("id")
+    .single();
+  const { error: eqForeignErr } = await organizerAClient.rpc("finalize_round_results", { p_round_id: eqRound2.id, p_eliminate_registration_ids: [eqForeignReg.id] });
+  const { data: eqForeignRegAfter } = await admin.from("registrations").select("status").eq("id", eqForeignReg.id).single();
+  record(
+    "淘汰配額: 淘汰名單混進別場比賽的 registration_id,安靜忽略不誤傷",
+    !eqForeignErr && eqForeignRegAfter?.status === "active",
+    `error=${eqForeignErr?.message ?? "none"} status=${eqForeignRegAfter?.status}`,
   );
 
   const tlOtherTeam = (

@@ -22,6 +22,7 @@ import {
   deleteCompetition,
   cleanupNonFinalistAudio,
   swapTeamMember,
+  setRoundEliminationPercent,
 } from "./actions";
 
 export interface ScoreItemData {
@@ -63,8 +64,9 @@ export interface RoundData {
   special: string[];
   isAnonymous: boolean;
   themeConfig: ThemeConfig | null;
-  teamSize: number | null;
+  groupCount: number | null;
   teams: TeamData[];
+  eliminationPercent: number | null;
   scoringRule: { id: string; items: ScoreItemData[] } | null;
   submissionOpensAt: string | null;
   submissionClosesAt: string | null;
@@ -319,14 +321,14 @@ function ThemedRoundConfigPanel({ roundId, initial }: { roundId: string; initial
   );
 }
 
-function TeamConfigPanel({ roundId, initialTeamSize }: { roundId: string; initialTeamSize: number | null }) {
-  const [teamSize, setTeamSize] = useState(initialTeamSize ?? 3);
+function GroupConfigPanel({ roundId, initialGroupCount }: { roundId: string; initialGroupCount: number | null }) {
+  const [groupCount, setGroupCount] = useState(initialGroupCount ?? 2);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
   async function handleSave() {
     setSaving(true);
-    await saveFormatBlockConfig(roundId, "team", { team_size: teamSize });
+    await saveFormatBlockConfig(roundId, "team", { group_count: groupCount });
     setSaving(false);
     setSaved(true);
   }
@@ -334,24 +336,82 @@ function TeamConfigPanel({ roundId, initialTeamSize }: { roundId: string; initia
   return (
     <div className="glass mt-2 mb-3.5 px-4 py-3.5">
       <div className="mb-2.5 text-[11.5px] leading-relaxed text-ink-faint">
-        每隊人數——報名截止（或前一輪確認結果）後，系統會自動把還在比賽中的參賽者隨機分成這個人數的隊伍，並發訊息通知每個人自己的隊伍。人數除不盡時，最後一隊人數較少。
+        分幾組——報名截止（或前一輪確認結果）後，系統會自動把還在比賽中的參賽者隨機平均分進這幾組（人數除不盡時，前面幾組會多一個人），並發訊息通知每個人自己的隊友。最多 5 組。
       </div>
       <div className="flex items-center gap-2">
         <input
           type="number"
-          min="2"
-          value={teamSize}
+          min="1"
+          max="5"
+          value={groupCount}
           onChange={(e) => {
-            setTeamSize(Number(e.target.value));
+            setGroupCount(Math.min(5, Number(e.target.value)));
             setSaved(false);
           }}
           className="w-24 rounded-[10px] border border-panel-border bg-black/25 px-3.5 py-2 text-[13px] text-ink outline-none focus:border-accent/50"
         />
-        <span className="text-[12.5px] text-ink-dim">人 / 隊</span>
+        <span className="text-[12.5px] text-ink-dim">組（上限 5）</span>
         <button
           onClick={handleSave}
-          disabled={saving || teamSize < 2}
+          disabled={saving || groupCount < 1 || groupCount > 5}
           className="rounded-[10px] bg-gradient-to-r from-[#ff9457] via-accent to-accent-2 px-3.5 py-2 text-[12.5px] font-semibold text-[#1a0e08] disabled:opacity-45"
+        >
+          {saving ? "儲存中…" : saved ? "已儲存" : "儲存"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function EliminationPercentPanel({ roundId, initialPercent }: { roundId: string; initialPercent: number | null }) {
+  const [percent, setPercent] = useState(initialPercent ?? 0);
+  const [enabled, setEnabled] = useState(initialPercent !== null && initialPercent > 0);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  async function handleSave() {
+    setSaving(true);
+    await setRoundEliminationPercent(roundId, enabled ? percent : null);
+    setSaving(false);
+    setSaved(true);
+  }
+
+  return (
+    <div className="mt-3.5 border-t border-panel-border pt-3">
+      <div className="mb-1.5 text-[12px] font-semibold text-ink-dim">本輪自動淘汰</div>
+      <div className="mb-2.5 text-[11.5px] leading-relaxed text-ink-faint">
+        設定百分比後，按「確認本輪結果」的當下，系統會依這輪即時分數，自動淘汰墊底的那個百分比人數（依當時還在比賽中的人數計算，四捨五入無條件捨去）。不啟用的話，淘汰名單需要自己在下方逐筆手動標記。
+      </div>
+      <div className="flex flex-wrap items-center gap-2.5">
+        <Switch
+          on={enabled}
+          label="是否啟用本輪自動淘汰"
+          onClick={() => {
+            setEnabled((v) => !v);
+            setSaved(false);
+          }}
+        />
+        <span className="text-[12.5px] text-ink-dim">{enabled ? "已啟用" : "未啟用（手動淘汰）"}</span>
+        {enabled && (
+          <>
+            <input
+              type="number"
+              min="0"
+              max="100"
+              value={percent}
+              onChange={(e) => {
+                setPercent(Math.max(0, Math.min(100, Number(e.target.value))));
+                setSaved(false);
+              }}
+              className="w-24 rounded-[10px] border border-panel-border bg-black/25 px-3.5 py-2 text-[13px] text-ink outline-none focus:border-accent/50"
+            />
+            <span className="text-[12.5px] text-ink-dim">%</span>
+          </>
+        )}
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="rounded-[10px] border border-panel-border bg-white/[0.04] px-3.5 py-1.75 text-[12px] font-semibold text-ink disabled:opacity-45"
         >
           {saving ? "儲存中…" : saved ? "已儲存" : "儲存"}
         </button>
@@ -533,10 +593,11 @@ function RoundFormatCard({
       {round.special.includes("themed_round") && <ThemedRoundConfigPanel roundId={round.id} initial={round.themeConfig} />}
       {round.grouping === "team" && (
         <>
-          <TeamConfigPanel roundId={round.id} initialTeamSize={round.teamSize} />
+          <GroupConfigPanel roundId={round.id} initialGroupCount={round.groupCount} />
           <TeamRosterPanel teams={round.teams} />
         </>
       )}
+      <EliminationPercentPanel roundId={round.id} initialPercent={round.eliminationPercent} />
 
       <div className="mt-3.5 flex items-center gap-2.5 border-t border-panel-border pt-2.5">
         <Switch on={!!round.scoringRule} label="此輪是否使用獨立評分規則" onClick={toggleOverride} />

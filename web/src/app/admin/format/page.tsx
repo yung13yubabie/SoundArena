@@ -116,7 +116,9 @@ export default async function AdminFormatPage({
 
   const { data: rounds } = await supabase
     .from("rounds")
-    .select("id, round_index, name, is_anonymous, submission_opens_at, submission_closes_at, voting_opens_at, voting_closes_at")
+    .select(
+      "id, round_index, name, is_anonymous, submission_opens_at, submission_closes_at, voting_opens_at, voting_closes_at, elimination_percent",
+    )
     .eq("competition_id", competition.id)
     .order("round_index");
 
@@ -178,7 +180,7 @@ export default async function AdminFormatPage({
     const themedRoundConfig = specialBlocks.find((b) => b.format_blocks!.key === "themed_round")?.config as
       | { theme_type?: "keyword" | "genre"; theme_value?: string }
       | undefined;
-    const teamConfig = roundBlocks.find((b) => b.format_blocks!.key === "team")?.config as { team_size?: number } | undefined;
+    const teamConfig = roundBlocks.find((b) => b.format_blocks!.key === "team")?.config as { group_count?: number } | undefined;
     const overrideRule = scoringRules.find((sr) => sr.round_id === r.id) ?? null;
 
     return {
@@ -192,7 +194,8 @@ export default async function AdminFormatPage({
       themeConfig: themedRoundConfig?.theme_value
         ? { themeType: themedRoundConfig.theme_type ?? "keyword", themeValue: themedRoundConfig.theme_value }
         : null,
-      teamSize: teamConfig?.team_size ?? null,
+      groupCount: teamConfig?.group_count ?? null,
+      eliminationPercent: r.elimination_percent,
       teams: teams
         .filter((t) => t.round_id === r.id)
         .map((t) => ({
