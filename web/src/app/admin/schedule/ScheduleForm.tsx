@@ -23,8 +23,46 @@ const PHASE_FIELDS: Array<{ label: string; startKey: keyof Dates; endKey: keyof 
   { label: "公布期", startKey: "announcementStart", endKey: "announcementEnd" },
 ];
 
+// DB-09 資安複查(第二輪稽核):原本 <input type="date"> 只精確到日,改成
+// datetime-local 需要處理瀏覽器本地時區換算——datetime-local 的 value 是
+// 沒有時區資訊的「牆上時鐘」字串,直接原樣送給 Postgres 會被當成 UTC 解讀,
+// 造成時區換算錯誤。這裡統一用瀏覽器自己的 Date 物件做換算。
+function toDatetimeLocalInput(iso: string): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function fromDatetimeLocalInput(value: string): string {
+  return value === "" ? "" : new Date(value).toISOString();
+}
+
+function initialDatesToLocal(initial: Dates): Dates {
+  return {
+    promotionStart: toDatetimeLocalInput(initial.promotionStart),
+    promotionEnd: toDatetimeLocalInput(initial.promotionEnd),
+    submissionStart: toDatetimeLocalInput(initial.submissionStart),
+    submissionEnd: toDatetimeLocalInput(initial.submissionEnd),
+    votingStart: toDatetimeLocalInput(initial.votingStart),
+    votingEnd: toDatetimeLocalInput(initial.votingEnd),
+    announcementStart: toDatetimeLocalInput(initial.announcementStart),
+    announcementEnd: toDatetimeLocalInput(initial.announcementEnd),
+    registrationDeadline: toDatetimeLocalInput(initial.registrationDeadline),
+  };
+}
+
+// dates 這時候存的是 datetime-local 格式(YYYY-MM-DDTHH:mm，本地時區的純文字),
+// 不需要再經過 Date 物件轉換就能直接重新排版顯示。
+function formatLocalForDisplay(value: string): string {
+  if (!value) return "（尚未設定）";
+  const [datePart, timePart] = value.split("T");
+  const [, month, day] = datePart.split("-");
+  return timePart ? `${Number(month)}/${Number(day)} ${timePart}` : `${Number(month)}/${Number(day)}`;
+}
+
 function buildShareMessage(competitionName: string, competitionId: string, dates: Dates, origin: string): string {
-  const show = (v: string) => v || "（尚未設定）";
+  const show = formatLocalForDisplay;
   return [
     `${competitionName} 開放報名中`,
     "",
@@ -83,7 +121,7 @@ export function ScheduleForm({
   competitionList,
   isPlatformAdmin = false,
 }: ScheduleFormProps) {
-  const [dates, setDates] = useState<Dates>(initial);
+  const [dates, setDates] = useState<Dates>(() => initialDatesToLocal(initial));
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -102,7 +140,18 @@ export function ScheduleForm({
   async function handleSave() {
     setSaving(true);
     setError(null);
-    const result = await saveSchedule({ competitionId, roundIds, ...dates });
+    const isoValues: Dates = {
+      promotionStart: fromDatetimeLocalInput(dates.promotionStart),
+      promotionEnd: fromDatetimeLocalInput(dates.promotionEnd),
+      submissionStart: fromDatetimeLocalInput(dates.submissionStart),
+      submissionEnd: fromDatetimeLocalInput(dates.submissionEnd),
+      votingStart: fromDatetimeLocalInput(dates.votingStart),
+      votingEnd: fromDatetimeLocalInput(dates.votingEnd),
+      announcementStart: fromDatetimeLocalInput(dates.announcementStart),
+      announcementEnd: fromDatetimeLocalInput(dates.announcementEnd),
+      registrationDeadline: fromDatetimeLocalInput(dates.registrationDeadline),
+    };
+    const result = await saveSchedule({ competitionId, roundIds, ...isoValues });
     setSaving(false);
     if ("error" in result) {
       setError(result.error);
@@ -121,7 +170,7 @@ export function ScheduleForm({
       <div className="mb-7">
         <h1 className="font-display text-[30px]">賽事時程 — {competitionName}</h1>
         <p className="mt-1.5 max-w-[680px] text-sm leading-relaxed text-ink-dim">
-          設定宣傳、投稿、投票、公布四個階段的起訖日期，時間衝突會立即提示。投稿／投票期會套用到目前每一輪。
+          設定宣傳、投稿、投票、公布四個階段的起訖日期與時間，時間衝突會立即提示。投稿／投票期會套用到目前每一輪。
         </p>
       </div>
 
@@ -135,7 +184,7 @@ export function ScheduleForm({
             <div>
               <label className="mb-1.25 block text-[10.5px] tracking-wide text-ink-faint uppercase">開始</label>
               <input
-                type="date"
+                type="datetime-local"
                 value={dates[p.startKey]}
                 onChange={(e) => set(p.startKey, e.target.value)}
                 className="w-full rounded-lg border border-panel-border bg-black/25 px-2.5 py-2 text-[12.5px] text-ink [color-scheme:dark]"
@@ -144,7 +193,7 @@ export function ScheduleForm({
             <div>
               <label className="mb-1.25 block text-[10.5px] tracking-wide text-ink-faint uppercase">結束</label>
               <input
-                type="date"
+                type="datetime-local"
                 value={dates[p.endKey]}
                 onChange={(e) => set(p.endKey, e.target.value)}
                 className="w-full rounded-lg border border-panel-border bg-black/25 px-2.5 py-2 text-[12.5px] text-ink [color-scheme:dark]"
@@ -155,9 +204,9 @@ export function ScheduleForm({
         <div className="grid grid-cols-1 items-center gap-2.5 py-3.5 md:grid-cols-[140px_1fr_1fr] md:gap-4">
           <div className="text-[13.5px] font-semibold">報名截止</div>
           <div>
-            <label className="mb-1.25 block text-[10.5px] tracking-wide text-ink-faint uppercase">最晚報名日</label>
+            <label className="mb-1.25 block text-[10.5px] tracking-wide text-ink-faint uppercase">最晚報名時間</label>
             <input
-              type="date"
+              type="datetime-local"
               value={dates.registrationDeadline}
               onChange={(e) => set("registrationDeadline", e.target.value)}
               className="w-full rounded-lg border border-panel-border bg-black/25 px-2.5 py-2 text-[12.5px] text-ink [color-scheme:dark]"
@@ -168,12 +217,12 @@ export function ScheduleForm({
 
         {registerAfterSubmitEnd && (
           <div className="col-span-full mt-1.5 mb-3 flex items-center gap-2 rounded-lg border border-bad/30 bg-bad/8 px-3 py-2 text-[11.5px] text-bad">
-            <Icon name="alert" size={14} /> 報名截止日（{dates.registrationDeadline}）晚於投稿期結束（{dates.submissionEnd}）— 違反第 2 節「存取順序」規則，請調整
+            <Icon name="alert" size={14} /> 報名截止（{formatLocalForDisplay(dates.registrationDeadline)}）晚於投稿期結束（{formatLocalForDisplay(dates.submissionEnd)}）— 違反第 2 節「存取順序」規則，請調整
           </div>
         )}
         {submitAfterVoteStart && (
           <div className="col-span-full mt-1.5 mb-3 flex items-center gap-2 rounded-lg border border-bad/30 bg-bad/8 px-3 py-2 text-[11.5px] text-bad">
-            <Icon name="alert" size={14} /> 投稿期結束（{dates.submissionEnd}）晚於投票期開始（{dates.votingStart}）— 兩階段時間重疊，請調整
+            <Icon name="alert" size={14} /> 投稿期結束（{formatLocalForDisplay(dates.submissionEnd)}）晚於投票期開始（{formatLocalForDisplay(dates.votingStart)}）— 兩階段時間重疊，請調整
           </div>
         )}
         {error && <p className="col-span-full mt-1.5 mb-3 text-[12px] text-bad">儲存失敗：{error}</p>}

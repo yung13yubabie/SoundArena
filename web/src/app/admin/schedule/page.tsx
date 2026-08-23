@@ -5,8 +5,12 @@ import { redirectToLogin } from "@/lib/loginRedirect";
 import { AdminShell } from "@/components/AdminShell";
 import { ScheduleForm } from "./ScheduleForm";
 
-function toDateInput(value: string | null): string {
-  return value ? value.slice(0, 10) : "";
+// 原始 ISO 字串(或 null)先原樣傳給 ScheduleForm——DB-09 資安複查(第二輪稽核):
+// 這裡是 Server Component,不知道瀏覽者的本地時區,轉成 <input type="datetime-local">
+// 要的格式必須在瀏覽器端用當地時區換算,不能在這裡用字串切割硬做,見 ScheduleForm.tsx
+// 的 toDatetimeLocalInput()。
+function orEmpty(value: string | null): string {
+  return value ?? "";
 }
 
 export default async function AdminSchedulePage({
@@ -91,15 +95,15 @@ export default async function AdminSchedulePage({
       competitionName={competition.name}
       roundIds={(rounds ?? []).map((r) => r.id)}
       initial={{
-        promotionStart: toDateInput(competition.promotion_starts_at),
-        promotionEnd: toDateInput(competition.promotion_ends_at),
-        submissionStart: toDateInput(representative?.submission_opens_at ?? null),
-        submissionEnd: toDateInput(representative?.submission_closes_at ?? null),
-        votingStart: toDateInput(representative?.voting_opens_at ?? null),
-        votingEnd: toDateInput(representative?.voting_closes_at ?? null),
-        announcementStart: toDateInput(competition.announcement_starts_at),
-        announcementEnd: toDateInput(competition.announcement_ends_at),
-        registrationDeadline: toDateInput(competition.registration_closes_at),
+        promotionStart: orEmpty(competition.promotion_starts_at),
+        promotionEnd: orEmpty(competition.promotion_ends_at),
+        submissionStart: orEmpty(representative?.submission_opens_at ?? null),
+        submissionEnd: orEmpty(representative?.submission_closes_at ?? null),
+        votingStart: orEmpty(representative?.voting_opens_at ?? null),
+        votingEnd: orEmpty(representative?.voting_closes_at ?? null),
+        announcementStart: orEmpty(competition.announcement_starts_at),
+        announcementEnd: orEmpty(competition.announcement_ends_at),
+        registrationDeadline: orEmpty(competition.registration_closes_at),
       }}
       competitionList={competitionList}
       isPlatformAdmin={isPlatformAdmin}
