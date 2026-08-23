@@ -433,6 +433,52 @@ async function main() {
     !!rsoStrangerErr && rsoStrangerErr.message.includes("insufficient permission"),
     rsoStrangerErr?.message,
   );
+
+  // ============ external_vote: 只算「沒有在這場比賽報名過」的登入使用者投的票,
+  // vote 範本維持算全部票(含參賽者互投,自投本身已經被擋)。============
+  const compEV = await makeCompetition(organizerA.id, "externalVote");
+  const { data: evRound } = await admin
+    .from("rounds")
+    .insert({ competition_id: compEV, round_index: 1, name: "R1", voting_opens_at: new Date(Date.now() - 60_000).toISOString(), voting_closes_at: new Date(Date.now() + 5_000).toISOString() })
+    .select("id")
+    .single();
+  const evSubmitter = await makeUser("evsubmitter");
+  const evInsider = await makeUser("evinsider");
+  const evOutsider = await makeUser("evoutsider");
+  const { data: evSubReg } = await admin
+    .from("registrations")
+    .insert({ competition_id: compEV, user_id: evSubmitter.id, suno_handle: "ev-submitter", display_name: "EV Submitter" })
+    .select("id")
+    .single();
+  const { data: evSubmission } = await admin
+    .from("submissions")
+    .insert({ round_id: evRound.id, registration_id: evSubReg.id, suno_share_url: "https://suno.com/s/secreg-ev", status: "approved" })
+    .select("id")
+    .single();
+  await admin.from("registrations").insert({ competition_id: compEV, user_id: evInsider.id, suno_handle: "ev-insider", display_name: "EV Insider" });
+  await admin.from("votes").insert([
+    { round_id: evRound.id, submission_id: evSubmission.id, voter_id: evInsider.id, voter_ip: "10.0.1.1" },
+    { round_id: evRound.id, submission_id: evSubmission.id, voter_id: evOutsider.id, voter_ip: "10.0.1.2" },
+  ]);
+  const { data: evRule } = await admin.from("scoring_rules").insert({ competition_id: compEV, round_id: evRound.id }).select("id").single();
+  const { data: voteTemplateEV } = await admin.from("score_item_templates").select("id").eq("key", "vote").single();
+  const { data: extVoteTemplateEV } = await admin.from("score_item_templates").select("id").eq("key", "external_vote").single();
+  const { data: evItems } = await admin
+    .from("score_items")
+    .insert([
+      { scoring_rule_id: evRule.id, template_id: voteTemplateEV.id, label: "投票", kind: "weighted", weight_percent: 50, sort_order: 0 },
+      { scoring_rule_id: evRule.id, template_id: extVoteTemplateEV.id, label: "外部投票", kind: "weighted", weight_percent: 50, sort_order: 1 },
+    ])
+    .select("id, template_id");
+  const evVoteItem = evItems.find((i) => i.template_id === voteTemplateEV.id);
+  const evExtVoteItem = evItems.find((i) => i.template_id === extVoteTemplateEV.id);
+  await admin.from("rounds").update({ voting_closes_at: new Date(Date.now() - 1000).toISOString() }).eq("id", evRound.id);
+
+  const { data: evScores } = await admin.rpc("get_round_scores", { p_round_id: evRound.id });
+  const evVoteScore = (evScores ?? []).find((s) => s.submission_id === evSubmission.id && s.score_item_id === evVoteItem.id);
+  const evExtVoteScore = (evScores ?? []).find((s) => s.submission_id === evSubmission.id && s.score_item_id === evExtVoteItem.id);
+  record("external_vote: vote 範本算全部票(含參賽者互投)", Number(evVoteScore?.raw_value) === 2, `raw_value=${evVoteScore?.raw_value}`);
+  record("external_vote: 只算非參賽者的票", Number(evExtVoteScore?.raw_value) === 1, `raw_value=${evExtVoteScore?.raw_value}`);
 }
 
 async function cleanup() {
