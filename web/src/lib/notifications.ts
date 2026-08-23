@@ -10,10 +10,13 @@ function siteOrigin(): string {
 }
 
 // 通知內文附上對應頁面連結,方便收到通知後直接點過去——報名成功導去投稿頁(下一步
-// 動作),投稿成功導去進度頁。
-function eventUrl(eventType: string, competitionId: string): string {
+// 動作),投稿成功導去進度頁。使用者要求:發出去的訊息不能帶原始 UUID——查證後
+// 發現這裡也不需要,/submit、/status 兩個頁面本來就沒有讀取任何 query string
+// (各自列出使用者自己名下的全部比賽/報名,不靠這個參數篩選),之前加的
+// ?competition=<uuid> 純粹是多餘、還洩漏內部識別碼的殘留,直接拿掉。
+function eventUrl(eventType: string): string {
   const origin = siteOrigin();
-  if (eventType === "registration_confirmed") return `${origin}/submit?competition=${competitionId}`;
+  if (eventType === "registration_confirmed") return `${origin}/submit`;
   if (eventType === "submission_confirmed" || eventType === "organizer_message") return `${origin}/status`;
   return origin;
 }
@@ -28,12 +31,12 @@ function eventUrl(eventType: string, competitionId: string): string {
 export async function dispatchNotificationEvent(supabase: SupabaseClient, eventId: string): Promise<void> {
   const { data: event } = await supabase
     .from("notification_events")
-    .select("id, user_id, title, body, channel, status, event_type, competition_id")
+    .select("id, user_id, title, body, channel, status, event_type")
     .eq("id", eventId)
     .maybeSingle();
   if (!event || event.status !== "pending") return;
 
-  const message = `**${event.title}**\n${event.body}\n\n${eventUrl(event.event_type, event.competition_id)}`;
+  const message = `**${event.title}**\n${event.body}\n\n${eventUrl(event.event_type)}`;
 
   if (event.channel === "discord") {
     const { data: profile } = await supabase
@@ -60,7 +63,7 @@ export async function dispatchNotificationEvent(supabase: SupabaseClient, eventI
       return;
     }
     try {
-      await sendEmail(authUser.email, event.title, `${event.body}\n\n${eventUrl(event.event_type, event.competition_id)}`);
+      await sendEmail(authUser.email, event.title, `${event.body}\n\n${eventUrl(event.event_type)}`);
     } catch (err) {
       console.error(`notification_events ${eventId} Email 送出失敗,留給下次 cron 重試:`, err);
       return;
