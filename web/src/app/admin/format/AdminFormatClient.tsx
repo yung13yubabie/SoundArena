@@ -634,6 +634,7 @@ interface AdminFormatClientProps {
   scoreItemTemplates: ScoreItemTemplate[];
   competitionList: Array<{ id: string; name: string }>;
   isPlatformAdmin?: boolean;
+  hasRegistrations: boolean;
 }
 
 export function AdminFormatClient({
@@ -645,6 +646,7 @@ export function AdminFormatClient({
   scoreItemTemplates,
   competitionList,
   isPlatformAdmin = false,
+  hasRegistrations,
 }: AdminFormatClientProps) {
   const [isPending, startTransition] = useTransition();
 
@@ -681,6 +683,14 @@ export function AdminFormatClient({
         <label className="mb-1.5 block text-[12.5px] font-semibold text-ink-dim">
           輪次（Round）— 第一輪固定初賽、最後一輪固定決賽，中間可新增／自訂
         </label>
+        {!hasRegistrations && (
+          <div className="mt-2 flex items-start gap-2 rounded-[10px] border border-warn/30 bg-warn/8 px-3.5 py-2.5 text-[11.5px] leading-relaxed text-warn">
+            <Icon name="alert" size={13} className="mt-0.5 flex-none" />
+            <span>
+              目前共 {rounds.length} 輪：{rounds.map((r) => r.name).join("、")}。開放報名後，已有真實投稿的輪次就無法自助移除了（見上方比賽的報名時間設定），建議先在這裡確認好輪次數量跟順序。
+            </span>
+          </div>
+        )}
       </div>
       {rounds.map((r) => (
         <RoundFormatCard

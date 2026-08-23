@@ -95,7 +95,7 @@ export default async function AdminFormatPage({
 
   const roundIds = (rounds ?? []).map((r) => r.id);
 
-  const [{ data: blockRows }, { data: scoringRuleRows }, { data: catalogRows }, { data: scoreTemplateRows }] =
+  const [{ data: blockRows }, { data: scoringRuleRows }, { data: catalogRows }, { data: scoreTemplateRows }, { count: registrationCount }] =
     await Promise.all([
       roundIds.length
         ? supabase.from("round_format_blocks").select("round_id, config, format_blocks(key, category)").in("round_id", roundIds)
@@ -106,6 +106,7 @@ export default async function AdminFormatPage({
         .eq("competition_id", competition.id),
       supabase.from("format_blocks").select("key, label, category").order("category").order("key"),
       supabase.from("score_item_templates").select("key, label, default_kind").order("label"),
+      supabase.from("registrations").select("id", { count: "exact", head: true }).eq("competition_id", competition.id),
     ]);
 
   const formatBlockCatalog: FormatBlockCatalog = { elimination: [], grouping: [], special: [] };
@@ -170,6 +171,7 @@ export default async function AdminFormatPage({
       scoreItemTemplates={scoreItemTemplates}
       competitionList={competitionList}
       isPlatformAdmin={isPlatformAdmin}
+      hasRegistrations={(registrationCount ?? 0) > 0}
     />
   );
 }
