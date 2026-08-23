@@ -257,12 +257,63 @@ export function AdminShell({
     router.push(`${ORG_ROUTES[key]}${suffix}`);
   }
 
+  const currentSectionValue = viewpoint === "organizer" ? active : section;
+  function handleSectionSelect(value: string) {
+    if (viewpoint === "organizer") goTo(value as AdminShellProps["active"]);
+    else setSection(value as Section);
+  }
+
   return (
     <div>
       <SiteHeader authed active="admin" roleLabel={viewpoint === "platform" ? "PlatformAdmin" : "Organizer"} />
+
+      {/* DB-04 手機版導覽:側欄在 md 以下完全隱藏(見下方 aside 的 hidden md:block),
+          改用這個頂部下拉選單切換分頁——後台選單項目不多,下拉選單比漢堡選單/抽屜
+          輕量,不需要額外的展開狀態跟遮罩層。 */}
+      <div className="flex flex-col gap-2 border-b border-panel-border bg-black/15 px-4 py-3 md:hidden">
+        {isPlatformAdmin && (
+          <div className="flex items-center gap-2.5">
+            <Switch
+              on={viewpoint === "platform"}
+              label="切換平台管理員視角與主辦人視角"
+              onClick={() => {
+                const nv = viewpoint === "platform" ? "organizer" : "platform";
+                setViewpoint(nv);
+                setSection(nv === "platform" ? "platform-competitions" : active);
+              }}
+            />
+            <span className="text-[11.5px]">{viewpoint === "platform" ? "PlatformAdmin 視角" : "Organizer 視角"}</span>
+          </div>
+        )}
+        {viewpoint === "organizer" && competitions && competitions.length > 0 && (
+          <select
+            value={activeCompetitionId ?? ""}
+            onChange={(e) => router.push(`${pathname}?c=${e.target.value}`)}
+            className="w-full appearance-none rounded-[9px] border border-panel-border bg-black/25 px-2.5 py-2 text-[12px] text-ink outline-none focus:border-accent/50 [color-scheme:dark]"
+          >
+            {competitions.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        )}
+        <select
+          value={currentSectionValue}
+          onChange={(e) => handleSectionSelect(e.target.value)}
+          className="w-full appearance-none rounded-[9px] border border-panel-border bg-black/25 px-2.5 py-2 text-[12.5px] text-ink outline-none focus:border-accent/50 [color-scheme:dark]"
+        >
+          {(viewpoint === "organizer" ? ORG_ITEMS : PLATFORM_ITEMS).map((it) => (
+            <option key={it.key} value={it.key}>
+              {it.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
       <div className="flex min-h-[calc(100vh-44px)]">
         <aside
-          className={`flex-none overflow-hidden border-r border-panel-border bg-black/15 transition-[width,padding] ${
+          className={`hidden flex-none overflow-hidden border-r border-panel-border bg-black/15 transition-[width,padding] md:block ${
             collapsed ? "w-14 px-2 py-4.5" : "w-52 px-3 py-4.5"
           }`}
         >
