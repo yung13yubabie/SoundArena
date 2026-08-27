@@ -833,6 +833,73 @@ async function main() {
     !rrFinalizeErr && rrRegAfter?.status === "eliminated",
     `error=${rrFinalizeErr?.message ?? "none"} status=${rrRegAfter?.status}`,
   );
+
+  // ============ 單敗淘汰(single_elimination):隨機配對含輪空、冪等、確認結果正確
+  // 100%淘汰輸家(不套用 elimination_percent)、前一輪結果觸發下一輪配對。平手偵測/
+  // 贏家判定的 TS 層邏輯不在這裡測(這支 RPC 本身不算贏家,那是 judge/actions.ts 的
+  // finalizeRoundResults() 在呼叫這支 RPC 之前做的事,已用真實 PoC 對照 tsx 直接
+  // 執行正式程式碼驗證過)。============
+  const compSingleElim = await makeCompetition(organizerA.id, "singleElim");
+  await admin.from("competitions").update({ registration_closes_at: new Date(Date.now() - 60_000).toISOString() }).eq("id", compSingleElim);
+  const { data: seRound1 } = await admin
+    .from("rounds")
+    .insert({ competition_id: compSingleElim, round_index: 1, name: "初選", voting_opens_at: new Date(Date.now() - 60_000).toISOString(), voting_closes_at: new Date(Date.now() - 1_000).toISOString() })
+    .select("id")
+    .single();
+  const { data: seRound2 } = await admin
+    .from("rounds")
+    .insert({ competition_id: compSingleElim, round_index: 2, name: "決賽", voting_opens_at: new Date(Date.now() - 60_000).toISOString(), voting_closes_at: new Date(Date.now() - 1_000).toISOString() })
+    .select("id")
+    .single();
+  const { data: seBlock } = await admin.from("format_blocks").select("id").eq("key", "single_elimination").single();
+  await admin.from("round_format_blocks").insert([
+    { round_id: seRound1.id, format_block_id: seBlock.id, config: {} },
+    { round_id: seRound2.id, format_block_id: seBlock.id, config: {} },
+  ]);
+
+  const seRegIds = [];
+  for (let i = 0; i < 3; i++) {
+    const u = await makeUser(`sep${i}`);
+    const { data: r } = await admin.from("registrations").insert({ competition_id: compSingleElim, user_id: u.id, suno_handle: `se-p${i}`, display_name: `SE P${i}`, review_status: "approved" }).select("id").single();
+    seRegIds.push(r.id);
+  }
+
+  const { error: seGenErr } = await organizerAClient.rpc("generate_single_elimination_matches_for_round", { p_round_id: seRound1.id });
+  const { data: seMatches } = await admin.from("matches").select("id, registration_a_id, registration_b_id").eq("round_id", seRound1.id);
+  record(
+    "單敗淘汰: 3人(奇數)隨機配對 → 1場(2人),1人輪空",
+    !seGenErr && (seMatches ?? []).length === 1,
+    `error=${seGenErr?.message ?? "none"} matches=${(seMatches ?? []).length}`,
+  );
+
+  await organizerAClient.rpc("generate_single_elimination_matches_for_round", { p_round_id: seRound1.id });
+  const { data: seMatchesAfterRepeat } = await admin.from("matches").select("id").eq("round_id", seRound1.id);
+  record("單敗淘汰: 重複呼叫是冪等的,不會重複配對", (seMatchesAfterRepeat ?? []).length === 1, `matches=${(seMatchesAfterRepeat ?? []).length}`);
+
+  const seLoserRegId = seMatches[0].registration_a_id;
+  const { error: seStrangerErr } = await organizerBClient.rpc("finalize_round_results", { p_round_id: seRound1.id, p_eliminate_registration_ids: [seLoserRegId] });
+  record(
+    "單敗淘汰: 陌生人不能確認別人比賽的輪次結果",
+    !!seStrangerErr && seStrangerErr.message.includes("insufficient permission"),
+    seStrangerErr?.message,
+  );
+
+  const { error: seFinalizeErr } = await organizerAClient.rpc("finalize_round_results", { p_round_id: seRound1.id, p_eliminate_registration_ids: [seLoserRegId] });
+  const { data: seRegsAfter } = await admin.from("registrations").select("id, status").in("id", seRegIds);
+  const seActiveAfter = (seRegsAfter ?? []).filter((r) => r.status === "active");
+  record(
+    "單敗淘汰: 確認本輪結果後,輸家被淘汰,贏家+輪空者維持active(3人剩2人,不是%計算)",
+    !seFinalizeErr && seActiveAfter.length === 2 && !seActiveAfter.some((r) => r.id === seLoserRegId),
+    `error=${seFinalizeErr?.message ?? "none"} active=${seActiveAfter.length}`,
+  );
+
+  const { error: seR2GenErr } = await organizerAClient.rpc("generate_single_elimination_matches_for_round", { p_round_id: seRound2.id });
+  const { data: seR2Matches } = await admin.from("matches").select("id").eq("round_id", seRound2.id);
+  record(
+    "單敗淘汰: 前一輪確認結果觸發下一輪配對(2人剩1場)",
+    !seR2GenErr && (seR2Matches ?? []).length === 1,
+    `error=${seR2GenErr?.message ?? "none"} matches=${(seR2Matches ?? []).length}`,
+  );
 }
 
 async function cleanup() {

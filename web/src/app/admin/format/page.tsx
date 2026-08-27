@@ -129,6 +129,7 @@ export default async function AdminFormatPage({
     await supabase.rpc("check_and_form_pending_teams", { p_competition_id: competition.id });
     await supabase.rpc("check_and_form_pending_pools", { p_competition_id: competition.id });
     await supabase.rpc("check_and_form_pending_matches", { p_competition_id: competition.id });
+    await supabase.rpc("check_and_form_pending_single_elimination_matches", { p_competition_id: competition.id });
     await dispatchPendingTeamNotifications([competition.id]);
   } catch {
     // 分組/配對檢查/送出通知失敗不影響賽制頁本身的顯示

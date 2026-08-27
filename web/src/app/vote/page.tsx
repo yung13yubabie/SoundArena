@@ -138,21 +138,21 @@ export default async function VotePage({
 
   const shuffled = revealed ? items : shuffle(items);
 
-  // 循環賽:這輪如果選了「循環賽」積木,投票不是「自由多選一」,是逐場配對投票——
-  // 換一套完全不同的畫面(MatchVoteList),不跟一般投票共用 VoteList。
+  // 循環賽/單敗淘汰:這輪如果選了其中一個積木,投票不是「自由多選一」,是逐場配對
+  // 投票——換一套完全不同的畫面(MatchVoteList),不跟一般投票共用 VoteList。
   const { data: roundBlocks } = await supabase
     .from("round_format_blocks")
     .select("format_blocks(key)")
     .eq("round_id", roundId);
-  const isRoundRobin = (roundBlocks ?? []).some((b) => {
+  const isMatchBasedRound = (roundBlocks ?? []).some((b) => {
     const block = Array.isArray(b.format_blocks) ? b.format_blocks[0] : b.format_blocks;
-    return block?.key === "round_robin";
+    return block?.key === "round_robin" || block?.key === "single_elimination";
   });
 
   let matchItems: MatchVoteItem[] = [];
   let initialVotedByMatch: Record<string, string> = {};
 
-  if (isRoundRobin) {
+  if (isMatchBasedRound) {
     const { data: matchRows } = await supabase
       .from("matches")
       .select("id, registration_a_id, registration_b_id, pools(name)")
@@ -178,7 +178,7 @@ export default async function VotePage({
 
     matchItems = ((matchRows ?? []) as unknown as MatchRow[]).map((m) => ({
       matchId: m.id,
-      poolName: one(m.pools)?.name ?? "",
+      poolName: one(m.pools)?.name ?? "淘汰賽對戰",
       a: buildSide(m.registration_a_id),
       b: buildSide(m.registration_b_id),
     }));
@@ -205,7 +205,7 @@ export default async function VotePage({
 
         {!votingOpen ? (
           <EmptyState icon="inbox" title="這一輪目前沒有開放投票" sub="投票期還沒開始,或已經截止" />
-        ) : isRoundRobin ? (
+        ) : isMatchBasedRound ? (
           matchItems.length === 0 ? (
             <EmptyState icon="inbox" title="還沒有對戰場次" sub="等分組完成後,場次會自動出現在這裡" />
           ) : (

@@ -575,6 +575,37 @@ function MatchesPanel({ pools, matches }: { pools: PoolData[]; matches: MatchDat
   );
 }
 
+function SingleEliminationPanel({ matches }: { matches: MatchData[] }) {
+  if (matches.length === 0) {
+    return (
+      <div className="mt-3.5 border-t border-panel-border pt-3 text-[12px] leading-relaxed text-ink-faint">
+        還沒有對戰配對——會在報名截止（或前一輪確認結果）後自動隨機配對，不需要手動觸發。人數是奇數時，隨機抽中一人自動輪空晉級，不會出現在配對名單裡。
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-3.5 border-t border-panel-border pt-3">
+      <div className="mb-1.5 text-[12px] font-semibold text-ink-dim">本輪對戰配對</div>
+      <div className="mb-2.5 text-[11.5px] leading-relaxed text-ink-faint">
+        贏家在「確認本輪結果」時才會結算並晉級下一輪；輸家直接淘汰（不套用自動淘汰百分比，單敗淘汰是輸一場就出局）。如果有場次平手，確認結果時會被擋下，需要延長投票時間讓更多人投票。
+      </div>
+      {matches.map((m) => (
+        <div key={m.id} className="py-0.75 text-[12px]">
+          <span className={m.winnerRegistrationId === m.registrationAId ? "font-semibold text-accent" : "text-ink-dim"}>
+            {m.registrationADisplayName}
+          </span>
+          <span className="text-ink-faint"> vs </span>
+          <span className={m.winnerRegistrationId === m.registrationBId ? "font-semibold text-accent" : "text-ink-dim"}>
+            {m.registrationBDisplayName}
+          </span>
+          {m.winnerRegistrationId === null && <span className="ml-1.5 text-ink-faint">（尚未結算或平手）</span>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function RoundFormatCard({
   round,
   competitionId,
@@ -706,7 +737,11 @@ function RoundFormatCard({
           <MatchesPanel pools={round.pools} matches={round.matches} />
         </>
       )}
-      <EliminationPercentPanel roundId={round.id} initialPercent={round.eliminationPercent} />
+      {round.elimination === "single_elimination" ? (
+        <SingleEliminationPanel matches={round.matches} />
+      ) : (
+        <EliminationPercentPanel roundId={round.id} initialPercent={round.eliminationPercent} />
+      )}
 
       <div className="mt-3.5 flex items-center gap-2.5 border-t border-panel-border pt-2.5">
         <Switch on={!!round.scoringRule} label="此輪是否使用獨立評分規則" onClick={toggleOverride} />
