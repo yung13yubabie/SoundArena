@@ -8,6 +8,7 @@ import { computeRanking } from "@/lib/ranking";
 import { getJudgeScoringData, getPeriodicAccumulationStageRoundIds, mergeJudgeScoringData } from "@/lib/judgeScoring";
 import { computeAndPersistMatchWinners, isRoundRobinRound } from "@/lib/roundRobin";
 import { computeSingleEliminationOutcome, isSingleEliminationRound } from "@/lib/singleElimination";
+import { computeDoubleEliminationOutcome, isDoubleEliminationRound } from "@/lib/doubleElimination";
 
 type ActionResult = { success: true } | { error: string };
 
@@ -87,6 +88,36 @@ export async function finalizeRoundResults(roundId: string): Promise<ActionResul
 
     try {
       await supabase.rpc("check_and_form_pending_single_elimination_matches", { p_competition_id: round.competition_id });
+    } catch {
+      // 下一輪配對的立即嘗試失敗不影響「確認本輪結果」本身已經成功,留給訪客造訪
+      // /status、/admin/format 時的 lazy check 兜底
+    }
+
+    revalidatePath("/judge");
+    revalidatePath("/status");
+    revalidatePath("/admin/review");
+    return { success: true };
+  }
+
+  // 雙敗淘汰:同樣不套用 elimination_percent、平手就拒絕確認——但淘汰名單只收
+  // 敗部(losers)/最終戰(final)場次的輸家,勝部(winners)輸的人保留 active,
+  // 下一輪配對時會依即時查詢的敗場數自然歸進敗部組。
+  const isDoubleElim = await isDoubleEliminationRound(roundId);
+  if (isDoubleElim) {
+    const outcome = await computeDoubleEliminationOutcome(roundId);
+    if (!outcome.ok) {
+      const tiedList = outcome.tiedMatches.map((m) => `${m.registrationADisplayName} vs ${m.registrationBDisplayName}`).join("、");
+      return { error: `以下場次平手,無法分出晉級者:${tiedList}。請到下方「本輪專屬時程」延長投票時間,等更多人投票後再重新確認` };
+    }
+
+    const { error: doubleElimFinalizeErr } = await supabase.rpc("finalize_round_results", {
+      p_round_id: roundId,
+      p_eliminate_registration_ids: outcome.loserRegistrationIds,
+    });
+    if (doubleElimFinalizeErr) return { error: toFriendlyError(doubleElimFinalizeErr) };
+
+    try {
+      await supabase.rpc("check_and_form_pending_double_elimination_matches", { p_competition_id: round.competition_id });
     } catch {
       // 下一輪配對的立即嘗試失敗不影響「確認本輪結果」本身已經成功,留給訪客造訪
       // /status、/admin/format 時的 lazy check 兜底

@@ -900,6 +900,139 @@ async function main() {
     !seR2GenErr && (seR2Matches ?? []).length === 1,
     `error=${seR2GenErr?.message ?? "none"} matches=${(seR2Matches ?? []).length}`,
   );
+
+  // ============ 雙敗淘汰(double_elimination):勝部/敗部分開配對、勝部輸家不淘汰、
+  // 敗部輸家才淘汰、最終戰(勝部剩1人+敗部剩1人)跨組配對。跟單敗淘汰同樣不測 TS 層
+  // 的平手偵測/贏家判定(已用真實 PoC 對照 tsx 直接執行正式程式碼驗證過),這裡只測
+  // RPC 邊界:配對分組正確性、冪等、權限、淘汰名單套用正確反映敗場數分組。
+  //
+  // 3人跑4輪的敘事(A=贏家、B=round1輸家、C=round1輪空者,之後代號隨場次動態算,
+  // 不用固定綽號,因為隨機配對誰是 registration_a/b 不保證):
+  //   round1: 3人(奇數)→ 1場 winners(2人配對,1人輪空)
+  //   round2: 0敗組2人(round1贏家+輪空者)配對成1場 winners;1敗組只1人,無場次
+  //   round3: 0敗組只1人,無場次;1敗組2人(round1輸家+round2輸家)配對成1場 losers
+  //   round4: 0敗組1人+1敗組1人 → 觸發最終戰特殊處理,產生1場 bracket=final
+  // ============
+  const compDoubleElim = await makeCompetition(organizerA.id, "doubleElim");
+  await admin.from("competitions").update({ registration_closes_at: new Date(Date.now() - 60_000).toISOString() }).eq("id", compDoubleElim);
+  const deRoundNames = ["初選", "R2", "R3", "R4"];
+  const deRounds = [];
+  for (let i = 0; i < 4; i++) {
+    const { data: r } = await admin
+      .from("rounds")
+      .insert({
+        competition_id: compDoubleElim,
+        round_index: i + 1,
+        name: deRoundNames[i],
+        voting_opens_at: new Date(Date.now() - 60_000).toISOString(),
+        voting_closes_at: new Date(Date.now() - 1_000).toISOString(),
+      })
+      .select("id")
+      .single();
+    deRounds.push(r.id);
+  }
+  const { data: deBlock } = await admin.from("format_blocks").select("id").eq("key", "double_elimination").single();
+  await admin.from("round_format_blocks").insert(deRounds.map((round_id) => ({ round_id, format_block_id: deBlock.id, config: {} })));
+
+  const deRegIds = [];
+  for (let i = 0; i < 3; i++) {
+    const u = await makeUser(`dep${i}`);
+    const { data: r } = await admin.from("registrations").insert({ competition_id: compDoubleElim, user_id: u.id, suno_handle: `de-p${i}`, display_name: `DE P${i}`, review_status: "approved" }).select("id").single();
+    deRegIds.push(r.id);
+  }
+
+  // round1: 3人(奇數)→ 1場 winners,1人輪空
+  const { error: deGen1Err } = await organizerAClient.rpc("generate_double_elimination_matches_for_round", { p_round_id: deRounds[0] });
+  const { data: deR1Matches } = await admin.from("matches").select("id, bracket, registration_a_id, registration_b_id").eq("round_id", deRounds[0]);
+  record(
+    "雙敗淘汰: 3人(奇數)第1輪 → 1場 winners bracket 配對,1人輪空",
+    !deGen1Err && (deR1Matches ?? []).length === 1 && deR1Matches[0].bracket === "winners",
+    `error=${deGen1Err?.message ?? "none"} matches=${(deR1Matches ?? []).length} bracket=${deR1Matches?.[0]?.bracket}`,
+  );
+
+  await organizerAClient.rpc("generate_double_elimination_matches_for_round", { p_round_id: deRounds[0] });
+  const { data: deR1MatchesAfterRepeat } = await admin.from("matches").select("id").eq("round_id", deRounds[0]);
+  record("雙敗淘汰: 重複呼叫是冪等的,不會重複配對", (deR1MatchesAfterRepeat ?? []).length === 1, `matches=${(deR1MatchesAfterRepeat ?? []).length}`);
+
+  const { error: deStrangerErr } = await organizerBClient.rpc("finalize_round_results", { p_round_id: deRounds[0], p_eliminate_registration_ids: [] });
+  record(
+    "雙敗淘汰: 陌生人不能確認別人比賽的輪次結果",
+    !!deStrangerErr && deStrangerErr.message.includes("insufficient permission"),
+    deStrangerErr?.message,
+  );
+
+  const deR1Match = deR1Matches[0];
+  const deByeId = deRegIds.find((id) => id !== deR1Match.registration_a_id && id !== deR1Match.registration_b_id);
+  const deR1WinnerId = deR1Match.registration_a_id;
+  const deR1LoserId = deR1Match.registration_b_id;
+  await admin.from("matches").update({ winner_registration_id: deR1WinnerId }).eq("id", deR1Match.id);
+  const { error: deFinalize1Err } = await organizerAClient.rpc("finalize_round_results", { p_round_id: deRounds[0], p_eliminate_registration_ids: [] });
+  const { data: deRegsAfterR1 } = await admin.from("registrations").select("id, status").in("id", deRegIds);
+  record(
+    "雙敗淘汰: 確認第1輪結果(空淘汰名單),勝部輸家不淘汰,3人全部維持active",
+    !deFinalize1Err && (deRegsAfterR1 ?? []).every((r) => r.status === "active"),
+    `error=${deFinalize1Err?.message ?? "none"} active=${(deRegsAfterR1 ?? []).filter((r) => r.status === "active").length}`,
+  );
+
+  // round2: 0敗組(贏家+輪空者)2人配對成1場 winners;1敗組(round1輸家)只1人,無場次
+  const { error: deGen2Err } = await organizerAClient.rpc("generate_double_elimination_matches_for_round", { p_round_id: deRounds[1] });
+  const { data: deR2Matches } = await admin.from("matches").select("id, bracket, registration_a_id, registration_b_id").eq("round_id", deRounds[1]);
+  const deR2Ids = deR2Matches?.[0] ? [deR2Matches[0].registration_a_id, deR2Matches[0].registration_b_id].sort() : [];
+  const deExpectedR2Ids = [deR1WinnerId, deByeId].sort();
+  record(
+    "雙敗淘汰: 第2輪 0敗組(贏家+輪空者)配對成1場 winners,1敗組只1人無場次",
+    !deGen2Err && (deR2Matches ?? []).length === 1 && deR2Matches[0].bracket === "winners" && JSON.stringify(deR2Ids) === JSON.stringify(deExpectedR2Ids),
+    `error=${deGen2Err?.message ?? "none"} matches=${(deR2Matches ?? []).length} bracket=${deR2Matches?.[0]?.bracket}`,
+  );
+
+  const deR2Match = deR2Matches[0];
+  const deR2WinnerId = deR2Match.registration_a_id;
+  const deR2LoserId = deR2Match.registration_b_id;
+  await admin.from("matches").update({ winner_registration_id: deR2WinnerId }).eq("id", deR2Match.id);
+  const { error: deFinalize2Err } = await organizerAClient.rpc("finalize_round_results", { p_round_id: deRounds[1], p_eliminate_registration_ids: [] });
+  const { data: deRegsAfterR2 } = await admin.from("registrations").select("id, status").in("id", deRegIds);
+  record(
+    "雙敗淘汰: 確認第2輪結果(空淘汰名單),勝部輸家仍不淘汰,3人繼續維持active",
+    !deFinalize2Err && (deRegsAfterR2 ?? []).every((r) => r.status === "active"),
+    `error=${deFinalize2Err?.message ?? "none"} active=${(deRegsAfterR2 ?? []).filter((r) => r.status === "active").length}`,
+  );
+
+  // round3: 0敗組(round2贏家)只1人,無場次;1敗組(round2輸家+round1輸家)2人配對成1場 losers
+  const { error: deGen3Err } = await organizerAClient.rpc("generate_double_elimination_matches_for_round", { p_round_id: deRounds[2] });
+  const { data: deR3Matches } = await admin.from("matches").select("id, bracket, registration_a_id, registration_b_id").eq("round_id", deRounds[2]);
+  const deR3Ids = deR3Matches?.[0] ? [deR3Matches[0].registration_a_id, deR3Matches[0].registration_b_id].sort() : [];
+  const deExpectedR3Ids = [deR2LoserId, deR1LoserId].sort();
+  record(
+    "雙敗淘汰: 第3輪 1敗組(兩個輸家)配對成1場 losers,0敗組只1人無場次",
+    !deGen3Err && (deR3Matches ?? []).length === 1 && deR3Matches[0].bracket === "losers" && JSON.stringify(deR3Ids) === JSON.stringify(deExpectedR3Ids),
+    `error=${deGen3Err?.message ?? "none"} matches=${(deR3Matches ?? []).length} bracket=${deR3Matches?.[0]?.bracket}`,
+  );
+
+  const deR3Match = deR3Matches[0];
+  const deR3WinnerId = deR3Match.registration_a_id;
+  const deR3LoserId = deR3Match.registration_b_id;
+  await admin.from("matches").update({ winner_registration_id: deR3WinnerId }).eq("id", deR3Match.id);
+  const { error: deFinalize3Err } = await organizerAClient.rpc("finalize_round_results", { p_round_id: deRounds[2], p_eliminate_registration_ids: [deR3LoserId] });
+  const { data: deRegsAfterR3 } = await admin.from("registrations").select("id, status").in("id", deRegIds);
+  const deActiveAfterR3 = (deRegsAfterR3 ?? []).filter((r) => r.status === "active");
+  record(
+    "雙敗淘汰: 確認第3輪結果,敗部輸家(第二次輸)真的被淘汰,另外2人維持active",
+    !deFinalize3Err && deActiveAfterR3.length === 2 && !deActiveAfterR3.some((r) => r.id === deR3LoserId),
+    `error=${deFinalize3Err?.message ?? "none"} active=${deActiveAfterR3.length}`,
+  );
+
+  // round4: 0敗組(round2贏家)1人 + 1敗組(round3贏家)1人 → 最終戰特殊處理,
+  // 這是修過的死結bug(見 migration 註解):兩組各自都不足2人配對,若不特別處理
+  // 就會 0 場次卡住——這裡驗證確實有正確產生跨組的 final 場次。
+  const { error: deGen4Err } = await organizerAClient.rpc("generate_double_elimination_matches_for_round", { p_round_id: deRounds[3] });
+  const { data: deR4Matches } = await admin.from("matches").select("id, bracket, registration_a_id, registration_b_id").eq("round_id", deRounds[3]);
+  const deR4Ids = deR4Matches?.[0] ? [deR4Matches[0].registration_a_id, deR4Matches[0].registration_b_id].sort() : [];
+  const deExpectedR4Ids = [deR2WinnerId, deR3WinnerId].sort();
+  record(
+    "雙敗淘汰: 第4輪 0敗組1人+1敗組1人 → 觸發最終戰特殊處理,產生1場跨組 bracket=final(不是0場死結)",
+    !deGen4Err && (deR4Matches ?? []).length === 1 && deR4Matches[0].bracket === "final" && JSON.stringify(deR4Ids) === JSON.stringify(deExpectedR4Ids),
+    `error=${deGen4Err?.message ?? "none"} matches=${(deR4Matches ?? []).length} bracket=${deR4Matches?.[0]?.bracket}`,
+  );
 }
 
 async function cleanup() {

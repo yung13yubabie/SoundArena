@@ -69,6 +69,7 @@ export interface MatchData {
   registrationBId: string;
   registrationBDisplayName: string;
   winnerRegistrationId: string | null;
+  bracket: "winners" | "losers" | "final" | null;
 }
 
 export interface RoundData {
@@ -606,6 +607,48 @@ function SingleEliminationPanel({ matches }: { matches: MatchData[] }) {
   );
 }
 
+const BRACKET_LABEL: Record<string, string> = { winners: "勝部", losers: "敗部", final: "最終戰" };
+
+function DoubleEliminationPanel({ matches }: { matches: MatchData[] }) {
+  if (matches.length === 0) {
+    return (
+      <div className="mt-3.5 border-t border-panel-border pt-3 text-[12px] leading-relaxed text-ink-faint">
+        還沒有對戰配對——會在報名截止（或前一輪確認結果）後自動配對，不需要手動觸發。勝部（0敗）跟敗部（1敗）分開隨機配對，各組人數是奇數時隨機抽一人自動輪空。
+      </div>
+    );
+  }
+
+  const groups: { key: string; label: string; matches: MatchData[] }[] = ["winners", "losers", "final"]
+    .map((key) => ({ key, label: BRACKET_LABEL[key], matches: matches.filter((m) => m.bracket === key) }))
+    .filter((g) => g.matches.length > 0);
+
+  return (
+    <div className="mt-3.5 border-t border-panel-border pt-3">
+      <div className="mb-1.5 text-[12px] font-semibold text-ink-dim">本輪對戰配對</div>
+      <div className="mb-2.5 text-[11.5px] leading-relaxed text-ink-faint">
+        贏家在「確認本輪結果」時才會結算並晉級下一輪；勝部（0敗）輸的人不會被淘汰，只是敗場數變成1，下一輪歸進敗部組——敗部（1敗）跟最終戰輸的人才是真的出局。如果有場次平手，確認結果時會被擋下，需要延長投票時間讓更多人投票。
+      </div>
+      {groups.map((g) => (
+        <div key={g.key} className="mb-2 last:mb-0">
+          <div className="mb-0.5 text-[11px] font-semibold text-ink-faint">{g.label}</div>
+          {g.matches.map((m) => (
+            <div key={m.id} className="py-0.75 text-[12px]">
+              <span className={m.winnerRegistrationId === m.registrationAId ? "font-semibold text-accent" : "text-ink-dim"}>
+                {m.registrationADisplayName}
+              </span>
+              <span className="text-ink-faint"> vs </span>
+              <span className={m.winnerRegistrationId === m.registrationBId ? "font-semibold text-accent" : "text-ink-dim"}>
+                {m.registrationBDisplayName}
+              </span>
+              {m.winnerRegistrationId === null && <span className="ml-1.5 text-ink-faint">（尚未結算或平手）</span>}
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function RoundFormatCard({
   round,
   competitionId,
@@ -739,6 +782,8 @@ function RoundFormatCard({
       )}
       {round.elimination === "single_elimination" ? (
         <SingleEliminationPanel matches={round.matches} />
+      ) : round.elimination === "double_elimination" ? (
+        <DoubleEliminationPanel matches={round.matches} />
       ) : (
         <EliminationPercentPanel roundId={round.id} initialPercent={round.eliminationPercent} />
       )}

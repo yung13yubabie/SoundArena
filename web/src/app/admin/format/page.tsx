@@ -60,6 +60,7 @@ interface MatchRow {
   registration_a_id: string;
   registration_b_id: string;
   winner_registration_id: string | null;
+  bracket: "winners" | "losers" | "final" | null;
   registrations_a: { display_name: string } | { display_name: string }[] | null;
   registrations_b: { display_name: string } | { display_name: string }[] | null;
 }
@@ -130,6 +131,7 @@ export default async function AdminFormatPage({
     await supabase.rpc("check_and_form_pending_pools", { p_competition_id: competition.id });
     await supabase.rpc("check_and_form_pending_matches", { p_competition_id: competition.id });
     await supabase.rpc("check_and_form_pending_single_elimination_matches", { p_competition_id: competition.id });
+    await supabase.rpc("check_and_form_pending_double_elimination_matches", { p_competition_id: competition.id });
     await dispatchPendingTeamNotifications([competition.id]);
   } catch {
     // 分組/配對檢查/送出通知失敗不影響賽制頁本身的顯示
@@ -184,7 +186,7 @@ export default async function AdminFormatPage({
       ? supabase
           .from("matches")
           .select(
-            "id, round_id, pool_id, registration_a_id, registration_b_id, winner_registration_id, registrations_a:registrations!matches_registration_a_id_fkey(display_name), registrations_b:registrations!matches_registration_b_id_fkey(display_name)",
+            "id, round_id, pool_id, registration_a_id, registration_b_id, winner_registration_id, bracket, registrations_a:registrations!matches_registration_a_id_fkey(display_name), registrations_b:registrations!matches_registration_b_id_fkey(display_name)",
           )
           .in("round_id", roundIds)
       : Promise.resolve({ data: [] as MatchRow[] }),
@@ -270,6 +272,7 @@ export default async function AdminFormatPage({
           registrationBId: m.registration_b_id,
           registrationBDisplayName: oneDisplayName(m.registrations_b),
           winnerRegistrationId: m.winner_registration_id,
+          bracket: m.bracket,
         })),
       scoringRule: overrideRule ? { id: overrideRule.id, items: toScoreItems(overrideRule.score_items ?? []) } : null,
       submissionOpensAt: r.submission_opens_at,

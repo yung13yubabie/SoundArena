@@ -146,7 +146,7 @@ export default async function VotePage({
     .eq("round_id", roundId);
   const isMatchBasedRound = (roundBlocks ?? []).some((b) => {
     const block = Array.isArray(b.format_blocks) ? b.format_blocks[0] : b.format_blocks;
-    return block?.key === "round_robin" || block?.key === "single_elimination";
+    return block?.key === "round_robin" || block?.key === "single_elimination" || block?.key === "double_elimination";
   });
 
   let matchItems: MatchVoteItem[] = [];
