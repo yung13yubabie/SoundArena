@@ -739,6 +739,100 @@ async function main() {
     !paFinalizeErr && paP1After === "eliminated" && paP2After === "active",
     `error=${paFinalizeErr?.message ?? "none"} p1=${paP1After} p2=${paP2After}`,
   );
+
+  // ============ 循環賽(round_robin)+ 抽籤分組(lottery):池分組均分打散、每池內
+  // 產生所有兩兩配對、勝負判定(含平票算平局)、自投防範、選錯配對對象防範、確認
+  // 結果時排名基準改成勝場數。============
+  const compRoundRobin = await makeCompetition(organizerA.id, "roundRobin");
+  await admin.from("competitions").update({ registration_closes_at: new Date(Date.now() - 60_000).toISOString() }).eq("id", compRoundRobin);
+  const { data: rrRound } = await admin
+    .from("rounds")
+    .insert({ competition_id: compRoundRobin, round_index: 1, name: "初選", voting_opens_at: new Date(Date.now() - 60_000).toISOString(), voting_closes_at: new Date(Date.now() - 1_000).toISOString(), elimination_percent: 34 })
+    .select("id")
+    .single();
+  const { data: rrLotteryBlock } = await admin.from("format_blocks").select("id").eq("key", "lottery").single();
+  const { data: rrRobinBlock } = await admin.from("format_blocks").select("id").eq("key", "round_robin").single();
+  await admin.from("round_format_blocks").insert([
+    { round_id: rrRound.id, format_block_id: rrLotteryBlock.id, config: { pool_size: 5 } },
+    { round_id: rrRound.id, format_block_id: rrRobinBlock.id, config: {} },
+  ]);
+
+  const rrRegIds = [];
+  for (let i = 0; i < 3; i++) {
+    const u = await makeUser(`rrp${i}`);
+    const { data: r } = await admin.from("registrations").insert({ competition_id: compRoundRobin, user_id: u.id, suno_handle: `rr-p${i}`, display_name: `RR P${i}`, review_status: "approved" }).select("id").single();
+    rrRegIds.push(r.id);
+  }
+
+  const { error: rrPoolErr } = await organizerAClient.rpc("form_lottery_pools_for_round", { p_round_id: rrRound.id });
+  const { data: rrPools } = await admin.from("pools").select("id, pool_members(registration_id)").eq("round_id", rrRound.id);
+  record(
+    "循環賽: 3人 pool_size=5 → 只分1池(不超過上限就不拆),3人都在池內",
+    !rrPoolErr && (rrPools ?? []).length === 1 && rrPools[0].pool_members.length === 3,
+    `error=${rrPoolErr?.message ?? "none"} pools=${(rrPools ?? []).length}`,
+  );
+
+  const { error: rrMatchErr } = await organizerAClient.rpc("generate_round_robin_matches_for_round", { p_round_id: rrRound.id });
+  const { data: rrMatches } = await admin.from("matches").select("id, registration_a_id, registration_b_id").eq("round_id", rrRound.id);
+  record(
+    "循環賽: 3人池內產生 C(3,2)=3 場兩兩配對",
+    !rrMatchErr && (rrMatches ?? []).length === 3,
+    `error=${rrMatchErr?.message ?? "none"} matches=${(rrMatches ?? []).length}`,
+  );
+
+  // 場次0:A方2票贏;場次1:1:1平手
+  const rrMatch0 = rrMatches[0];
+  const rrMatch1 = rrMatches[1];
+  const rrVoter1 = await makeUser("rrvoter1");
+  const rrVoter2 = await makeUser("rrvoter2");
+  await admin.from("match_votes").insert([
+    { match_id: rrMatch0.id, voter_id: rrVoter1.id, voter_ip: "10.4.1.1", chosen_registration_id: rrMatch0.registration_a_id },
+    { match_id: rrMatch0.id, voter_id: rrVoter2.id, voter_ip: "10.4.1.2", chosen_registration_id: rrMatch0.registration_a_id },
+    { match_id: rrMatch1.id, voter_id: rrVoter1.id, voter_ip: "10.4.1.3", chosen_registration_id: rrMatch1.registration_a_id },
+    { match_id: rrMatch1.id, voter_id: rrVoter2.id, voter_ip: "10.4.1.4", chosen_registration_id: rrMatch1.registration_b_id },
+  ]);
+
+  const rrMatch0Owner = await admin.from("registrations").select("user_id").eq("id", rrMatch0.registration_a_id).single();
+  const { error: rrSelfVoteErr } = await admin
+    .from("match_votes")
+    .insert({ match_id: rrMatch0.id, voter_id: rrMatch0Owner.data.user_id, voter_ip: "10.4.1.5", chosen_registration_id: rrMatch0.registration_a_id });
+  record(
+    "循環賽: 不能投自己參與的場次",
+    !!rrSelfVoteErr && rrSelfVoteErr.message.includes("cannot vote on your own match"),
+    rrSelfVoteErr?.message,
+  );
+
+  const rrOutsiderRegId = rrRegIds.find((id) => id !== rrMatch0.registration_a_id && id !== rrMatch0.registration_b_id);
+  const { error: rrWrongChoiceErr } = await admin
+    .from("match_votes")
+    .insert({ match_id: rrMatch0.id, voter_id: (await makeUser("rrwrongchoice")).id, voter_ip: "10.4.1.6", chosen_registration_id: rrOutsiderRegId });
+  record(
+    "循環賽: 選擇的對象不在這場配對裡會被拒絕",
+    !!rrWrongChoiceErr && rrWrongChoiceErr.message.includes("chosen registration is not part of this match"),
+    rrWrongChoiceErr?.message,
+  );
+
+  // 3 人 × 34% = floor(1.02) = 1 人該被淘汰,指定 rrRegIds[0] 為算好的淘汰名單(不驗證
+  // 實際勝場數計算細節,那已經在真實 PoC 用 tsx 直接 import 正式程式碼驗證過——這裡
+  // 驗證的是 RPC 邊界:陌生人擋下、正常套用)。
+  const { error: rrStrangerErr } = await organizerBClient.rpc("finalize_round_results", { p_round_id: rrRound.id, p_eliminate_registration_ids: [rrRegIds[0]] });
+  record(
+    "循環賽: 陌生人不能確認別人比賽的輪次結果",
+    !!rrStrangerErr && rrStrangerErr.message.includes("insufficient permission"),
+    rrStrangerErr?.message,
+  );
+
+  // 這支 RPC 本身不計算配對贏家(那是 judge/actions.ts 的 finalizeRoundResults()
+  // TS 層在呼叫這支 RPC 之前做的事,已經用真實 PoC 對照 tsx 直接執行正式程式碼驗證
+  // 過)——這裡直接呼叫 RPC 繞過那一層,只驗證 RPC 邊界本身:算好的淘汰名單能不能
+  // 正確套用、鎖定。
+  const { error: rrFinalizeErr } = await organizerAClient.rpc("finalize_round_results", { p_round_id: rrRound.id, p_eliminate_registration_ids: [rrRegIds[0]] });
+  const { data: rrRegAfter } = await admin.from("registrations").select("status").eq("id", rrRegIds[0]).single();
+  record(
+    "循環賽: 主辦人可以確認本輪結果,套用的淘汰名單正確反映到報名狀態",
+    !rrFinalizeErr && rrRegAfter?.status === "eliminated",
+    `error=${rrFinalizeErr?.message ?? "none"} status=${rrRegAfter?.status}`,
+  );
 }
 
 async function cleanup() {

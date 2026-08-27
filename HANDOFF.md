@@ -1439,3 +1439,19 @@ grilling 過程中使用者兩次糾正我的初版提案:(1)循環賽不能重�
 ### 下一步
 
 賽制細節填空剩下循環賽(傳統兩兩對戰)、單/雙敗淘汰(需要獨立設計對戰配對邏輯,見上面的使用者修正)。這兩個都需要真的對戰配對資料結構,不能沿用%淘汰機制,還沒開始。
+
+## 08-23:循環賽(round_robin)+ 抽籤分組(lottery)
+
+使用者確認「循環賽先做」(比單/雙敗淘汰簡單,沒有樹狀晉級路徑)。用 `mattpocock-skills:grilling` 跑三輪收斂完整設計,細節見 [ADR-0048](docs/adr/0048-round-robin-and-lottery-pools.md)。
+
+**設計**:只有個人對戰(不跟隊伍分組互動);觀眾對每場配對(A vs B)單獨投票,計票多的一方贏,5:5 算平局各得 0.5 勝;整個循環賽賽程容納在同一個輪次內部(新的 `matches` 表,不拆成好幾輪);規模用「抽籤分組」(補上真的行為)先分池——主辦人填「每池人數上限」,系統自動算出要分幾池、均勻分配;最終排名依「勝場數」接現有的 `elimination_percent` 自動淘汰機制。`pools`/`pool_members`/`matches`/`match_votes` 四張新表,刻意跟 `teams`/`votes` 分開,不共用。
+
+`match_votes` 比照 `votes` 表既有模式,INSERT 完全不開放給 authenticated(voter_ip 只有 Next.js 層量得到真實值),用 trigger 驗證自投防範跟配對正確性。排名計算(`lib/roundRobin.ts` 的 `computeAndPersistMatchWinners()`)在確認本輪結果時才結算,不是投票期間即時算。`/admin/format` 新增分池/場次設定跟顯示面板,`/vote` 新增 `MatchVoteList` 逐場配對投票畫面。
+
+寫 `/vote` 頁面時抓到兩個真實 RLS 缺口:`match_votes` 沒開放使用者查自己投過誰、`pools` 名稱一般使用者讀不到——都已補上對應 policy。
+
+真實 PoC 兩層(演算法對照真實資料庫 + 用 `npx tsx` 對照真實資料庫重新驗證計票邏輯,`lib/roundRobin.ts` 有 `import "server-only"` 沒辦法直接 import),15/15 通過。`security-regression.mjs` 新增 8 項,58/58 通過。`tsc`/`eslint`/`build` 全程乾淨。**尚未驗證**:`/vote` 的配對投票新畫面沒有瀏覽器肉眼驗證過。
+
+### 下一步
+
+賽制細節填空最後一塊:單/雙敗淘汰,需要真的樹狀晉級路徑(誰贏誰晉級跟誰打、雙敗的敗部怎麼運作),跟循環賽的平面結構完全不同,還沒開始設計。

@@ -55,6 +55,22 @@ export interface TeamData {
   members: TeamMemberData[];
 }
 
+export interface PoolData {
+  id: string;
+  name: string;
+  members: TeamMemberData[];
+}
+
+export interface MatchData {
+  id: string;
+  poolName: string;
+  registrationAId: string;
+  registrationADisplayName: string;
+  registrationBId: string;
+  registrationBDisplayName: string;
+  winnerRegistrationId: string | null;
+}
+
 export interface RoundData {
   id: string;
   name: string;
@@ -66,6 +82,9 @@ export interface RoundData {
   themeConfig: ThemeConfig | null;
   groupCount: number | null;
   teams: TeamData[];
+  poolSize: number | null;
+  pools: PoolData[];
+  matches: MatchData[];
   eliminationPercent: number | null;
   scoringRule: { id: string; items: ScoreItemData[] } | null;
   submissionOpensAt: string | null;
@@ -472,6 +491,90 @@ function TeamRosterPanel({ teams }: { teams: TeamData[] }) {
   );
 }
 
+function PoolConfigPanel({ roundId, initialPoolSize }: { roundId: string; initialPoolSize: number | null }) {
+  const [poolSize, setPoolSize] = useState(initialPoolSize ?? 5);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  async function handleSave() {
+    setSaving(true);
+    await saveFormatBlockConfig(roundId, "lottery", { pool_size: poolSize });
+    setSaving(false);
+    setSaved(true);
+  }
+
+  return (
+    <div className="glass mt-2 mb-3.5 px-4 py-3.5">
+      <div className="mb-2.5 text-[11.5px] leading-relaxed text-ink-faint">
+        每池人數上限——報名截止（或前一輪確認結果）後，系統依人數自動算出要分幾池、均勻分配（依這個上限切分，不是固定分成幾池），並發訊息通知每個人自己在哪一池、對手是誰。如果這輪同時選了「循環賽」，會在每池內自動產生所有兩兩配對的場次。
+      </div>
+      <div className="flex items-center gap-2">
+        <input
+          type="number"
+          min="2"
+          value={poolSize}
+          onChange={(e) => {
+            setPoolSize(Number(e.target.value));
+            setSaved(false);
+          }}
+          className="w-24 rounded-[10px] border border-panel-border bg-black/25 px-3.5 py-2 text-[13px] text-ink outline-none focus:border-accent/50"
+        />
+        <span className="text-[12.5px] text-ink-dim">人 / 池（上限）</span>
+        <button
+          onClick={handleSave}
+          disabled={saving || poolSize < 2}
+          className="rounded-[10px] bg-gradient-to-r from-[#ff9457] via-accent to-accent-2 px-3.5 py-2 text-[12.5px] font-semibold text-[#1a0e08] disabled:opacity-45"
+        >
+          {saving ? "儲存中…" : saved ? "已儲存" : "儲存"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function MatchesPanel({ pools, matches }: { pools: PoolData[]; matches: MatchData[] }) {
+  if (pools.length === 0) {
+    return (
+      <div className="glass mt-2 mb-3.5 px-4 py-3.5 text-[12px] leading-relaxed text-ink-faint">
+        還沒有分池——會在報名截止（或前一輪確認結果）後自動進行，不需要手動觸發。
+      </div>
+    );
+  }
+
+  return (
+    <div className="glass mt-2 mb-3.5 px-4 py-3.5">
+      <div className="mb-2.5 text-[11.5px] text-ink-faint">目前分池與對戰場次——贏家在「確認本輪結果」時才會結算</div>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {pools.map((pool) => {
+          const poolMatches = matches.filter((m) => m.poolName === pool.name);
+          return (
+            <div key={pool.id} className="rounded-[10px] border border-panel-border bg-white/[0.02] p-3">
+              <div className="mb-1.5 text-[12.5px] font-semibold">{pool.name}</div>
+              <div className="mb-2 text-[11.5px] text-ink-dim">{pool.members.map((m) => m.displayName).join("、")}</div>
+              {poolMatches.length > 0 && (
+                <div className="border-t border-panel-border pt-2">
+                  {poolMatches.map((m) => (
+                    <div key={m.id} className="py-0.75 text-[11.5px]">
+                      <span className={m.winnerRegistrationId === m.registrationAId ? "font-semibold text-accent" : "text-ink-dim"}>
+                        {m.registrationADisplayName}
+                      </span>
+                      <span className="text-ink-faint"> vs </span>
+                      <span className={m.winnerRegistrationId === m.registrationBId ? "font-semibold text-accent" : "text-ink-dim"}>
+                        {m.registrationBDisplayName}
+                      </span>
+                      {m.winnerRegistrationId === null && <span className="ml-1.5 text-ink-faint">（尚未結算或平局）</span>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function RoundFormatCard({
   round,
   competitionId,
@@ -595,6 +698,12 @@ function RoundFormatCard({
         <>
           <GroupConfigPanel roundId={round.id} initialGroupCount={round.groupCount} />
           <TeamRosterPanel teams={round.teams} />
+        </>
+      )}
+      {round.grouping === "lottery" && (
+        <>
+          <PoolConfigPanel roundId={round.id} initialPoolSize={round.poolSize} />
+          <MatchesPanel pools={round.pools} matches={round.matches} />
         </>
       )}
       <EliminationPercentPanel roundId={round.id} initialPercent={round.eliminationPercent} />

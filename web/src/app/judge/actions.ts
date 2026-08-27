@@ -6,6 +6,7 @@ import { toFriendlyError } from "@/lib/actionError";
 import { dispatchPendingTeamNotifications } from "@/lib/notifications";
 import { computeRanking } from "@/lib/ranking";
 import { getJudgeScoringData, getPeriodicAccumulationStageRoundIds, mergeJudgeScoringData } from "@/lib/judgeScoring";
+import { computeAndPersistMatchWinners, isRoundRobinRound } from "@/lib/roundRobin";
 
 type ActionResult = { success: true } | { error: string };
 
@@ -67,30 +68,39 @@ export async function finalizeRoundResults(roundId: string): Promise<ActionResul
     .maybeSingle();
   if (!round) return { error: "找不到這個輪次" };
 
+  // 循環賽:先結算每場配對的贏家(平票算平局,雙方各得 0.5 勝),不管這輪有沒有設定
+  // 自動淘汰都要做——沒有勝負紀錄,matches.winner_registration_id 永遠是 null,結果頁
+  // 沒東西可以顯示。這一步獨立於下面的淘汰名單計算。
+  const isRoundRobin = await isRoundRobinRound(roundId);
+  const roundRobinStandings = isRoundRobin ? await computeAndPersistMatchWinners(roundId) : null;
+
   let eliminateIds: string[] = [];
   if (round.elimination_percent && round.elimination_percent > 0) {
-    // 月/週期累積制:排名不是只看這一輪自己的分數,是看這個週期累積賽段從頭到
-    // 現在所有週期的分數總和(見 lib/judgeScoring.ts 的說明)。不是累積制的輪次
-    // 維持原本的單輪次排名,行為不變。
-    const stageRoundIds = await getPeriodicAccumulationStageRoundIds(supabase, round.competition_id, roundId);
-    const roundIdsToScore = stageRoundIds ?? [roundId];
-
-    const [{ data: activeRegs }, perRoundData] = await Promise.all([
-      supabase.from("registrations").select("id").eq("competition_id", round.competition_id).eq("status", "active"),
-      Promise.all(roundIdsToScore.map((rid) => getJudgeScoringData(supabase, round.competition_id, rid))),
-    ]);
-
+    const { data: activeRegs } = await supabase.from("registrations").select("id").eq("competition_id", round.competition_id).eq("status", "active");
     const activeIds = (activeRegs ?? []).map((r) => r.id);
-    const { scoreItems, values } = mergeJudgeScoringData(perRoundData);
-    const ranking = computeRanking(
-      scoreItems,
-      Array.from(values.entries()).map(([id, v]) => ({ id, values: v })),
-    );
-    const totalByRegistration = new Map(ranking.map((r) => [r.id, r.total]));
 
-    // 這輪沒投稿的 active 報名者視為 0 分、排在墊底——報名截止時他們本來就有機會
-    // 投稿卻沒投,承擔被淘汰的風險是合理的,不用另外設計特殊豁免規則。同分時用
-    // registration_id 排序當穩定 tiebreak,結果不會每次重算就不一樣。
+    let totalByRegistration: Map<string, number>;
+    if (roundRobinStandings) {
+      // 循環賽:排名基準是「勝場數」(含平局的 0.5),不是加權分數。
+      totalByRegistration = new Map(roundRobinStandings.map((s) => [s.registrationId, s.wins]));
+    } else {
+      // 月/週期累積制:排名不是只看這一輪自己的分數,是看這個週期累積賽段從頭到
+      // 現在所有週期的分數總和(見 lib/judgeScoring.ts 的說明)。不是累積制的輪次
+      // 維持原本的單輪次排名,行為不變。
+      const stageRoundIds = await getPeriodicAccumulationStageRoundIds(supabase, round.competition_id, roundId);
+      const roundIdsToScore = stageRoundIds ?? [roundId];
+      const perRoundData = await Promise.all(roundIdsToScore.map((rid) => getJudgeScoringData(supabase, round.competition_id, rid)));
+      const { scoreItems, values } = mergeJudgeScoringData(perRoundData);
+      const ranking = computeRanking(
+        scoreItems,
+        Array.from(values.entries()).map(([id, v]) => ({ id, values: v })),
+      );
+      totalByRegistration = new Map(ranking.map((r) => [r.id, r.total]));
+    }
+
+    // 這輪沒投稿/沒比賽紀錄的 active 報名者視為 0 分、排在墊底——報名截止時他們本來
+    // 就有機會投稿卻沒投,承擔被淘汰的風險是合理的,不用另外設計特殊豁免規則。同分
+    // 時用 registration_id 排序當穩定 tiebreak,結果不會每次重算就不一樣。
     const sorted = [...activeIds].sort((a, b) => {
       const totalA = totalByRegistration.get(a) ?? 0;
       const totalB = totalByRegistration.get(b) ?? 0;
@@ -110,10 +120,12 @@ export async function finalizeRoundResults(roundId: string): Promise<ActionResul
 
   try {
     await supabase.rpc("check_and_form_pending_teams", { p_competition_id: round.competition_id });
+    await supabase.rpc("check_and_form_pending_pools", { p_competition_id: round.competition_id });
+    await supabase.rpc("check_and_form_pending_matches", { p_competition_id: round.competition_id });
     await dispatchPendingTeamNotifications([round.competition_id]);
   } catch {
-    // 確認結果後的立即分組嘗試失敗不影響「確認本輪結果」本身已經成功,留給訪客造訪
-    // /status、/admin/format 時的 lazy check 兜底
+    // 確認結果後的立即分組/配對嘗試失敗不影響「確認本輪結果」本身已經成功,留給訪客
+    // 造訪 /status、/admin/format 時的 lazy check 兜底
   }
 
   revalidatePath("/judge");

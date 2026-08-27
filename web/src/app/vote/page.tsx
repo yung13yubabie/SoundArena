@@ -5,6 +5,7 @@ import { redirectToLogin } from "@/lib/loginRedirect";
 import { SiteHeader } from "@/components/SiteHeader";
 import { EmptyState } from "@/components/EmptyState";
 import { VoteList, type VoteSubmission } from "./VoteList";
+import { MatchVoteList, type MatchVoteItem } from "./MatchVoteList";
 
 interface RoundPickerRow {
   id: string;
@@ -19,6 +20,13 @@ interface SubmissionRow {
   registration_id: string;
   suno_share_url: string;
   registrations: { user_id: string; display_name: string } | { user_id: string; display_name: string }[] | null;
+}
+
+interface MatchRow {
+  id: string;
+  registration_a_id: string;
+  registration_b_id: string;
+  pools: { name: string } | { name: string }[] | null;
 }
 
 function one<T>(value: T | T[] | null): T | null {
@@ -130,6 +138,58 @@ export default async function VotePage({
 
   const shuffled = revealed ? items : shuffle(items);
 
+  // 循環賽:這輪如果選了「循環賽」積木,投票不是「自由多選一」,是逐場配對投票——
+  // 換一套完全不同的畫面(MatchVoteList),不跟一般投票共用 VoteList。
+  const { data: roundBlocks } = await supabase
+    .from("round_format_blocks")
+    .select("format_blocks(key)")
+    .eq("round_id", roundId);
+  const isRoundRobin = (roundBlocks ?? []).some((b) => {
+    const block = Array.isArray(b.format_blocks) ? b.format_blocks[0] : b.format_blocks;
+    return block?.key === "round_robin";
+  });
+
+  let matchItems: MatchVoteItem[] = [];
+  let initialVotedByMatch: Record<string, string> = {};
+
+  if (isRoundRobin) {
+    const { data: matchRows } = await supabase
+      .from("matches")
+      .select("id, registration_a_id, registration_b_id, pools(name)")
+      .eq("round_id", roundId);
+
+    const submissionByRegistration = new Map(
+      ((submissions ?? []) as unknown as SubmissionRow[]).map((s) => [s.registration_id, s]),
+    );
+    const registrationUserById = new Map(
+      ((submissions ?? []) as unknown as SubmissionRow[]).map((s) => [s.registration_id, one(s.registrations)?.user_id]),
+    );
+
+    const buildSide = (registrationId: string) => {
+      const sub = submissionByRegistration.get(registrationId);
+      return {
+        registrationId,
+        submissionId: sub?.id ?? null,
+        title: sub ? (revealed ? (sub.title ?? "未命名作品") : "— 標題於匿名階段不顯示 —") : "（這位還沒投稿)",
+        isOwn: registrationUserById.get(registrationId) === userId,
+        sunoShareUrl: sub && revealed ? sub.suno_share_url : null,
+      };
+    };
+
+    matchItems = ((matchRows ?? []) as unknown as MatchRow[]).map((m) => ({
+      matchId: m.id,
+      poolName: one(m.pools)?.name ?? "",
+      a: buildSide(m.registration_a_id),
+      b: buildSide(m.registration_b_id),
+    }));
+
+    const matchIds = matchItems.map((m) => m.matchId);
+    const { data: myMatchVotes } = matchIds.length
+      ? await supabase.from("match_votes").select("match_id, chosen_registration_id").eq("voter_id", userId).in("match_id", matchIds)
+      : { data: [] };
+    initialVotedByMatch = Object.fromEntries((myMatchVotes ?? []).map((v) => [v.match_id, v.chosen_registration_id]));
+  }
+
   return (
     <div>
       <SiteHeader authed active="vote" />
@@ -145,6 +205,12 @@ export default async function VotePage({
 
         {!votingOpen ? (
           <EmptyState icon="inbox" title="這一輪目前沒有開放投票" sub="投票期還沒開始,或已經截止" />
+        ) : isRoundRobin ? (
+          matchItems.length === 0 ? (
+            <EmptyState icon="inbox" title="還沒有對戰場次" sub="等分組完成後,場次會自動出現在這裡" />
+          ) : (
+            <MatchVoteList matches={matchItems} initialVotedByMatch={initialVotedByMatch} />
+          )
         ) : items.length === 0 ? (
           <EmptyState icon="inbox" title="目前沒有可投票的作品" sub="本輪投稿審核尚未完成,通過審核的作品會自動出現在這裡" />
         ) : (

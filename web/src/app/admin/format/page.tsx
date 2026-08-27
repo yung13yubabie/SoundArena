@@ -46,6 +46,24 @@ interface TeamRow {
   team_members: TeamMemberRow[];
 }
 
+interface PoolRow {
+  id: string;
+  round_id: string;
+  name: string;
+  pool_members: TeamMemberRow[];
+}
+
+interface MatchRow {
+  id: string;
+  round_id: string;
+  pool_id: string;
+  registration_a_id: string;
+  registration_b_id: string;
+  winner_registration_id: string | null;
+  registrations_a: { display_name: string } | { display_name: string }[] | null;
+  registrations_b: { display_name: string } | { display_name: string }[] | null;
+}
+
 function oneTemplate(value: ScoreItemRow["score_item_templates"]) {
   return Array.isArray(value) ? value[0] : value;
 }
@@ -109,9 +127,11 @@ export default async function AdminFormatPage({
   // 見 status/page.tsx 同一處的說明,完全冪等,失敗也不影響這頁的顯示。
   try {
     await supabase.rpc("check_and_form_pending_teams", { p_competition_id: competition.id });
+    await supabase.rpc("check_and_form_pending_pools", { p_competition_id: competition.id });
+    await supabase.rpc("check_and_form_pending_matches", { p_competition_id: competition.id });
     await dispatchPendingTeamNotifications([competition.id]);
   } catch {
-    // 分組檢查/送出通知失敗不影響賽制頁本身的顯示
+    // 分組/配對檢查/送出通知失敗不影響賽制頁本身的顯示
   }
 
   const { data: rounds } = await supabase
@@ -151,6 +171,24 @@ export default async function AdminFormatPage({
       : Promise.resolve({ data: [] as TeamRow[] }),
   ]);
 
+  const [{ data: poolRows }, { data: matchRows }] = await Promise.all([
+    roundIds.length
+      ? supabase
+          .from("pools")
+          .select("id, round_id, name, pool_members(registration_id, registrations(display_name))")
+          .in("round_id", roundIds)
+          .order("name")
+      : Promise.resolve({ data: [] as PoolRow[] }),
+    roundIds.length
+      ? supabase
+          .from("matches")
+          .select(
+            "id, round_id, pool_id, registration_a_id, registration_b_id, winner_registration_id, registrations_a:registrations!matches_registration_a_id_fkey(display_name), registrations_b:registrations!matches_registration_b_id_fkey(display_name)",
+          )
+          .in("round_id", roundIds)
+      : Promise.resolve({ data: [] as MatchRow[] }),
+  ]);
+
   const formatBlockCatalog: FormatBlockCatalog = { elimination: [], grouping: [], special: [] };
   for (const row of catalogRows ?? []) {
     formatBlockCatalog[row.category as "elimination" | "grouping" | "special"].push({ key: row.key, label: row.label });
@@ -166,6 +204,9 @@ export default async function AdminFormatPage({
   const scoringRules = (scoringRuleRows ?? []) as unknown as ScoringRuleRow[];
   const defaultRule = scoringRules.find((r) => r.round_id === null);
   const teams = (teamRows ?? []) as unknown as TeamRow[];
+  const pools = (poolRows ?? []) as unknown as PoolRow[];
+  const matches = (matchRows ?? []) as unknown as MatchRow[];
+  const poolNameById = new Map(pools.map((p) => [p.id, p.name]));
 
   const indices = (rounds ?? []).map((r) => r.round_index);
   const minIdx = Math.min(...indices);
@@ -181,6 +222,7 @@ export default async function AdminFormatPage({
       | { theme_type?: "keyword" | "genre"; theme_value?: string }
       | undefined;
     const teamConfig = roundBlocks.find((b) => b.format_blocks!.key === "team")?.config as { group_count?: number } | undefined;
+    const lotteryConfig = roundBlocks.find((b) => b.format_blocks!.key === "lottery")?.config as { pool_size?: number } | undefined;
     const overrideRule = scoringRules.find((sr) => sr.round_id === r.id) ?? null;
 
     return {
@@ -205,6 +247,28 @@ export default async function AdminFormatPage({
             registrationId: m.registration_id,
             displayName: oneDisplayName(m.registrations),
           })),
+        })),
+      poolSize: lotteryConfig?.pool_size ?? null,
+      pools: pools
+        .filter((p) => p.round_id === r.id)
+        .map((p) => ({
+          id: p.id,
+          name: p.name,
+          members: p.pool_members.map((m) => ({
+            registrationId: m.registration_id,
+            displayName: oneDisplayName(m.registrations),
+          })),
+        })),
+      matches: matches
+        .filter((m) => m.round_id === r.id)
+        .map((m) => ({
+          id: m.id,
+          poolName: poolNameById.get(m.pool_id) ?? "",
+          registrationAId: m.registration_a_id,
+          registrationADisplayName: oneDisplayName(m.registrations_a),
+          registrationBId: m.registration_b_id,
+          registrationBDisplayName: oneDisplayName(m.registrations_b),
+          winnerRegistrationId: m.winner_registration_id,
         })),
       scoringRule: overrideRule ? { id: overrideRule.id, items: toScoreItems(overrideRule.score_items ?? []) } : null,
       submissionOpensAt: r.submission_opens_at,

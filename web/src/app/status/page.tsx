@@ -96,9 +96,11 @@ export default async function StatusPage() {
   // 完全冪等,條件不成立就什麼都不做,失敗也不影響這頁本身的顯示。
   try {
     await Promise.all(competitionIds.map((id) => supabase.rpc("check_and_form_pending_teams", { p_competition_id: id })));
+    await Promise.all(competitionIds.map((id) => supabase.rpc("check_and_form_pending_pools", { p_competition_id: id })));
+    await Promise.all(competitionIds.map((id) => supabase.rpc("check_and_form_pending_matches", { p_competition_id: id })));
     await dispatchPendingTeamNotifications(competitionIds);
   } catch {
-    // 分組檢查/送出通知失敗不影響「我的投稿」頁本身的顯示
+    // 分組/配對檢查/送出通知失敗不影響「我的投稿」頁本身的顯示
   }
 
   const { data: rounds } = competitionIds.length

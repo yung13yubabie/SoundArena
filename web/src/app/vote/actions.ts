@@ -59,3 +59,38 @@ export async function castVote(roundId: string, submissionId: string, aiUsageRat
   revalidatePath("/vote");
   return { success: true };
 }
+
+// 循環賽配對投票——跟 castVote() 同一個理由:match_votes 沒有開放任何 authenticated
+// INSERT policy(voter_ip 只有這裡量得到真實值),寫入一定要走 service_role。
+export async function castMatchVote(matchId: string, chosenRegistrationId: string): Promise<ActionResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "請先登入" };
+
+  const voterIp = await getClientIp();
+
+  const serviceClient = createServiceClient();
+  const { error } = await serviceClient.from("match_votes").insert({
+    match_id: matchId,
+    voter_id: user.id,
+    voter_ip: voterIp,
+    chosen_registration_id: chosenRegistrationId,
+  });
+
+  if (error) {
+    return {
+      error: toFriendlyError(error, [
+        { test: (_m, c) => c === "23505", friendly: (error.message.includes("voter_ip")
+          ? "這個網路連線已經投過這一場了（同網路只能投一票，避免灌票）——如果你是跟朋友共用 wifi，可以試試切換成行動網路再投一次"
+          : "你已經投過這一場了") },
+        { test: (m) => m.includes("cannot vote on your own match"), friendly: "不能投自己參與的場次" },
+        { test: (m) => m.includes("chosen registration is not part of this match"), friendly: "選擇的對象不在這場配對裡" },
+      ]),
+    };
+  }
+
+  revalidatePath("/vote");
+  return { success: true };
+}
