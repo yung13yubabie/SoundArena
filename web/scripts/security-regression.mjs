@@ -1033,6 +1033,121 @@ async function main() {
     !deGen4Err && (deR4Matches ?? []).length === 1 && deR4Matches[0].bracket === "final" && JSON.stringify(deR4Ids) === JSON.stringify(deExpectedR4Ids),
     `error=${deGen4Err?.message ?? "none"} matches=${(deR4Matches ?? []).length} bracket=${deR4Matches?.[0]?.bracket}`,
   );
+
+  // ============ 外卡復活戰(wildcard_revival):整場限用一次、候選人驗證、下一輪配對
+  // 已產生就擋下開啟、投票驗證(自己不能投自己、只能投候選人)、確認結果套用回
+  // active。候選名單排序演算法(哪些人算「離晉級線最近」)是 TS 層的事,不在這裡測
+  // (RPC 只驗證候選人真的是 source_round 淘汰的人,不重算排名)。============
+  const compWC = await makeCompetition(organizerA.id, "wildcard");
+  await admin.from("competitions").update({ registration_closes_at: new Date(Date.now() - 60_000).toISOString() }).eq("id", compWC);
+  const { data: wcRound1 } = await admin
+    .from("rounds")
+    .insert({ competition_id: compWC, round_index: 1, name: "初選", voting_opens_at: new Date(Date.now() - 60_000).toISOString(), voting_closes_at: new Date(Date.now() - 1_000).toISOString() })
+    .select("id")
+    .single();
+  await admin.from("rounds").insert({ competition_id: compWC, round_index: 2, name: "決賽" });
+
+  const wcRegIds = [];
+  for (let i = 0; i < 4; i++) {
+    const u = await makeUser(`wcp${i}`);
+    const { data: r } = await admin.from("registrations").insert({ competition_id: compWC, user_id: u.id, suno_handle: `wc-p${i}`, display_name: `WC P${i}`, review_status: "approved" }).select("id").single();
+    wcRegIds.push({ id: r.id, userId: u.id });
+  }
+  // 用真正的 finalize_round_results 淘汰前兩人,eliminated_in_round_id 由 RPC 內部設好
+  await organizerAClient.rpc("finalize_round_results", { p_round_id: wcRound1.id, p_eliminate_registration_ids: [wcRegIds[0].id, wcRegIds[1].id] });
+
+  const { error: wcStrangerOpenErr } = await organizerBClient.rpc("open_wildcard_revival_event", {
+    p_competition_id: compWC, p_source_round_id: wcRound1.id, p_candidate_registration_ids: [wcRegIds[0].id],
+    p_voting_opens_at: new Date(Date.now() - 1_000).toISOString(), p_voting_closes_at: new Date(Date.now() + 60_000).toISOString(),
+  });
+  record("外卡復活: 陌生人不能開啟別人比賽的外卡復活投票", !!wcStrangerOpenErr && wcStrangerOpenErr.message.includes("insufficient permission"), wcStrangerOpenErr?.message);
+
+  const { error: wcBadCandidateErr } = await organizerAClient.rpc("open_wildcard_revival_event", {
+    p_competition_id: compWC, p_source_round_id: wcRound1.id, p_candidate_registration_ids: [wcRegIds[2].id],
+    p_voting_opens_at: new Date(Date.now() - 1_000).toISOString(), p_voting_closes_at: new Date(Date.now() + 60_000).toISOString(),
+  });
+  record(
+    "外卡復活: 候選名單裡塞一個不是這輪淘汰的人會被拒絕",
+    !!wcBadCandidateErr && wcBadCandidateErr.message.includes("not eliminated in the source round"),
+    wcBadCandidateErr?.message,
+  );
+
+  const wcClosesAt = new Date(Date.now() + 3_000).toISOString();
+  const { data: wcEventId, error: wcOpenErr } = await organizerAClient.rpc("open_wildcard_revival_event", {
+    p_competition_id: compWC, p_source_round_id: wcRound1.id, p_candidate_registration_ids: [wcRegIds[0].id, wcRegIds[1].id],
+    p_voting_opens_at: new Date(Date.now() - 1_000).toISOString(), p_voting_closes_at: wcClosesAt,
+  });
+  record("外卡復活: 主辦人可以正常開啟,候選人是真的被淘汰的人", !wcOpenErr && !!wcEventId, `error=${wcOpenErr?.message ?? "none"}`);
+
+  const { error: wcReopenErr } = await organizerAClient.rpc("open_wildcard_revival_event", {
+    p_competition_id: compWC, p_source_round_id: wcRound1.id, p_candidate_registration_ids: [wcRegIds[0].id],
+    p_voting_opens_at: new Date(Date.now() - 1_000).toISOString(), p_voting_closes_at: new Date(Date.now() + 60_000).toISOString(),
+  });
+  record("外卡復活: 整場比賽限用一次,第二次開啟被 unique 擋下", !!wcReopenErr && wcReopenErr.code === "23505", `code=${wcReopenErr?.code}`);
+
+  const wcCandidateOwner = wcRegIds[0];
+  const { error: wcSelfVoteErr } = await admin
+    .from("wildcard_revival_votes")
+    .insert({ event_id: wcEventId, voter_id: wcCandidateOwner.userId, voter_ip: "10.5.1.1", chosen_registration_id: wcCandidateOwner.id });
+  record("外卡復活: 候選人不能投給自己", !!wcSelfVoteErr && wcSelfVoteErr.message.includes("cannot vote for yourself"), wcSelfVoteErr?.message);
+
+  const { error: wcNonCandidateErr } = await admin
+    .from("wildcard_revival_votes")
+    .insert({ event_id: wcEventId, voter_id: (await makeUser("wcvoterbad")).id, voter_ip: "10.5.1.2", chosen_registration_id: wcRegIds[2].id });
+  record("外卡復活: 投給不在候選名單裡的人會被拒絕", !!wcNonCandidateErr && wcNonCandidateErr.message.includes("not a candidate"), wcNonCandidateErr?.message);
+
+  const wcVoter = await makeUser("wcvoter1");
+  const { error: wcVoteErr } = await admin
+    .from("wildcard_revival_votes")
+    .insert({ event_id: wcEventId, voter_id: wcVoter.id, voter_ip: "10.5.1.3", chosen_registration_id: wcRegIds[0].id });
+  record("外卡復活: 正常投票成功", !wcVoteErr, wcVoteErr?.message);
+
+  const { error: wcDupVoteErr } = await admin
+    .from("wildcard_revival_votes")
+    .insert({ event_id: wcEventId, voter_id: wcVoter.id, voter_ip: "10.5.1.4", chosen_registration_id: wcRegIds[1].id });
+  record("外卡復活: 同一人不能投第二次", !!wcDupVoteErr && wcDupVoteErr.code === "23505", `code=${wcDupVoteErr?.code}`);
+
+  const { error: wcTooEarlyErr } = await organizerAClient.rpc("resolve_wildcard_revival_event", { p_event_id: wcEventId, p_winner_registration_id: wcRegIds[0].id });
+  record("外卡復活: 投票還沒截止不能確認結果", !!wcTooEarlyErr && wcTooEarlyErr.message.includes("cannot resolve before voting has closed"), wcTooEarlyErr?.message);
+
+  await new Promise((resolve) => setTimeout(resolve, 4_000));
+
+  const { error: wcResolveErr } = await organizerAClient.rpc("resolve_wildcard_revival_event", { p_event_id: wcEventId, p_winner_registration_id: wcRegIds[0].id });
+  const { data: wcWinnerAfter } = await admin.from("registrations").select("status, eliminated_in_round_id").eq("id", wcRegIds[0].id).single();
+  record(
+    "外卡復活: 投票截止後主辦人可以確認結果,贏家的報名狀態改回 active",
+    !wcResolveErr && wcWinnerAfter?.status === "active" && wcWinnerAfter?.eliminated_in_round_id === null,
+    `error=${wcResolveErr?.message ?? "none"} status=${wcWinnerAfter?.status}`,
+  );
+
+  const { error: wcExtendAfterResolveErr } = await organizerAClient.rpc("extend_wildcard_revival_voting", { p_event_id: wcEventId, p_new_closes_at: new Date(Date.now() + 60_000).toISOString() });
+  record("外卡復活: 已經確認結果的事件不能再延長投票時間", !!wcExtendAfterResolveErr && wcExtendAfterResolveErr.message.includes("already been resolved"), wcExtendAfterResolveErr?.message);
+
+  // 下一輪配對已產生時擋下開啟——另開一場比賽測試(unique(competition_id) 讓
+  // compWC 沒辦法拿來測第二次開啟)
+  const compWCBlocked = await makeCompetition(organizerA.id, "wildcardBlocked");
+  await admin.from("competitions").update({ registration_closes_at: new Date(Date.now() - 60_000).toISOString() }).eq("id", compWCBlocked);
+  const { data: wcbRound1 } = await admin
+    .from("rounds")
+    .insert({ competition_id: compWCBlocked, round_index: 1, name: "初選", voting_opens_at: new Date(Date.now() - 60_000).toISOString(), voting_closes_at: new Date(Date.now() - 1_000).toISOString() })
+    .select("id")
+    .single();
+  const { data: wcbRound2 } = await admin.from("rounds").insert({ competition_id: compWCBlocked, round_index: 2, name: "決賽" }).select("id").single();
+  const wcbUser = await makeUser("wcbp0");
+  const { data: wcbReg } = await admin.from("registrations").insert({ competition_id: compWCBlocked, user_id: wcbUser.id, suno_handle: "wcb-p0", display_name: "WCB P0", review_status: "approved" }).select("id").single();
+  await organizerAClient.rpc("finalize_round_results", { p_round_id: wcbRound1.id, p_eliminate_registration_ids: [wcbReg.id] });
+  // 模擬下一輪配對已經產生(直接插一筆 teams 列,不需要真的跑分組演算法)
+  await admin.from("teams").insert({ round_id: wcbRound2.id, name: "第 1 隊" });
+
+  const { error: wcBlockedErr } = await organizerAClient.rpc("open_wildcard_revival_event", {
+    p_competition_id: compWCBlocked, p_source_round_id: wcbRound1.id, p_candidate_registration_ids: [wcbReg.id],
+    p_voting_opens_at: new Date(Date.now() - 1_000).toISOString(), p_voting_closes_at: new Date(Date.now() + 60_000).toISOString(),
+  });
+  record(
+    "外卡復活: 下一輪分組/配對已經產生時,開啟被擋下(時間窗已過)",
+    !!wcBlockedErr && wcBlockedErr.message.includes("next round pairing has already been formed"),
+    wcBlockedErr?.message,
+  );
 }
 
 async function cleanup() {

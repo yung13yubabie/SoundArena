@@ -94,3 +94,40 @@ export async function castMatchVote(matchId: string, chosenRegistrationId: strin
   revalidatePath("/vote");
   return { success: true };
 }
+
+// 外卡復活投票——同一個理由:wildcard_revival_votes 沒有開放任何 authenticated
+// INSERT policy,寫入一定要走 service_role。
+export async function castWildcardRevivalVote(eventId: string, chosenRegistrationId: string): Promise<ActionResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "請先登入" };
+
+  const voterIp = await getClientIp();
+
+  const serviceClient = createServiceClient();
+  const { error } = await serviceClient.from("wildcard_revival_votes").insert({
+    event_id: eventId,
+    voter_id: user.id,
+    voter_ip: voterIp,
+    chosen_registration_id: chosenRegistrationId,
+  });
+
+  if (error) {
+    return {
+      error: toFriendlyError(error, [
+        { test: (_m, c) => c === "23505", friendly: (error.message.includes("voter_ip")
+          ? "這個網路連線已經投過外卡復活票了（同網路只能投一票，避免灌票）——如果你是跟朋友共用 wifi，可以試試切換成行動網路再投一次"
+          : "你已經投過外卡復活票了") },
+        { test: (m) => m.includes("cannot vote for yourself"), friendly: "不能投給自己" },
+        { test: (m) => m.includes("chosen registration is not a candidate"), friendly: "選擇的對象不在候選名單裡" },
+        { test: (m) => m.includes("voting has not opened"), friendly: "外卡復活投票還沒開始" },
+        { test: (m) => m.includes("voting has closed"), friendly: "外卡復活投票已經結束" },
+      ]),
+    };
+  }
+
+  revalidatePath("/vote/wildcard");
+  return { success: true };
+}

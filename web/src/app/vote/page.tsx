@@ -14,6 +14,11 @@ interface RoundPickerRow {
   competitions: { name: string } | { name: string }[] | null;
 }
 
+interface WildcardEventPickerRow {
+  id: string;
+  competitions: { name: string } | { name: string }[] | null;
+}
+
 interface SubmissionRow {
   id: string;
   title: string | null;
@@ -66,6 +71,15 @@ export default async function VotePage({
 
     const openRounds = (rounds ?? []) as unknown as RoundPickerRow[];
 
+    const { data: wildcardEvents } = await supabase
+      .from("wildcard_revival_events")
+      .select("id, competitions!inner(name, is_public)")
+      .eq("competitions.is_public", true)
+      .is("resolved_at", null)
+      .lte("voting_opens_at", nowIso)
+      .gt("voting_closes_at", nowIso);
+    const openWildcardEvents = (wildcardEvents ?? []) as unknown as WildcardEventPickerRow[];
+
     return (
       <div>
         <SiteHeader authed active="vote" />
@@ -76,6 +90,19 @@ export default async function VotePage({
               以下是目前開放投票中的輪次。
             </p>
           </div>
+          {openWildcardEvents.length > 0 && (
+            <div className="mb-6">
+              <div className="mb-2.5 text-[11px] tracking-wide text-ink-faint uppercase">外卡復活投票</div>
+              <div className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-4">
+                {openWildcardEvents.map((e) => (
+                  <Link key={e.id} href={`/vote/wildcard?event=${e.id}`} className="glass block p-4.5 hover:border-accent/30">
+                    <div className="mb-1 text-[15px]">外卡復活投票</div>
+                    <div className="text-[12px] text-ink-faint">{one(e.competitions)?.name ?? "未命名比賽"}</div>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
           {openRounds.length === 0 ? (
             <EmptyState icon="inbox" title="目前沒有開放投票的輪次" sub="等主辦方開放投票期後再回來看看" />
           ) : (

@@ -23,6 +23,9 @@ import {
   cleanupNonFinalistAudio,
   swapTeamMember,
   setRoundEliminationPercent,
+  openWildcardRevival,
+  extendWildcardRevivalVoting,
+  finalizeWildcardRevival,
 } from "./actions";
 
 export interface ScoreItemData {
@@ -97,6 +100,21 @@ export interface RoundData {
 export interface CompetitionData {
   id: string;
   name: string;
+}
+
+export interface WildcardRevivalCandidateData {
+  registrationId: string;
+  displayName: string;
+}
+
+export interface WildcardRevivalEventData {
+  id: string;
+  sourceRoundName: string;
+  votingOpensAt: string;
+  votingClosesAt: string;
+  resolvedAt: string | null;
+  winnerDisplayName: string | null;
+  candidates: WildcardRevivalCandidateData[];
 }
 
 export interface FormatBlockCatalog {
@@ -649,6 +667,143 @@ function DoubleEliminationPanel({ matches }: { matches: MatchData[] }) {
   );
 }
 
+function WildcardRevivalPanel({ competitionId, event }: { competitionId: string; event: WildcardRevivalEventData | null }) {
+  const [candidateN, setCandidateN] = useState("3");
+  const [opensAt, setOpensAt] = useState(() => toDatetimeLocalInput(new Date().toISOString()));
+  const [closesAt, setClosesAt] = useState("");
+  const [extendClosesAt, setExtendClosesAt] = useState("");
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleOpen() {
+    setPending(true);
+    setError(null);
+    const n = parseInt(candidateN, 10);
+    const result = await openWildcardRevival(competitionId, Number.isFinite(n) && n > 0 ? n : 3, fromDatetimeLocalInput(opensAt), fromDatetimeLocalInput(closesAt));
+    setPending(false);
+    if ("error" in result) setError(result.error);
+  }
+
+  async function handleExtend() {
+    if (!event) return;
+    setPending(true);
+    setError(null);
+    const result = await extendWildcardRevivalVoting(event.id, fromDatetimeLocalInput(extendClosesAt));
+    setPending(false);
+    if ("error" in result) setError(result.error);
+  }
+
+  async function handleFinalize() {
+    if (!event) return;
+    setPending(true);
+    setError(null);
+    const result = await finalizeWildcardRevival(event.id);
+    setPending(false);
+    if ("error" in result) setError(result.error);
+  }
+
+  const nowIso = new Date().toISOString();
+  const votingClosed = !!event && event.votingClosesAt <= nowIso;
+
+  return (
+    <div className="glass mb-5 p-4.5">
+      <div className="mb-1 text-[13.5px] font-semibold text-ink">外卡復活戰</div>
+      <div className="mb-3 text-[11.5px] leading-relaxed text-ink-faint">
+        整場比賽限用一次：候選人是「觸發當下最近一次確認結果的那一輪」被淘汰者中離晉級線最近的幾位，開放觀眾投票決定誰復活。只適用單敗淘汰／循環賽／月週期累積制，且必須在下一輪配對產生之前開啟（否則這次機會就錯過，但整場還有下次機會）。
+      </div>
+
+      {!event ? (
+        <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+          <div>
+            <label className="mb-1 block text-[10.5px] tracking-wide text-ink-faint uppercase">候選人數（前N名）</label>
+            <input
+              type="number"
+              min={1}
+              value={candidateN}
+              onChange={(e) => setCandidateN(e.target.value)}
+              className="w-full rounded-lg border border-panel-border bg-black/25 px-2.5 py-2 text-[12.5px] text-ink"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-[10.5px] tracking-wide text-ink-faint uppercase">投票開始</label>
+            <input
+              type="datetime-local"
+              value={opensAt}
+              onChange={(e) => setOpensAt(e.target.value)}
+              className="w-full rounded-lg border border-panel-border bg-black/25 px-2.5 py-2 text-[12.5px] text-ink [color-scheme:dark]"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-[10.5px] tracking-wide text-ink-faint uppercase">投票截止</label>
+            <input
+              type="datetime-local"
+              value={closesAt}
+              onChange={(e) => setClosesAt(e.target.value)}
+              className="w-full rounded-lg border border-panel-border bg-black/25 px-2.5 py-2 text-[12.5px] text-ink [color-scheme:dark]"
+            />
+          </div>
+          {error && <p className="col-span-full text-[12px] text-bad">{error}</p>}
+          <div className="col-span-full">
+            <button
+              onClick={handleOpen}
+              disabled={pending || !closesAt}
+              className="rounded-[9px] border border-panel-border bg-white/[0.04] px-3.5 py-1.75 text-[12px] font-semibold text-ink disabled:opacity-45"
+            >
+              {pending ? "開啟中…" : "開啟外卡復活投票"}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="text-[12.5px]">
+          <div className="mb-1.5 text-ink-dim">來源輪次：{event.sourceRoundName}</div>
+          <div className="mb-2.5 text-ink-dim">
+            候選人：{event.candidates.map((c) => c.displayName).join("、")}
+          </div>
+          {event.resolvedAt ? (
+            <div className="text-accent font-semibold">已確認結果，復活者：{event.winnerDisplayName}</div>
+          ) : (
+            <>
+              <div className="mb-2 text-ink-faint">
+                投票時間：{new Date(event.votingOpensAt).toLocaleString("zh-TW")} ～ {new Date(event.votingClosesAt).toLocaleString("zh-TW")}
+              </div>
+              {error && <p className="mb-2 text-[12px] text-bad">{error}</p>}
+              {votingClosed ? (
+                <button
+                  onClick={handleFinalize}
+                  disabled={pending}
+                  className="rounded-[9px] border border-panel-border bg-white/[0.04] px-3.5 py-1.75 text-[12px] font-semibold text-ink disabled:opacity-45"
+                >
+                  {pending ? "確認中…" : "確認外卡復活結果"}
+                </button>
+              ) : (
+                <div className="text-ink-faint">投票進行中，截止後才能確認結果。</div>
+              )}
+              <div className="mt-3 flex items-end gap-2">
+                <div>
+                  <label className="mb-1 block text-[10.5px] tracking-wide text-ink-faint uppercase">平手時可延長投票截止至</label>
+                  <input
+                    type="datetime-local"
+                    value={extendClosesAt}
+                    onChange={(e) => setExtendClosesAt(e.target.value)}
+                    className="rounded-lg border border-panel-border bg-black/25 px-2.5 py-2 text-[12.5px] text-ink [color-scheme:dark]"
+                  />
+                </div>
+                <button
+                  onClick={handleExtend}
+                  disabled={pending || !extendClosesAt}
+                  className="rounded-[9px] border border-panel-border bg-white/[0.04] px-3.5 py-1.75 text-[12px] font-semibold text-ink disabled:opacity-45"
+                >
+                  延長
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function RoundFormatCard({
   round,
   competitionId,
@@ -1112,6 +1267,7 @@ interface AdminFormatClientProps {
   competitionList: Array<{ id: string; name: string }>;
   isPlatformAdmin?: boolean;
   hasRegistrations: boolean;
+  wildcardRevival: WildcardRevivalEventData | null;
 }
 
 export function AdminFormatClient({
@@ -1124,6 +1280,7 @@ export function AdminFormatClient({
   competitionList,
   isPlatformAdmin = false,
   hasRegistrations,
+  wildcardRevival,
 }: AdminFormatClientProps) {
   const [isPending, startTransition] = useTransition();
 
@@ -1189,6 +1346,10 @@ export function AdminFormatClient({
       >
         <Icon name="plus" size={13} /> 新增中間輪次
       </button>
+
+      <div className="mt-5">
+        <WildcardRevivalPanel competitionId={competition.id} event={wildcardRevival} />
+      </div>
     </AdminShell>
   );
 }

@@ -11,6 +11,7 @@ import {
   type ScoreItemData,
   type ScoreItemTemplate,
   type FormatBlockCatalog,
+  type WildcardRevivalEventData,
 } from "./AdminFormatClient";
 
 interface ScoreItemRow {
@@ -287,6 +288,34 @@ export default async function AdminFormatPage({
     name: competition.name,
   };
 
+  function oneRel<T>(value: T | T[] | null): T | null {
+    return Array.isArray(value) ? (value[0] ?? null) : value;
+  }
+
+  const { data: wcEventRow } = await supabase
+    .from("wildcard_revival_events")
+    .select("id, voting_opens_at, voting_closes_at, resolved_at, rounds(name), registrations(display_name)")
+    .eq("competition_id", competition.id)
+    .maybeSingle();
+  const { data: wcCandidateRows } = wcEventRow
+    ? await supabase.from("wildcard_revival_candidates").select("registration_id, registrations(display_name)").eq("event_id", wcEventRow.id)
+    : { data: [] as { registration_id: string; registrations: { display_name: string } | { display_name: string }[] | null }[] };
+
+  const wildcardRevival: WildcardRevivalEventData | null = wcEventRow
+    ? {
+        id: wcEventRow.id,
+        sourceRoundName: oneRel(wcEventRow.rounds)?.name ?? "",
+        votingOpensAt: wcEventRow.voting_opens_at,
+        votingClosesAt: wcEventRow.voting_closes_at,
+        resolvedAt: wcEventRow.resolved_at,
+        winnerDisplayName: wcEventRow.resolved_at ? (oneRel(wcEventRow.registrations)?.display_name ?? null) : null,
+        candidates: (wcCandidateRows ?? []).map((c) => ({
+          registrationId: c.registration_id,
+          displayName: oneRel(c.registrations)?.display_name ?? "（未命名參賽者）",
+        })),
+      }
+    : null;
+
   const defaultItems: ScoreItemData[] = defaultRule ? toScoreItems(defaultRule.score_items ?? []) : [];
 
   return (
@@ -300,6 +329,7 @@ export default async function AdminFormatPage({
       competitionList={competitionList}
       isPlatformAdmin={isPlatformAdmin}
       hasRegistrations={(registrationCount ?? 0) > 0}
+      wildcardRevival={wildcardRevival}
     />
   );
 }

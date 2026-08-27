@@ -8,6 +8,7 @@ import { deleteAudioObject } from "@/lib/storage";
 import { planAudioRetention } from "@/lib/audioRetention";
 import { dispatchPendingTeamNotifications } from "@/lib/notifications";
 import { createCompetitionChannel, grantDiscordChannelAccess } from "@/lib/discord";
+import { computeWildcardRevivalCandidates, computeWildcardRevivalOutcome } from "@/lib/wildcardRevival";
 
 type ActionResult = { success: true } | { error: string };
 
@@ -422,5 +423,74 @@ export async function swapTeamMember(registrationId: string, newTeamId: string):
   }
 
   revalidatePath("/admin/format");
+  return { success: true };
+}
+
+// 外卡復活——候選名單是「觸發當下最近一次確認結果的那一輪」,取前 candidateN 名
+// (離晉級線最近),整場比賽限用一次(RPC 端用 unique(competition_id) 保證)。
+export async function openWildcardRevival(competitionId: string, candidateN: number, opensAt: string, closesAt: string): Promise<ActionResult> {
+  const supabase = await createClient();
+
+  const { data: sourceRound } = await supabase
+    .from("rounds")
+    .select("id")
+    .eq("competition_id", competitionId)
+    .not("results_finalized_at", "is", null)
+    .order("round_index", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!sourceRound) return { error: "目前還沒有任何一輪確認過結果，無法開啟外卡復活投票" };
+
+  const candidateIds = await computeWildcardRevivalCandidates(supabase, competitionId, sourceRound.id, candidateN);
+  if (candidateIds.length === 0) return { error: "找不到候選人（最近一輪確認結果沒有人被淘汰）" };
+
+  const { error } = await supabase.rpc("open_wildcard_revival_event", {
+    p_competition_id: competitionId,
+    p_source_round_id: sourceRound.id,
+    p_candidate_registration_ids: candidateIds,
+    p_voting_opens_at: opensAt,
+    p_voting_closes_at: closesAt,
+  });
+  if (error) {
+    return {
+      error: toFriendlyError(error, [
+        { test: (_m, c) => c === "23505", friendly: "這場比賽已經用過外卡復活了,整場限用一次" },
+        { test: (m) => m.includes("next round pairing has already been formed"), friendly: "下一輪的分組/配對已經產生,這次機會已經錯過(比賽後續其他輪次確認結果後可以再試)" },
+        { test: (m) => m.includes("source round has not been finalized"), friendly: "這一輪還沒確認結果" },
+        { test: (m) => m.includes("invalid voting window"), friendly: "投票時間設定不正確" },
+      ]),
+    };
+  }
+
+  revalidatePath("/admin/format");
+  return { success: true };
+}
+
+export async function extendWildcardRevivalVoting(eventId: string, newClosesAt: string): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("extend_wildcard_revival_voting", { p_event_id: eventId, p_new_closes_at: newClosesAt });
+  if (error) return { error: toFriendlyError(error) };
+  revalidatePath("/admin/format");
+  return { success: true };
+}
+
+// 確認外卡復活結果——票數最高的候選人贏,平手就整個拒絕確認,比照單敗/雙敗淘汰
+// 「確認本輪結果」平手擋下的處理模式。
+export async function finalizeWildcardRevival(eventId: string): Promise<ActionResult> {
+  const outcome = await computeWildcardRevivalOutcome(eventId);
+  if (!outcome.ok) {
+    const tiedList = outcome.tiedCandidates.map((c) => `${c.displayName}(${c.votes}票)`).join("、");
+    return { error: `最高票平手,無法決定復活者:${tiedList}。請延長投票時間,等更多人投票後再重新確認` };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("resolve_wildcard_revival_event", {
+    p_event_id: eventId,
+    p_winner_registration_id: outcome.winnerRegistrationId,
+  });
+  if (error) return { error: toFriendlyError(error) };
+
+  revalidatePath("/admin/format");
+  revalidatePath("/status");
   return { success: true };
 }
