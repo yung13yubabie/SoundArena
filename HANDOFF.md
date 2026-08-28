@@ -1507,3 +1507,19 @@ grilling 過程中使用者兩次糾正我的初版提案:(1)循環賽不能重�
 ### 下一步
 
 「特殊機制」分類原本兩個純標籤(業界導師制、敗部復活戰)至此都處理完畢(一個移除、一個做完整套邏輯)。剩下 `themed_round`(限定主題輪)已經是顯示型的完整功能,不需要再擴充。下一步照使用者稍早的指示「最後在搞UI」——瀏覽器實際點過這一整批(含更早的團隊分組、Discord頻道、循環賽、單敗/雙敗淘汰、外卡復活戰)所有新畫面,目前全部都只驗證到資料庫/RPC層。
+
+## 08-28:Codex 對抗式審查(codex:codex-rescue)找到 4 個真實漏洞並修復
+
+使用者要求對整批賽制細節填空功能做對抗式測試,委派 `codex:codex-rescue`。Codex 實際跑在受限沙盒(shell 被拒絕、工作目錄唯讀、瀏覽器啟動失敗),**沒有做到要求的真實瀏覽器 E2E**,只完成純靜態審查,回報 4 項發現。逐項對照原始碼、用真實資料庫(含真實 anon-key session client)驗證後**全部確認為真**。細節見 [ADR-0052](docs/adr/0052-codex-adversarial-review-fixes.md)。
+
+**Finding 1(高)**:`match_votes` 的驗證 trigger 從循環賽批次建立以來就沒有投票視窗檢查,配對投票(循環賽/單敗/雙敗淘汰)任何時間都能投,不受視窗約束。補上比照 `votes` 表同一套的 opens_at/closes_at 檢查。
+
+**Finding 2(高,但是既有投票機制原本就有的根本缺口,不是這幾批新引入的)**:投稿表單 `allowPublicPlayback` 預設 false,一般投票者的 session 用真實 anon-key 登入實測,完全讀不到別人的投稿內容(RLS 只放行投稿者自己/主辦人/`allow_public_playback=true`)。新增 `get_votable_submissions()`/`get_wildcard_revival_candidates()` 兩支 security definer RPC,只在投票視窗開放中回傳安全欄位,刻意不擴大 table 本身的 RLS。`/vote`、`/vote/wildcard` 改用這兩支 RPC。目前正式環境還沒有真實投稿,還沒有真實使用者受影響。
+
+**Finding 3(高)**:外卡復活的 `resolve_wildcard_revival_event()` 原本不驗票,主辦人技術上可以指定任何候選人復活,違背 grilling 選定的「觀眾投票決定」設計。改成 RPC 自己算票數,跟傳入的贏家不一致或平手都拒絕。
+
+**Finding 4(中)**:雙敗淘汰的敗場數查詢只用 `competition_id` 篩選,沒限定只算雙敗淘汰輪次——同一場比賽前面輪次是別種賽制時,輸贏會被誤算進雙敗淘汰的敗場數。補上格式積木過濾。
+
+真實 PoC 9/9 通過(過程中兩次因為 PoC 腳本自己的錯誤——用 service_role 呼叫權限閘 RPC、投票視窗設定順序搞反——得到誤導性失敗,排查後確認是腳本問題)。修復 Finding 3 時自己寫出一個新的 SQL bug(CTE 作用域跨陳述式引用,`relation vote_counts does not exist`),另開一個 migration 修正。`security-regression.mjs` 新增 9 項,過程中還發現 Finding 1 修復揭露了循環賽批次(ADR-0048)自己的測試 fixture 問題(`voting_closes_at` 從建立時就在過去,先前沒視窗檢查所以沒暴露),一併修正 fixture。`tsc`/`eslint`/`build`/`security-regression.mjs` 全部 89/89 通過。
+
+**未涵蓋**:Codex 要求的真實瀏覽器 E2E 完全沒有跑成,這批修復的 UI 層面一樣沒有肉眼驗證過,跟之前所有批次同一個缺口。

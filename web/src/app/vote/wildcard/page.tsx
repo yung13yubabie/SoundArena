@@ -16,14 +16,10 @@ interface EventRow {
 
 interface CandidateRow {
   registration_id: string;
-  registrations: { user_id: string; display_name: string } | { user_id: string; display_name: string }[] | null;
-}
-
-interface SubmissionRow {
-  id: string;
+  user_id: string;
+  submission_id: string | null;
   title: string | null;
-  registration_id: string;
-  suno_share_url: string;
+  suno_share_url: string | null;
 }
 
 function one<T>(value: T | T[] | null): T | null {
@@ -62,17 +58,11 @@ export default async function WildcardVotePage({ searchParams }: { searchParams:
   const { data: revealedData } = await supabase.rpc("round_identity_revealed", { p_round_id: event.source_round_id });
   const revealed = revealedData === true;
 
-  const { data: candidateRows } = await supabase
-    .from("wildcard_revival_candidates")
-    .select("registration_id, registrations(user_id, display_name)")
-    .eq("event_id", event.id);
+  // 用 get_wildcard_revival_candidates() RPC 讀,不直接查 wildcard_revival_candidates
+  // 內嵌的 registrations/submissions——一般投票者的 session 受 RLS 限制,兩張表都
+  // 讀不到別人的資料。這支 RPC 只在事件自己的投票視窗開放中才回傳資料。
+  const { data: candidateRows } = await supabase.rpc("get_wildcard_revival_candidates", { p_event_id: event.id });
   const candidates = (candidateRows ?? []) as unknown as CandidateRow[];
-  const candidateRegIds = candidates.map((c) => c.registration_id);
-
-  const { data: submissionRows } = candidateRegIds.length
-    ? await supabase.from("submissions").select("id, title, registration_id, suno_share_url").eq("round_id", event.source_round_id).in("registration_id", candidateRegIds)
-    : { data: [] as SubmissionRow[] };
-  const submissionByRegistration = new Map(((submissionRows ?? []) as SubmissionRow[]).map((s) => [s.registration_id, s]));
 
   const { data: myVote } = await supabase
     .from("wildcard_revival_votes")
@@ -81,17 +71,13 @@ export default async function WildcardVotePage({ searchParams }: { searchParams:
     .eq("voter_id", userId)
     .maybeSingle();
 
-  const items: WildcardCandidate[] = candidates.map((c) => {
-    const reg = one(c.registrations);
-    const sub = submissionByRegistration.get(c.registration_id);
-    return {
-      registrationId: c.registration_id,
-      submissionId: sub?.id ?? null,
-      title: sub ? (revealed ? (sub.title ?? "未命名作品") : "— 標題於匿名階段不顯示 —") : "（這位沒有這一輪的投稿）",
-      isOwn: reg?.user_id === userId,
-      sunoShareUrl: sub && revealed ? sub.suno_share_url : null,
-    };
-  });
+  const items: WildcardCandidate[] = candidates.map((c) => ({
+    registrationId: c.registration_id,
+    submissionId: c.submission_id,
+    title: c.submission_id ? (revealed ? (c.title ?? "未命名作品") : "— 標題於匿名階段不顯示 —") : "（這位沒有這一輪的投稿）",
+    isOwn: c.user_id === userId,
+    sunoShareUrl: c.submission_id && revealed ? c.suno_share_url : null,
+  }));
   const shuffled = revealed ? items : shuffle(items);
 
   return (

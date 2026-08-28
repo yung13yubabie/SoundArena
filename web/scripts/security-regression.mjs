@@ -747,7 +747,7 @@ async function main() {
   await admin.from("competitions").update({ registration_closes_at: new Date(Date.now() - 60_000).toISOString() }).eq("id", compRoundRobin);
   const { data: rrRound } = await admin
     .from("rounds")
-    .insert({ competition_id: compRoundRobin, round_index: 1, name: "初選", voting_opens_at: new Date(Date.now() - 60_000).toISOString(), voting_closes_at: new Date(Date.now() - 1_000).toISOString(), elimination_percent: 34 })
+    .insert({ competition_id: compRoundRobin, round_index: 1, name: "初選", voting_opens_at: new Date(Date.now() - 60_000).toISOString(), voting_closes_at: new Date(Date.now() + 60_000).toISOString(), elimination_percent: 34 })
     .select("id")
     .single();
   const { data: rrLotteryBlock } = await admin.from("format_blocks").select("id").eq("key", "lottery").single();
@@ -811,6 +811,10 @@ async function main() {
     !!rrWrongChoiceErr && rrWrongChoiceErr.message.includes("chosen registration is not part of this match"),
     rrWrongChoiceErr?.message,
   );
+
+  // 上面的配對投票測試需要投票視窗還開著(Codex修復 Finding1 之後 match_votes 會
+  // 檢查視窗),確認結果則需要視窗已經截止——投票測完才把視窗關掉。
+  await admin.from("rounds").update({ voting_closes_at: new Date(Date.now() - 1_000).toISOString() }).eq("id", rrRound.id);
 
   // 3 人 × 34% = floor(1.02) = 1 人該被淘汰,指定 rrRegIds[0] 為算好的淘汰名單(不驗證
   // 實際勝場數計算細節,那已經在真實 PoC 用 tsx 直接 import 正式程式碼驗證過——這裡
@@ -1147,6 +1151,102 @@ async function main() {
     "外卡復活: 下一輪分組/配對已經產生時,開啟被擋下(時間窗已過)",
     !!wcBlockedErr && wcBlockedErr.message.includes("next round pairing has already been formed"),
     wcBlockedErr?.message,
+  );
+
+  // ============ Codex 對抗式審查(codex:codex-rescue)找到、逐項對照原始碼+真實
+  // 資料庫驗證後確認為真的 4 個問題,修復後的永久回歸測試。============
+
+  // Finding 1: match_votes 的驗證 trigger 之前沒檢查投票視窗,任何時間都能投。
+  const compCRF1 = await makeCompetition(organizerA.id, "crf1");
+  const { data: crf1Round } = await admin
+    .from("rounds")
+    .insert({ competition_id: compCRF1, round_index: 1, name: "R1", voting_opens_at: new Date(Date.now() + 60_000).toISOString(), voting_closes_at: new Date(Date.now() + 120_000).toISOString() })
+    .select("id")
+    .single();
+  const crf1p0 = await makeUser("crf1p0");
+  const crf1p1 = await makeUser("crf1p1");
+  const { data: crf1Reg0 } = await admin.from("registrations").insert({ competition_id: compCRF1, user_id: crf1p0.id, suno_handle: "crf1-p0", display_name: "CRF1 P0", review_status: "approved" }).select("id").single();
+  const { data: crf1Reg1 } = await admin.from("registrations").insert({ competition_id: compCRF1, user_id: crf1p1.id, suno_handle: "crf1-p1", display_name: "CRF1 P1", review_status: "approved" }).select("id").single();
+  const { data: crf1Match } = await admin.from("matches").insert({ round_id: crf1Round.id, registration_a_id: crf1Reg0.id, registration_b_id: crf1Reg1.id }).select("id").single();
+  const crf1Voter = await makeUser("crf1voter");
+  const { error: crf1EarlyErr } = await admin.from("match_votes").insert({ match_id: crf1Match.id, voter_id: crf1Voter.id, voter_ip: "10.8.1.1", chosen_registration_id: crf1Reg0.id });
+  record("Codex修復 Finding1: 投票視窗還沒開始時,配對投票被拒絕", !!crf1EarlyErr && crf1EarlyErr.message.includes("voting has not opened"), crf1EarlyErr?.message);
+
+  await admin.from("rounds").update({ voting_opens_at: new Date(Date.now() - 120_000).toISOString(), voting_closes_at: new Date(Date.now() - 60_000).toISOString() }).eq("id", crf1Round.id);
+  const { error: crf1LateErr } = await admin.from("match_votes").insert({ match_id: crf1Match.id, voter_id: crf1Voter.id, voter_ip: "10.8.1.2", chosen_registration_id: crf1Reg0.id });
+  record("Codex修復 Finding1: 投票視窗已截止時,配對投票被拒絕", !!crf1LateErr && crf1LateErr.message.includes("voting has closed"), crf1LateErr?.message);
+
+  // Finding 2: 一般投票者的 session 用 table 直接讀 submissions 時,allow_public_playback
+  // 預設 false 導致讀不到別人的投稿——改用 get_votable_submissions() RPC。
+  const compCRF2 = await makeCompetition(organizerA.id, "crf2");
+  const { data: crf2Round } = await admin
+    .from("rounds")
+    .insert({ competition_id: compCRF2, round_index: 1, name: "R1", voting_opens_at: new Date(Date.now() - 60_000).toISOString(), voting_closes_at: new Date(Date.now() + 60_000).toISOString() })
+    .select("id")
+    .single();
+  const crf2Submitter = await makeUser("crf2sub");
+  const { data: crf2Reg } = await admin.from("registrations").insert({ competition_id: compCRF2, user_id: crf2Submitter.id, suno_handle: "crf2-sub", display_name: "CRF2 Sub", review_status: "approved" }).select("id").single();
+  await admin.from("submissions").insert({ round_id: crf2Round.id, registration_id: crf2Reg.id, suno_share_url: "https://suno.com/s/crf2", title: "CRF2 Song", sharer_handle: "crf2-handle", status: "approved", allow_public_playback: false });
+  const crf2Voter = await makeUser("crf2voter");
+  const crf2VoterClient = await clientFor(crf2Voter.email);
+  const { data: crf2RpcRows, error: crf2RpcErr } = await crf2VoterClient.rpc("get_votable_submissions", { p_round_id: crf2Round.id });
+  record(
+    "Codex修復 Finding2: 一般投票者透過 get_votable_submissions() RPC 讀得到投稿,即使 allow_public_playback=false",
+    !crf2RpcErr && (crf2RpcRows ?? []).length === 1,
+    `error=${crf2RpcErr?.message ?? "none"} rows=${(crf2RpcRows ?? []).length}`,
+  );
+  const { data: crf2DirectRows } = await crf2VoterClient.from("submissions").select("id").eq("round_id", crf2Round.id);
+  record("Codex修復 Finding2(對照組): 直接查 submissions table 仍然讀不到,沒有順手擴大 table RLS", (crf2DirectRows ?? []).length === 0, `rows=${(crf2DirectRows ?? []).length}`);
+
+  // Finding 3: resolve_wildcard_revival_event() 之前不驗票,主辦人可以指定任何
+  // 候選人為贏家——改成 RPC 自己算票數,跟呼叫端傳的贏家不符就拒絕。
+  const compCRF3 = await makeCompetition(organizerA.id, "crf3");
+  const { data: crf3Round } = await admin
+    .from("rounds")
+    .insert({ competition_id: compCRF3, round_index: 1, name: "R1", voting_opens_at: new Date(Date.now() - 120_000).toISOString(), voting_closes_at: new Date(Date.now() - 60_000).toISOString() })
+    .select("id")
+    .single();
+  const crf3c0User = await makeUser("crf3c0");
+  const crf3c1User = await makeUser("crf3c1");
+  const { data: crf3c0 } = await admin.from("registrations").insert({ competition_id: compCRF3, user_id: crf3c0User.id, suno_handle: "crf3-c0", display_name: "CRF3 C0", review_status: "approved" }).select("id").single();
+  const { data: crf3c1 } = await admin.from("registrations").insert({ competition_id: compCRF3, user_id: crf3c1User.id, suno_handle: "crf3-c1", display_name: "CRF3 C1", review_status: "approved" }).select("id").single();
+  await organizerAClient.rpc("finalize_round_results", { p_round_id: crf3Round.id, p_eliminate_registration_ids: [crf3c0.id, crf3c1.id] });
+  const { data: crf3EventId } = await organizerAClient.rpc("open_wildcard_revival_event", {
+    p_competition_id: compCRF3, p_source_round_id: crf3Round.id, p_candidate_registration_ids: [crf3c0.id, crf3c1.id],
+    p_voting_opens_at: new Date(Date.now() - 60_000).toISOString(), p_voting_closes_at: new Date(Date.now() + 3_000).toISOString(),
+  });
+  const crf3v1 = await makeUser("crf3v1");
+  await admin.from("wildcard_revival_votes").insert({ event_id: crf3EventId, voter_id: crf3v1.id, voter_ip: "10.8.2.1", chosen_registration_id: crf3c0.id });
+  await new Promise((resolve) => setTimeout(resolve, 4_000));
+  const { error: crf3WrongErr } = await organizerAClient.rpc("resolve_wildcard_revival_event", { p_event_id: crf3EventId, p_winner_registration_id: crf3c1.id });
+  record("Codex修復 Finding3: 主辦人指定得票較少的候選人為贏家,被 RPC 自己算的票數拒絕", !!crf3WrongErr && crf3WrongErr.message.includes("does not match"), crf3WrongErr?.message);
+  const { error: crf3RightErr } = await organizerAClient.rpc("resolve_wildcard_revival_event", { p_event_id: crf3EventId, p_winner_registration_id: crf3c0.id });
+  record("Codex修復 Finding3: 傳真正得票最高的候選人可以正常確認結果", !crf3RightErr, crf3RightErr?.message);
+
+  // Finding 4: 雙敗淘汰的敗場數之前沒限定只算 double_elimination 輪次的場次——
+  // 同一場比賽如果前面輪次是別種賽制,那些輸贏會被誤算進雙敗淘汰的敗場數。
+  const compCRF4 = await makeCompetition(organizerA.id, "crf4");
+  await admin.from("competitions").update({ registration_closes_at: new Date(Date.now() - 60_000).toISOString() }).eq("id", compCRF4);
+  const { data: crf4RRRound } = await admin
+    .from("rounds")
+    .insert({ competition_id: compCRF4, round_index: 1, name: "循環賽", voting_opens_at: new Date(Date.now() - 60_000).toISOString(), voting_closes_at: new Date(Date.now() - 1_000).toISOString() })
+    .select("id")
+    .single();
+  const { data: crf4DERound } = await admin.from("rounds").insert({ competition_id: compCRF4, round_index: 2, name: "雙敗淘汰" }).select("id").single();
+  const { data: crf4DEBlock } = await admin.from("format_blocks").select("id").eq("key", "double_elimination").single();
+  await admin.from("round_format_blocks").insert({ round_id: crf4DERound.id, format_block_id: crf4DEBlock.id, config: {} });
+  const crf4d0User = await makeUser("crf4d0");
+  const crf4d1User = await makeUser("crf4d1");
+  const { data: crf4d0 } = await admin.from("registrations").insert({ competition_id: compCRF4, user_id: crf4d0User.id, suno_handle: "crf4-d0", display_name: "CRF4 D0", review_status: "approved" }).select("id").single();
+  const { data: crf4d1 } = await admin.from("registrations").insert({ competition_id: compCRF4, user_id: crf4d1User.id, suno_handle: "crf4-d1", display_name: "CRF4 D1", review_status: "approved" }).select("id").single();
+  await admin.from("matches").insert({ round_id: crf4RRRound.id, registration_a_id: crf4d0.id, registration_b_id: crf4d1.id, winner_registration_id: crf4d0.id });
+  await organizerAClient.rpc("finalize_round_results", { p_round_id: crf4RRRound.id, p_eliminate_registration_ids: [] });
+  await organizerAClient.rpc("generate_double_elimination_matches_for_round", { p_round_id: crf4DERound.id });
+  const { data: crf4DEMatches } = await admin.from("matches").select("id, bracket").eq("round_id", crf4DERound.id);
+  record(
+    "Codex修復 Finding4: 循環賽輪次的敗場不誤算進雙敗淘汰,兩人都算0敗配成1場winners",
+    (crf4DEMatches ?? []).length === 1 && crf4DEMatches[0].bracket === "winners",
+    `matches=${(crf4DEMatches ?? []).length} bracket=${crf4DEMatches?.[0]?.bracket}`,
   );
 }
 

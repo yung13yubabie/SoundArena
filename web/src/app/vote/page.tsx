@@ -23,8 +23,8 @@ interface SubmissionRow {
   id: string;
   title: string | null;
   registration_id: string;
+  user_id: string;
   suno_share_url: string;
-  registrations: { user_id: string; display_name: string } | { user_id: string; display_name: string }[] | null;
 }
 
 interface MatchRow {
@@ -139,11 +139,11 @@ export default async function VotePage({
     round.voting_opens_at <= nowIso &&
     nowIso < round.voting_closes_at;
 
-  const { data: submissions } = await supabase
-    .from("submissions")
-    .select("id, title, registration_id, suno_share_url, registrations(user_id, display_name)")
-    .eq("round_id", roundId)
-    .eq("status", "approved");
+  // 用 get_votable_submissions() RPC 讀,不直接查 submissions 表——一般投票者的
+  // session 受 RLS 限制,submissions 只放行「allow_public_playback=true」的投稿
+  // (預設是 false),table RLS 讀不到別人的投稿內容。這支 RPC 只在投票視窗開放中
+  // 才回傳資料,只給投票必要的安全欄位,避免擴大 table 本身的 RLS。
+  const { data: submissions } = await supabase.rpc("get_votable_submissions", { p_round_id: roundId });
 
   const { data: myVote } = await supabase
     .from("votes")
@@ -152,16 +152,13 @@ export default async function VotePage({
     .eq("voter_id", userId)
     .maybeSingle();
 
-  const items: VoteSubmission[] = ((submissions ?? []) as unknown as SubmissionRow[]).map((s) => {
-    const reg = one(s.registrations);
-    return {
-      id: s.id,
-      title: revealed ? (s.title ?? "未命名作品") : "— 標題於匿名階段不顯示 —",
-      isOwn: reg?.user_id === userId,
-      // 匿名階段不能給 Suno 連結當備援——點開會看到作者的 Suno 帳號,直接洩漏身份。
-      sunoShareUrl: revealed ? s.suno_share_url : null,
-    };
-  });
+  const items: VoteSubmission[] = ((submissions ?? []) as unknown as SubmissionRow[]).map((s) => ({
+    id: s.id,
+    title: revealed ? (s.title ?? "未命名作品") : "— 標題於匿名階段不顯示 —",
+    isOwn: s.user_id === userId,
+    // 匿名階段不能給 Suno 連結當備援——點開會看到作者的 Suno 帳號,直接洩漏身份。
+    sunoShareUrl: revealed ? s.suno_share_url : null,
+  }));
 
   const shuffled = revealed ? items : shuffle(items);
 
@@ -189,7 +186,7 @@ export default async function VotePage({
       ((submissions ?? []) as unknown as SubmissionRow[]).map((s) => [s.registration_id, s]),
     );
     const registrationUserById = new Map(
-      ((submissions ?? []) as unknown as SubmissionRow[]).map((s) => [s.registration_id, one(s.registrations)?.user_id]),
+      ((submissions ?? []) as unknown as SubmissionRow[]).map((s) => [s.registration_id, s.user_id]),
     );
 
     const buildSide = (registrationId: string) => {
