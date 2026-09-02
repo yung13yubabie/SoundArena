@@ -169,20 +169,24 @@ export async function toggleFormatBlock(
       if (error) return { error: toFriendlyError(error) };
     }
   } else {
-    const { data: categoryBlocks } = await supabase.from("format_blocks").select("id").eq("category", category);
-    const ids = (categoryBlocks ?? []).map((b) => b.id);
-    if (ids.length) {
-      const { error } = await supabase
-        .from("round_format_blocks")
-        .delete()
-        .eq("round_id", roundId)
-        .in("format_block_id", ids);
-      if (error) return { error: toFriendlyError(error) };
+    // elimination/grouping 改走 set_round_format_block() RPC——單一交易內做
+    // 「已有賽程資料就鎖定/隊伍賽跟淘汰賽制相容性/循環賽必須搭配抽籤分組」的
+    // 驗證,避免 Server Action 分開刪除+插入兩次呼叫之間出現中間態。
+    const { error } = await supabase.rpc("set_round_format_block", {
+      p_round_id: roundId,
+      p_category: category,
+      p_block_key: blockKey,
+    });
+    if (error) {
+      return {
+        error: toFriendlyError(error, [
+          { test: (m) => m.includes("already has real schedule data"), friendly: "這一輪已經產生真實賽程資料或確認過結果，無法再變更淘汰方式/分組方式" },
+          { test: (m) => m.includes("team grouping is not compatible"), friendly: "隊伍賽目前還不支援這種淘汰方式——配對邏輯是以個人為單位，不是以隊伍為單位" },
+          { test: (m) => m.includes("round_robin requires lottery grouping"), friendly: "循環賽需要搭配「抽籤分組」才能運作，請先選抽籤分組" },
+          { test: (m) => m.includes("already has an independent scoring rule override"), friendly: "這一輪已經有獨立評分規則，請先移除才能切成月/週期累積制" },
+        ]),
+      };
     }
-    const { error } = await supabase
-      .from("round_format_blocks")
-      .insert({ round_id: roundId, format_block_id: block.id });
-    if (error) return { error: toFriendlyError(error) };
   }
 
   revalidatePath("/admin/format");
@@ -320,7 +324,15 @@ export async function toggleScoringOverride(
       .insert({ competition_id: competitionId, round_id: roundId })
       .select("id")
       .single();
-    if (error || !rule) return { error: error?.message ?? "建立覆寫規則失敗" };
+    if (error || !rule) {
+      return {
+        error: error
+          ? toFriendlyError(error, [
+              { test: (m) => m.includes("periodic_accumulation rounds cannot use an independent scoring rule"), friendly: "這一輪是月/週期累積制，不能使用獨立評分規則——累積分數的合併邏輯要求整個賽段共用同一份規則" },
+            ])
+          : "建立覆寫規則失敗",
+      };
+    }
     await insertDefaultScoreItems(supabase, rule.id);
   } else {
     const { error } = await supabase.from("scoring_rules").delete().eq("round_id", roundId);

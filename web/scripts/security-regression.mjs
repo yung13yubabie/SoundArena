@@ -1248,6 +1248,62 @@ async function main() {
     (crf4DEMatches ?? []).length === 1 && crf4DEMatches[0].bracket === "winners",
     `matches=${(crf4DEMatches ?? []).length} bracket=${crf4DEMatches?.[0]?.bracket}`,
   );
+
+  // ============ Codex 第二輪對抗式審查(codex:codex-rescue)找到的 6 項發現
+  // (孤兒節點/相容性缺口),逐項對照原始碼+真實資料庫驗證後確認為真的永久回歸測試。
+  // ============
+
+  // Finding 5: wildcard_revival 已從目錄移除
+  const { data: r2WcBlock } = await admin.from("format_blocks").select("id").eq("key", "wildcard_revival").maybeSingle();
+  record("Codex第二輪 Finding5: format_blocks 目錄已經沒有 wildcard_revival 這個孤兒標籤", r2WcBlock === null);
+
+  // Finding 4: round_robin 必須搭配 lottery,正確操作順序不會卡死
+  const compR2F4 = await makeCompetition(organizerA.id, "r2f4");
+  const { data: r2F4Round } = await admin.from("rounds").insert({ competition_id: compR2F4, round_index: 1, name: "R1" }).select("id").single();
+  const { error: r2F4RRWithoutLotteryErr } = await organizerAClient.rpc("set_round_format_block", { p_round_id: r2F4Round.id, p_category: "elimination", p_block_key: "round_robin" });
+  record("Codex第二輪 Finding4: 沒選抽籤分組時,循環賽被拒絕", !!r2F4RRWithoutLotteryErr && r2F4RRWithoutLotteryErr.message.includes("requires lottery grouping"), r2F4RRWithoutLotteryErr?.message);
+  await organizerAClient.rpc("set_round_format_block", { p_round_id: r2F4Round.id, p_category: "grouping", p_block_key: "lottery" });
+  const { error: r2F4RRAfterLotteryErr } = await organizerAClient.rpc("set_round_format_block", { p_round_id: r2F4Round.id, p_category: "elimination", p_block_key: "round_robin" });
+  record("Codex第二輪 Finding4: 先選抽籤分組後,循環賽可以正常選上", !r2F4RRAfterLotteryErr, r2F4RRAfterLotteryErr?.message);
+  const { error: r2F4SwitchAwayErr } = await organizerAClient.rpc("set_round_format_block", { p_round_id: r2F4Round.id, p_category: "grouping", p_block_key: "individual" });
+  record("Codex第二輪 Finding4: 循環賽還選著時,不能把分組切離抽籤分組", !!r2F4SwitchAwayErr && r2F4SwitchAwayErr.message.includes("requires lottery grouping"), r2F4SwitchAwayErr?.message);
+
+  // Finding 2: team + single/double_elimination 不相容(雙向),team + periodic_accumulation 不受限制
+  const compR2F2 = await makeCompetition(organizerA.id, "r2f2");
+  const { data: r2F2Round } = await admin.from("rounds").insert({ competition_id: compR2F2, round_index: 1, name: "R1" }).select("id").single();
+  await organizerAClient.rpc("set_round_format_block", { p_round_id: r2F2Round.id, p_category: "grouping", p_block_key: "team" });
+  const { error: r2F2TeamThenSEErr } = await organizerAClient.rpc("set_round_format_block", { p_round_id: r2F2Round.id, p_category: "elimination", p_block_key: "single_elimination" });
+  record("Codex第二輪 Finding2: 已選隊伍賽時,單敗淘汰被拒絕", !!r2F2TeamThenSEErr && r2F2TeamThenSEErr.message.includes("not compatible"), r2F2TeamThenSEErr?.message);
+  const { error: r2F2TeamPeriodicErr } = await organizerAClient.rpc("set_round_format_block", { p_round_id: r2F2Round.id, p_category: "elimination", p_block_key: "periodic_accumulation" });
+  record("Codex第二輪 Finding2(對照組): 隊伍賽 + 月週期累積制不受這條限制", !r2F2TeamPeriodicErr, r2F2TeamPeriodicErr?.message);
+
+  // Finding 3: periodic_accumulation 輪次不能有獨立評分規則(雙向)
+  const compR2F3 = await makeCompetition(organizerA.id, "r2f3");
+  const { data: r2F3Round } = await admin.from("rounds").insert({ competition_id: compR2F3, round_index: 1, name: "R1" }).select("id").single();
+  await organizerAClient.rpc("set_round_format_block", { p_round_id: r2F3Round.id, p_category: "elimination", p_block_key: "periodic_accumulation" });
+  const { error: r2F3OverrideErr } = await admin.from("scoring_rules").insert({ competition_id: compR2F3, round_id: r2F3Round.id });
+  record("Codex第二輪 Finding3: 週期累積制輪次不能建立獨立評分規則", !!r2F3OverrideErr && r2F3OverrideErr.message.includes("cannot use an independent scoring rule"), r2F3OverrideErr?.message);
+
+  const compR2F3b = await makeCompetition(organizerA.id, "r2f3b");
+  const { data: r2F3bRound } = await admin.from("rounds").insert({ competition_id: compR2F3b, round_index: 1, name: "R1" }).select("id").single();
+  await admin.from("scoring_rules").insert({ competition_id: compR2F3b, round_id: r2F3bRound.id });
+  const { error: r2F3bSwitchErr } = await organizerAClient.rpc("set_round_format_block", { p_round_id: r2F3bRound.id, p_category: "elimination", p_block_key: "periodic_accumulation" });
+  record("Codex第二輪 Finding3(反向): 已有獨立評分規則的輪次不能切成週期累積制", !!r2F3bSwitchErr && r2F3bSwitchErr.message.includes("already has an independent scoring rule"), r2F3bSwitchErr?.message);
+
+  // Finding 1: 已有真實賽程資料的輪次鎖定 elimination/grouping
+  const compR2F1 = await makeCompetition(organizerA.id, "r2f1");
+  await admin.from("competitions").update({ registration_closes_at: new Date(Date.now() - 60_000).toISOString() }).eq("id", compR2F1);
+  const { data: r2F1Round } = await admin.from("rounds").insert({ competition_id: compR2F1, round_index: 1, name: "R1" }).select("id").single();
+  await organizerAClient.rpc("set_round_format_block", { p_round_id: r2F1Round.id, p_category: "elimination", p_block_key: "single_elimination" });
+  const r2F1p0 = await makeUser("r2f1p0");
+  const r2F1p1 = await makeUser("r2f1p1");
+  await admin.from("registrations").insert([
+    { competition_id: compR2F1, user_id: r2F1p0.id, suno_handle: "r2-f1-p0", display_name: "R2F1 P0", review_status: "approved" },
+    { competition_id: compR2F1, user_id: r2F1p1.id, suno_handle: "r2-f1-p1", display_name: "R2F1 P1", review_status: "approved" },
+  ]);
+  await organizerAClient.rpc("generate_single_elimination_matches_for_round", { p_round_id: r2F1Round.id });
+  const { error: r2F1SwitchErr } = await organizerAClient.rpc("set_round_format_block", { p_round_id: r2F1Round.id, p_category: "elimination", p_block_key: "double_elimination" });
+  record("Codex第二輪 Finding1: 已產生真實賽程資料後,不能再切換淘汰方式", !!r2F1SwitchErr && r2F1SwitchErr.message.includes("already has real schedule data"), r2F1SwitchErr?.message);
 }
 
 async function cleanup() {

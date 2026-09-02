@@ -57,7 +57,7 @@ interface PoolRow {
 interface MatchRow {
   id: string;
   round_id: string;
-  pool_id: string;
+  pool_id: string | null;
   registration_a_id: string;
   registration_b_id: string;
   winner_registration_id: string | null;
@@ -267,7 +267,7 @@ export default async function AdminFormatPage({
         .filter((m) => m.round_id === r.id)
         .map((m) => ({
           id: m.id,
-          poolName: poolNameById.get(m.pool_id) ?? "",
+          poolName: (m.pool_id ? poolNameById.get(m.pool_id) : undefined) ?? "",
           registrationAId: m.registration_a_id,
           registrationADisplayName: oneDisplayName(m.registrations_a),
           registrationBId: m.registration_b_id,
