@@ -1261,21 +1261,32 @@ async function main() {
   const compR2F4 = await makeCompetition(organizerA.id, "r2f4");
   const { data: r2F4Round } = await admin.from("rounds").insert({ competition_id: compR2F4, round_index: 1, name: "R1" }).select("id").single();
   const { error: r2F4RRWithoutLotteryErr } = await organizerAClient.rpc("set_round_format_block", { p_round_id: r2F4Round.id, p_category: "elimination", p_block_key: "round_robin" });
-  record("Codex第二輪 Finding4: 沒選抽籤分組時,循環賽被拒絕", !!r2F4RRWithoutLotteryErr && r2F4RRWithoutLotteryErr.message.includes("requires lottery grouping"), r2F4RRWithoutLotteryErr?.message);
+  record(
+    "Codex第二輪 Finding4: 沒選抽籤分組時,循環賽被拒絕(08-30後訊息改成也接受team分組,這裡驗證新訊息文字)",
+    !!r2F4RRWithoutLotteryErr && r2F4RRWithoutLotteryErr.message.includes("requires lottery or team grouping"),
+    r2F4RRWithoutLotteryErr?.message,
+  );
   await organizerAClient.rpc("set_round_format_block", { p_round_id: r2F4Round.id, p_category: "grouping", p_block_key: "lottery" });
   const { error: r2F4RRAfterLotteryErr } = await organizerAClient.rpc("set_round_format_block", { p_round_id: r2F4Round.id, p_category: "elimination", p_block_key: "round_robin" });
   record("Codex第二輪 Finding4: 先選抽籤分組後,循環賽可以正常選上", !r2F4RRAfterLotteryErr, r2F4RRAfterLotteryErr?.message);
   const { error: r2F4SwitchAwayErr } = await organizerAClient.rpc("set_round_format_block", { p_round_id: r2F4Round.id, p_category: "grouping", p_block_key: "individual" });
-  record("Codex第二輪 Finding4: 循環賽還選著時,不能把分組切離抽籤分組", !!r2F4SwitchAwayErr && r2F4SwitchAwayErr.message.includes("requires lottery grouping"), r2F4SwitchAwayErr?.message);
+  record(
+    "Codex第二輪 Finding4: 循環賽還選著時,不能把分組切離抽籤/隊伍分組",
+    !!r2F4SwitchAwayErr && r2F4SwitchAwayErr.message.includes("requires lottery or team grouping"),
+    r2F4SwitchAwayErr?.message,
+  );
 
-  // Finding 2: team + single/double_elimination 不相容(雙向),team + periodic_accumulation 不受限制
+  // Finding 2(08-30「隊伍賽真正支援對戰單位」上線後取代):當初 team + single/double_elimination/
+  // round_robin 互斥只是真正配對邏輯做出來前的臨時防呆,這條限制已經在
+  // 20260830090000_set_round_format_block_team_aware.sql 移除——配對/投票/淘汰/計分現在都是
+  // team-aware,這個組合改成「應該要允許」。這裡驗證的是新行為,不是重新驗證舊的拒絕。
   const compR2F2 = await makeCompetition(organizerA.id, "r2f2");
   const { data: r2F2Round } = await admin.from("rounds").insert({ competition_id: compR2F2, round_index: 1, name: "R1" }).select("id").single();
   await organizerAClient.rpc("set_round_format_block", { p_round_id: r2F2Round.id, p_category: "grouping", p_block_key: "team" });
   const { error: r2F2TeamThenSEErr } = await organizerAClient.rpc("set_round_format_block", { p_round_id: r2F2Round.id, p_category: "elimination", p_block_key: "single_elimination" });
-  record("Codex第二輪 Finding2: 已選隊伍賽時,單敗淘汰被拒絕", !!r2F2TeamThenSEErr && r2F2TeamThenSEErr.message.includes("not compatible"), r2F2TeamThenSEErr?.message);
+  record("隊伍賽真正支援對戰單位: 隊伍賽 + 單敗淘汰現在是合法組合", !r2F2TeamThenSEErr, r2F2TeamThenSEErr?.message);
   const { error: r2F2TeamPeriodicErr } = await organizerAClient.rpc("set_round_format_block", { p_round_id: r2F2Round.id, p_category: "elimination", p_block_key: "periodic_accumulation" });
-  record("Codex第二輪 Finding2(對照組): 隊伍賽 + 月週期累積制不受這條限制", !r2F2TeamPeriodicErr, r2F2TeamPeriodicErr?.message);
+  record("隊伍賽真正支援對戰單位(對照組): 隊伍賽 + 月週期累積制依然不受限制", !r2F2TeamPeriodicErr, r2F2TeamPeriodicErr?.message);
 
   // Finding 3: periodic_accumulation 輪次不能有獨立評分規則(雙向)
   const compR2F3 = await makeCompetition(organizerA.id, "r2f3");
@@ -1304,6 +1315,301 @@ async function main() {
   await organizerAClient.rpc("generate_single_elimination_matches_for_round", { p_round_id: r2F1Round.id });
   const { error: r2F1SwitchErr } = await organizerAClient.rpc("set_round_format_block", { p_round_id: r2F1Round.id, p_category: "elimination", p_block_key: "double_elimination" });
   record("Codex第二輪 Finding1: 已產生真實賽程資料後,不能再切換淘汰方式", !!r2F1SwitchErr && r2F1SwitchErr.message.includes("already has real schedule data"), r2F1SwitchErr?.message);
+
+  // ============ 隊伍賽真正支援對戰單位(08-30):一隊共用一筆正式投稿(隊員各自
+  // 上傳候選版本、只有隊長能選正式送出、投稿擁有權不隨隊長轉讓改變)、隊長轉讓的
+  // 權限邊界、四支既有 RPC(get_votable_submissions/judge_submissions_for_round/
+  // get_round_submissions/get_round_scores)正確過濾掉未被選中的候選草稿(即使
+  // 草稿已經有評分紀錄)、單敗淘汰配對真的用 team_a_id/team_b_id 而不是個人、
+  // match_votes 的隊伍投票防呆(不能投自己隊,chosen_team_id 必須是這場的其中一隊)。
+  // ============
+  const compTF = await makeCompetition(organizerA.id, "teamFeature");
+  await admin.from("competitions").update({ registration_closes_at: new Date(Date.now() - 60_000).toISOString() }).eq("id", compTF);
+  const { data: tfRound1 } = await admin
+    .from("rounds")
+    .insert({
+      competition_id: compTF,
+      round_index: 1,
+      name: "初選",
+      voting_opens_at: new Date(Date.now() - 60_000).toISOString(),
+      voting_closes_at: new Date(Date.now() + 60_000).toISOString(),
+    })
+    .select("id")
+    .single();
+  const { data: tfTeamBlock } = await admin.from("format_blocks").select("id").eq("key", "team").single();
+  await admin.from("round_format_blocks").insert({ round_id: tfRound1.id, format_block_id: tfTeamBlock.id, config: { group_count: 2 } });
+
+  const tfUsers = [];
+  const tfRegIds = [];
+  for (let i = 0; i < 4; i++) {
+    const u = await makeUser(`tfp${i}`);
+    tfUsers.push(u);
+    const { data: r } = await admin
+      .from("registrations")
+      .insert({ competition_id: compTF, user_id: u.id, suno_handle: `tf-p${i}`, display_name: `TF P${i}`, review_status: "approved" })
+      .select("id")
+      .single();
+    tfRegIds.push(r.id);
+  }
+
+  await organizerAClient.rpc("form_team_groups_for_round", { p_round_id: tfRound1.id });
+  const { data: tfTeams } = await admin
+    .from("teams")
+    .select("id, name, captain_registration_id, team_members(registration_id)")
+    .eq("round_id", tfRound1.id);
+  record(
+    "隊伍賽: 4人分2組,每組各2人,分組時系統隨機指定了一位隊長",
+    (tfTeams ?? []).length === 2 &&
+      tfTeams.every((t) => t.team_members.length === 2) &&
+      tfTeams.every((t) => t.team_members.some((m) => m.registration_id === t.captain_registration_id)),
+    `teams=${JSON.stringify(tfTeams)}`,
+  );
+
+  const tfTeam1 = tfTeams[0];
+  const tfTeam2 = tfTeams[1];
+  const tfTeam1MemberIds = tfTeam1.team_members.map((m) => m.registration_id);
+  const tfCaptainRegId = tfTeam1.captain_registration_id;
+  const tfNonCaptainRegId = tfTeam1MemberIds.find((id) => id !== tfCaptainRegId);
+  const tfCaptainUser = tfUsers[tfRegIds.indexOf(tfCaptainRegId)];
+  const tfNonCaptainUser = tfUsers[tfRegIds.indexOf(tfNonCaptainRegId)];
+  const tfOutsiderRegId = tfTeam2.team_members[0].registration_id;
+  const tfOutsiderUser = tfUsers[tfRegIds.indexOf(tfOutsiderRegId)];
+
+  // --- 投稿流程:隊員各自上傳候選版本,只有隊長能選正式送出 ---
+  const { error: tfOutsiderSubmitErr } = await admin.rpc("submit_entry", {
+    p_round_id: tfRound1.id,
+    p_registration_id: tfOutsiderRegId,
+    p_caller_user_id: tfOutsiderUser.id,
+    p_suno_share_url: "https://suno.com/s/tfoutsider",
+    p_title: "冒充別隊候選",
+    p_cover_image_url: null,
+    p_sharer_handle: `tf-p${tfRegIds.indexOf(tfOutsiderRegId)}`,
+    p_lyrics: "",
+    p_allow_public_playback: false,
+    p_team_id: tfTeam1.id,
+  });
+  record(
+    "隊伍賽投稿: 不是這支隊伍的成員,帶那支隊伍的 team_id 投稿被拒絕",
+    !!tfOutsiderSubmitErr && tfOutsiderSubmitErr.message.includes("not a member of this team"),
+    tfOutsiderSubmitErr?.message,
+  );
+
+  const { data: tfSubA, error: tfSubAErr } = await admin.rpc("submit_entry", {
+    p_round_id: tfRound1.id,
+    p_registration_id: tfCaptainRegId,
+    p_caller_user_id: tfCaptainUser.id,
+    p_suno_share_url: "https://suno.com/s/tfcandidatea",
+    p_title: "候選版本A(隊長上傳)",
+    p_cover_image_url: null,
+    p_sharer_handle: `tf-p${tfRegIds.indexOf(tfCaptainRegId)}`,
+    p_lyrics: "",
+    p_allow_public_playback: false,
+    p_team_id: tfTeam1.id,
+  });
+  record("隊伍賽投稿: 隊長上傳候選版本A成功", !tfSubAErr && !!tfSubA, tfSubAErr?.message);
+
+  const { data: tfSubB, error: tfSubBErr } = await admin.rpc("submit_entry", {
+    p_round_id: tfRound1.id,
+    p_registration_id: tfNonCaptainRegId,
+    p_caller_user_id: tfNonCaptainUser.id,
+    p_suno_share_url: "https://suno.com/s/tfcandidateb",
+    p_title: "候選版本B(隊員上傳)",
+    p_cover_image_url: null,
+    p_sharer_handle: `tf-p${tfRegIds.indexOf(tfNonCaptainRegId)}`,
+    p_lyrics: "",
+    p_allow_public_playback: false,
+    p_team_id: tfTeam1.id,
+  });
+  record("隊伍賽投稿: 非隊長隊員也能上傳自己的候選版本B", !tfSubBErr && !!tfSubB, tfSubBErr?.message);
+
+  await admin.from("submissions").update({ status: "approved" }).in("id", [tfSubA, tfSubB]);
+
+  const { error: tfSelectNonCaptainErr } = await admin.rpc("select_team_submission", { p_submission_id: tfSubA, p_caller_user_id: tfNonCaptainUser.id });
+  record(
+    "隊伍賽送出: 非隊長不能選正式送出的版本",
+    !!tfSelectNonCaptainErr && tfSelectNonCaptainErr.message.includes("only the team captain"),
+    tfSelectNonCaptainErr?.message,
+  );
+
+  const { error: tfSelectCaptainErr } = await admin.rpc("select_team_submission", { p_submission_id: tfSubA, p_caller_user_id: tfCaptainUser.id });
+  const { data: tfSubsAfterSelectA } = await admin.from("submissions").select("id, is_team_selected").in("id", [tfSubA, tfSubB]);
+  record(
+    "隊伍賽送出: 隊長選版本A為正式送出,只有A被標記",
+    !tfSelectCaptainErr &&
+      tfSubsAfterSelectA.find((s) => s.id === tfSubA)?.is_team_selected === true &&
+      tfSubsAfterSelectA.find((s) => s.id === tfSubB)?.is_team_selected === false,
+    `error=${tfSelectCaptainErr?.message ?? "none"} rows=${JSON.stringify(tfSubsAfterSelectA)}`,
+  );
+
+  const { error: tfReselectErr } = await admin.rpc("select_team_submission", { p_submission_id: tfSubB, p_caller_user_id: tfCaptainUser.id });
+  const { data: tfSubsAfterSelectB } = await admin.from("submissions").select("id, is_team_selected").in("id", [tfSubA, tfSubB]);
+  record(
+    "隊伍賽送出: 隊長改選版本B,版本A自動變回未選中(同隊同輪次只留一筆)",
+    !tfReselectErr &&
+      tfSubsAfterSelectB.find((s) => s.id === tfSubB)?.is_team_selected === true &&
+      tfSubsAfterSelectB.find((s) => s.id === tfSubA)?.is_team_selected === false,
+    `error=${tfReselectErr?.message ?? "none"} rows=${JSON.stringify(tfSubsAfterSelectB)}`,
+  );
+
+  // --- 隊長轉讓 ---
+  const { error: tfTransferStrangerErr } = await organizerBClient.rpc("transfer_team_captain", {
+    p_team_id: tfTeam1.id,
+    p_new_captain_registration_id: tfNonCaptainRegId,
+  });
+  record(
+    "隊長轉讓: 不相干的陌生主辦人不能轉讓別人比賽隊伍的隊長",
+    !!tfTransferStrangerErr && tfTransferStrangerErr.message.includes("insufficient permission"),
+    tfTransferStrangerErr?.message,
+  );
+
+  const tfCaptainClient = await clientFor(tfCaptainUser.email);
+  const { error: tfTransferBadMemberErr } = await tfCaptainClient.rpc("transfer_team_captain", {
+    p_team_id: tfTeam1.id,
+    p_new_captain_registration_id: tfOutsiderRegId,
+  });
+  record(
+    "隊長轉讓: 不能轉讓給不是這支隊伍成員的人",
+    !!tfTransferBadMemberErr && tfTransferBadMemberErr.message.includes("existing member"),
+    tfTransferBadMemberErr?.message,
+  );
+
+  const { error: tfTransferOkErr } = await tfCaptainClient.rpc("transfer_team_captain", {
+    p_team_id: tfTeam1.id,
+    p_new_captain_registration_id: tfNonCaptainRegId,
+  });
+  const { data: tfTeam1AfterTransfer } = await admin.from("teams").select("captain_registration_id").eq("id", tfTeam1.id).single();
+  record(
+    "隊長轉讓: 現任隊長可以把隊長轉讓給隊友",
+    !tfTransferOkErr && tfTeam1AfterTransfer?.captain_registration_id === tfNonCaptainRegId,
+    `error=${tfTransferOkErr?.message ?? "none"}`,
+  );
+
+  const { data: tfSubBAfterTransfer } = await admin.from("submissions").select("registration_id").eq("id", tfSubB).single();
+  record(
+    "隊長轉讓: 投稿的上傳者歸屬不會跟著隊長轉讓改變(還是原本上傳的人)",
+    tfSubBAfterTransfer?.registration_id === tfNonCaptainRegId,
+    `registration_id=${tfSubBAfterTransfer?.registration_id}`,
+  );
+
+  // 轉回原本的隊長,方便後面測試沿用同一個 caller
+  await admin.rpc("transfer_team_captain", { p_team_id: tfTeam1.id, p_new_captain_registration_id: tfCaptainRegId });
+
+  // --- 草稿過濾:未被隊長選中的候選版本不能洩漏進投票/評審/公開結果 ---
+  const { data: tfRule } = await admin.from("scoring_rules").insert({ competition_id: compTF, round_id: null }).select("id").single();
+  const { data: tfBonusTempl } = await admin.from("score_item_templates").select("id").eq("key", "manual_bonus").single();
+  const { data: tfScoreItem } = await admin
+    .from("score_items")
+    .insert({ scoring_rule_id: tfRule.id, template_id: tfBonusTempl.id, label: "測試加分", kind: "bonus", weight_percent: null, sort_order: 0 })
+    .select("id")
+    .single();
+  // 故意在「未選中」的草稿A身上留一筆真實評分紀錄——驗證過濾邏輯是看 is_team_selected,
+  // 不是看有沒有評分資料。
+  await admin.from("submission_scores").insert({ submission_id: tfSubA, score_item_id: tfScoreItem.id, raw_value: 999, entered_by: organizerA.id });
+
+  const tfVoter = await makeUser("tfvoter");
+  const tfVoterClient = await clientFor(tfVoter.email);
+  const { data: tfVotable, error: tfVotableErr } = await tfVoterClient.rpc("get_votable_submissions", { p_round_id: tfRound1.id });
+  record(
+    "隊伍賽草稿過濾: get_votable_submissions() 只回傳隊長選中的那一筆,不含未選中的候選草稿",
+    !tfVotableErr && (tfVotable ?? []).length === 1 && tfVotable[0].id === tfSubB,
+    `error=${tfVotableErr?.message ?? "none"} rows=${JSON.stringify(tfVotable)}`,
+  );
+
+  const { data: tfJudgeRows, error: tfJudgeErr } = await organizerAClient.rpc("judge_submissions_for_round", { p_round_id: tfRound1.id });
+  record(
+    "隊伍賽草稿過濾: judge_submissions_for_round() 只回傳隊長選中的那一筆",
+    !tfJudgeErr && (tfJudgeRows ?? []).length === 1 && tfJudgeRows[0].submission_id === tfSubB,
+    `error=${tfJudgeErr?.message ?? "none"} rows=${JSON.stringify(tfJudgeRows)}`,
+  );
+
+  await admin.from("rounds").update({ voting_closes_at: new Date(Date.now() - 1_000).toISOString() }).eq("id", tfRound1.id);
+  const { data: tfResultsRows, error: tfResultsErr } = await tfVoterClient.rpc("get_round_submissions", { p_round_id: tfRound1.id });
+  record(
+    "隊伍賽草稿過濾: get_round_submissions()(公開結果頁)只回傳隊長選中的那一筆",
+    !tfResultsErr && (tfResultsRows ?? []).length === 1 && tfResultsRows[0].submission_id === tfSubB,
+    `error=${tfResultsErr?.message ?? "none"} rows=${JSON.stringify(tfResultsRows)}`,
+  );
+
+  const { data: tfScoreRows, error: tfScoreErr } = await tfVoterClient.rpc("get_round_scores", { p_round_id: tfRound1.id });
+  record(
+    "隊伍賽草稿過濾: get_round_scores() 排除未選中候選草稿的分數,即使那筆草稿已經有評分紀錄",
+    !tfScoreErr && (tfScoreRows ?? []).length === 1 && tfScoreRows[0].submission_id === tfSubB && Number(tfScoreRows[0].raw_value) === 0,
+    `error=${tfScoreErr?.message ?? "none"} rows=${JSON.stringify(tfScoreRows)}`,
+  );
+
+  // ============ 隊伍賽單敗淘汰:配對用 team_a_id/team_b_id,match_votes 隊伍投票防呆 ============
+  const compTFse = await makeCompetition(organizerA.id, "teamFeatureSE");
+  await admin.from("competitions").update({ registration_closes_at: new Date(Date.now() - 60_000).toISOString() }).eq("id", compTFse);
+  const { data: tfseRound1 } = await admin.from("rounds").insert({ competition_id: compTFse, round_index: 1, name: "R1" }).select("id").single();
+  await organizerAClient.rpc("set_round_format_block", { p_round_id: tfseRound1.id, p_category: "grouping", p_block_key: "team" });
+  await organizerAClient.rpc("set_round_format_block", { p_round_id: tfseRound1.id, p_category: "elimination", p_block_key: "single_elimination" });
+
+  const tfseUsers = [];
+  const tfseRegIds = [];
+  for (let i = 0; i < 4; i++) {
+    const u = await makeUser(`tfsep${i}`);
+    tfseUsers.push(u);
+    const { data: r } = await admin
+      .from("registrations")
+      .insert({ competition_id: compTFse, user_id: u.id, suno_handle: `tfse-p${i}`, display_name: `TFSE P${i}`, review_status: "approved" })
+      .select("id")
+      .single();
+    tfseRegIds.push(r.id);
+  }
+
+  await organizerAClient.rpc("form_team_groups_for_round", { p_round_id: tfseRound1.id });
+  const { data: tfseTeams } = await admin.from("teams").select("id, team_members(registration_id)").eq("round_id", tfseRound1.id);
+  record("隊伍賽單敗淘汰: 分組完成,4人分2隊", (tfseTeams ?? []).length === 2, `teams=${(tfseTeams ?? []).length}`);
+
+  const { error: tfseGenErr } = await organizerAClient.rpc("generate_single_elimination_matches_for_round", { p_round_id: tfseRound1.id });
+  const { data: tfseMatches } = await admin
+    .from("matches")
+    .select("id, team_a_id, team_b_id, registration_a_id, registration_b_id")
+    .eq("round_id", tfseRound1.id);
+  record(
+    "隊伍賽單敗淘汰: 配對用 team_a_id/team_b_id(以隊伍為單位),registration_a_id/b_id 維持 null",
+    !tfseGenErr &&
+      (tfseMatches ?? []).length === 1 &&
+      !!tfseMatches[0].team_a_id &&
+      !!tfseMatches[0].team_b_id &&
+      tfseMatches[0].registration_a_id === null &&
+      tfseMatches[0].registration_b_id === null,
+    `error=${tfseGenErr?.message ?? "none"} match=${JSON.stringify(tfseMatches?.[0])}`,
+  );
+
+  const tfseMatch = tfseMatches[0];
+  const { data: tfseTeamAMembers } = await admin.from("team_members").select("registration_id").eq("team_id", tfseMatch.team_a_id);
+  const tfseTeamAMemberRegId = tfseTeamAMembers[0].registration_id;
+  const tfseTeamAMemberUser = tfseUsers[tfseRegIds.indexOf(tfseTeamAMemberRegId)];
+
+  await admin
+    .from("rounds")
+    .update({ voting_opens_at: new Date(Date.now() - 60_000).toISOString(), voting_closes_at: new Date(Date.now() + 60_000).toISOString() })
+    .eq("id", tfseRound1.id);
+
+  const { error: tfseOwnTeamVoteErr } = await admin
+    .from("match_votes")
+    .insert({ match_id: tfseMatch.id, voter_id: tfseTeamAMemberUser.id, voter_ip: "10.9.1.1", chosen_team_id: tfseMatch.team_a_id });
+  record(
+    "隊伍賽配對投票: 隊員不能投自己隊伍的場次",
+    !!tfseOwnTeamVoteErr && tfseOwnTeamVoteErr.message.includes("own team"),
+    tfseOwnTeamVoteErr?.message,
+  );
+
+  const tfseOutsider = await makeUser("tfseoutsider");
+  const { error: tfseWrongTeamErr } = await admin
+    .from("match_votes")
+    .insert({ match_id: tfseMatch.id, voter_id: tfseOutsider.id, voter_ip: "10.9.1.2", chosen_team_id: tfTeam2.id });
+  record(
+    "隊伍賽配對投票: chosen_team_id 不是這場的任一隊(拿別的比賽的隊伍 id 硬塞),被拒絕",
+    !!tfseWrongTeamErr && tfseWrongTeamErr.message.includes("not part of this match"),
+    tfseWrongTeamErr?.message,
+  );
+
+  const { error: tfseOutsiderVoteErr } = await admin
+    .from("match_votes")
+    .insert({ match_id: tfseMatch.id, voter_id: tfseOutsider.id, voter_ip: "10.9.1.3", chosen_team_id: tfseMatch.team_a_id });
+  record("隊伍賽配對投票: 不是任一隊成員的一般投票者可以正常投票", !tfseOutsiderVoteErr, tfseOutsiderVoteErr?.message);
 }
 
 async function cleanup() {

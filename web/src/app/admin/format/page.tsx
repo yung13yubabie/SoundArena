@@ -44,6 +44,7 @@ interface TeamRow {
   id: string;
   round_id: string;
   name: string;
+  captain_registration_id: string | null;
   team_members: TeamMemberRow[];
 }
 
@@ -58,9 +59,12 @@ interface MatchRow {
   id: string;
   round_id: string;
   pool_id: string | null;
-  registration_a_id: string;
-  registration_b_id: string;
+  registration_a_id: string | null;
+  registration_b_id: string | null;
+  team_a_id: string | null;
+  team_b_id: string | null;
   winner_registration_id: string | null;
+  winner_team_id: string | null;
   bracket: "winners" | "losers" | "final" | null;
   registrations_a: { display_name: string } | { display_name: string }[] | null;
   registrations_b: { display_name: string } | { display_name: string }[] | null;
@@ -169,7 +173,7 @@ export default async function AdminFormatPage({
     roundIds.length
       ? supabase
           .from("teams")
-          .select("id, round_id, name, team_members(registration_id, registrations(display_name))")
+          .select("id, round_id, name, captain_registration_id, team_members(registration_id, registrations(display_name))")
           .in("round_id", roundIds)
           .order("name")
       : Promise.resolve({ data: [] as TeamRow[] }),
@@ -187,7 +191,7 @@ export default async function AdminFormatPage({
       ? supabase
           .from("matches")
           .select(
-            "id, round_id, pool_id, registration_a_id, registration_b_id, winner_registration_id, bracket, registrations_a:registrations!matches_registration_a_id_fkey(display_name), registrations_b:registrations!matches_registration_b_id_fkey(display_name)",
+            "id, round_id, pool_id, registration_a_id, registration_b_id, team_a_id, team_b_id, winner_registration_id, winner_team_id, bracket, registrations_a:registrations!matches_registration_a_id_fkey(display_name), registrations_b:registrations!matches_registration_b_id_fkey(display_name)",
           )
           .in("round_id", roundIds)
       : Promise.resolve({ data: [] as MatchRow[] }),
@@ -211,6 +215,7 @@ export default async function AdminFormatPage({
   const pools = (poolRows ?? []) as unknown as PoolRow[];
   const matches = (matchRows ?? []) as unknown as MatchRow[];
   const poolNameById = new Map(pools.map((p) => [p.id, p.name]));
+  const teamNameById = new Map(teams.map((t) => [t.id, t.name]));
 
   const indices = (rounds ?? []).map((r) => r.round_index);
   const minIdx = Math.min(...indices);
@@ -247,6 +252,7 @@ export default async function AdminFormatPage({
         .map((t) => ({
           id: t.id,
           name: t.name,
+          captainRegistrationId: t.captain_registration_id,
           members: t.team_members.map((m) => ({
             registrationId: m.registration_id,
             displayName: oneDisplayName(m.registrations),
@@ -268,11 +274,11 @@ export default async function AdminFormatPage({
         .map((m) => ({
           id: m.id,
           poolName: (m.pool_id ? poolNameById.get(m.pool_id) : undefined) ?? "",
-          registrationAId: m.registration_a_id,
-          registrationADisplayName: oneDisplayName(m.registrations_a),
-          registrationBId: m.registration_b_id,
-          registrationBDisplayName: oneDisplayName(m.registrations_b),
-          winnerRegistrationId: m.winner_registration_id,
+          aId: m.team_a_id ?? m.registration_a_id ?? "",
+          aLabel: m.team_a_id ? (teamNameById.get(m.team_a_id) ?? "未命名隊伍") : oneDisplayName(m.registrations_a),
+          bId: m.team_b_id ?? m.registration_b_id ?? "",
+          bLabel: m.team_b_id ? (teamNameById.get(m.team_b_id) ?? "未命名隊伍") : oneDisplayName(m.registrations_b),
+          winnerId: m.winner_team_id ?? m.winner_registration_id,
           bracket: m.bracket,
         })),
       scoringRule: overrideRule ? { id: overrideRule.id, items: toScoreItems(overrideRule.score_items ?? []) } : null,

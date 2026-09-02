@@ -9,6 +9,7 @@ import { getJudgeScoringData, getPeriodicAccumulationStageRoundIds, mergeJudgeSc
 import { computeAndPersistMatchWinners, isRoundRobinRound } from "@/lib/roundRobin";
 import { computeSingleEliminationOutcome, isSingleEliminationRound } from "@/lib/singleElimination";
 import { computeDoubleEliminationOutcome, isDoubleEliminationRound } from "@/lib/doubleElimination";
+import { isTeamGroupingRound, getTeamStageStartRoundId, computeTeamScoreTotals } from "@/lib/teamGrouping";
 
 type ActionResult = { success: true } | { error: string };
 
@@ -134,43 +135,90 @@ export async function finalizeRoundResults(roundId: string): Promise<ActionResul
   // 沒東西可以顯示。這一步獨立於下面的淘汰名單計算。
   const isRoundRobin = await isRoundRobinRound(roundId);
   const roundRobinStandings = isRoundRobin ? await computeAndPersistMatchWinners(roundId) : null;
+  const isTeamRound = await isTeamGroupingRound(supabase, roundId);
 
   let eliminateIds: string[] = [];
   if (round.elimination_percent && round.elimination_percent > 0) {
-    const { data: activeRegs } = await supabase.from("registrations").select("id").eq("competition_id", round.competition_id).eq("status", "active");
-    const activeIds = (activeRegs ?? []).map((r) => r.id);
-
-    let totalByRegistration: Map<string, number>;
-    if (roundRobinStandings) {
-      // 循環賽:排名基準是「勝場數」(含平局的 0.5),不是加權分數。
-      totalByRegistration = new Map(roundRobinStandings.map((s) => [s.registrationId, s.wins]));
-    } else {
-      // 月/週期累積制:排名不是只看這一輪自己的分數,是看這個週期累積賽段從頭到
-      // 現在所有週期的分數總和(見 lib/judgeScoring.ts 的說明)。不是累積制的輪次
-      // 維持原本的單輪次排名,行為不變。
-      const stageRoundIds = await getPeriodicAccumulationStageRoundIds(supabase, round.competition_id, roundId);
-      const roundIdsToScore = stageRoundIds ?? [roundId];
-      const perRoundData = await Promise.all(roundIdsToScore.map((rid) => getJudgeScoringData(supabase, round.competition_id, rid)));
-      const { scoreItems, values } = mergeJudgeScoringData(perRoundData);
-      const ranking = computeRanking(
-        scoreItems,
-        Array.from(values.entries()).map(([id, v]) => ({ id, values: v })),
+    if (isTeamRound) {
+      // team 賽事:排序/砍除的單位是「隊伍」,不是個人——不然可能把同一隊砍到
+      // 只剩一半人,違反「整隊一起淘汰」的設計。砍掉的隊伍展開成隊內全部現役
+      // 成員的 registration_id 才傳給 finalize_round_results()。
+      const stageStartRoundId = await getTeamStageStartRoundId(supabase, roundId);
+      const { data: activeTeamRows } = await supabase
+        .from("teams")
+        .select("id, team_members!inner(registration_id, registrations!inner(status))")
+        .eq("round_id", stageStartRoundId ?? roundId);
+      const activeTeams = (activeTeamRows ?? []).filter((t) =>
+        (t.team_members as unknown as { registrations: { status: string } | { status: string }[] | null }[]).some((tm) => {
+          const reg = Array.isArray(tm.registrations) ? tm.registrations[0] : tm.registrations;
+          return reg?.status === "active";
+        }),
       );
-      totalByRegistration = new Map(ranking.map((r) => [r.id, r.total]));
+      const activeTeamIds = activeTeams.map((t) => t.id);
+
+      let totalByTeam: Map<string, number>;
+      if (roundRobinStandings && roundRobinStandings.teamStandings.length > 0) {
+        totalByTeam = new Map(roundRobinStandings.teamStandings.map((s) => [s.teamId, s.wins]));
+      } else {
+        totalByTeam = await computeTeamScoreTotals(supabase, round.competition_id, roundId, activeTeamIds);
+      }
+
+      const sortedTeams = [...activeTeamIds].sort((a, b) => {
+        const totalA = totalByTeam.get(a) ?? 0;
+        const totalB = totalByTeam.get(b) ?? 0;
+        if (totalA !== totalB) return totalA - totalB;
+        return a < b ? -1 : a > b ? 1 : 0;
+      });
+
+      const eliminateTeamCount = Math.floor((round.elimination_percent / 100) * activeTeamIds.length);
+      const eliminateTeamIds = new Set(sortedTeams.slice(0, eliminateTeamCount));
+
+      eliminateIds = activeTeams
+        .filter((t) => eliminateTeamIds.has(t.id))
+        .flatMap((t) =>
+          (t.team_members as unknown as { registration_id: string; registrations: { status: string } | { status: string }[] | null }[])
+            .filter((tm) => {
+              const reg = Array.isArray(tm.registrations) ? tm.registrations[0] : tm.registrations;
+              return reg?.status === "active";
+            })
+            .map((tm) => tm.registration_id),
+        );
+    } else {
+      const { data: activeRegs } = await supabase.from("registrations").select("id").eq("competition_id", round.competition_id).eq("status", "active");
+      const activeIds = (activeRegs ?? []).map((r) => r.id);
+
+      let totalByRegistration: Map<string, number>;
+      if (roundRobinStandings) {
+        // 循環賽:排名基準是「勝場數」(含平局的 0.5),不是加權分數。
+        totalByRegistration = new Map(roundRobinStandings.registrationStandings.map((s) => [s.registrationId, s.wins]));
+      } else {
+        // 月/週期累積制:排名不是只看這一輪自己的分數,是看這個週期累積賽段從頭到
+        // 現在所有週期的分數總和(見 lib/judgeScoring.ts 的說明)。不是累積制的輪次
+        // 維持原本的單輪次排名,行為不變。
+        const stageRoundIds = await getPeriodicAccumulationStageRoundIds(supabase, round.competition_id, roundId);
+        const roundIdsToScore = stageRoundIds ?? [roundId];
+        const perRoundData = await Promise.all(roundIdsToScore.map((rid) => getJudgeScoringData(supabase, round.competition_id, rid)));
+        const { scoreItems, values } = mergeJudgeScoringData(perRoundData);
+        const ranking = computeRanking(
+          scoreItems,
+          Array.from(values.entries()).map(([id, v]) => ({ id, values: v })),
+        );
+        totalByRegistration = new Map(ranking.map((r) => [r.id, r.total]));
+      }
+
+      // 這輪沒投稿/沒比賽紀錄的 active 報名者視為 0 分、排在墊底——報名截止時他們本來
+      // 就有機會投稿卻沒投,承擔被淘汰的風險是合理的,不用另外設計特殊豁免規則。同分
+      // 時用 registration_id 排序當穩定 tiebreak,結果不會每次重算就不一樣。
+      const sorted = [...activeIds].sort((a, b) => {
+        const totalA = totalByRegistration.get(a) ?? 0;
+        const totalB = totalByRegistration.get(b) ?? 0;
+        if (totalA !== totalB) return totalA - totalB;
+        return a < b ? -1 : a > b ? 1 : 0;
+      });
+
+      const eliminateCount = Math.floor((round.elimination_percent / 100) * activeIds.length);
+      eliminateIds = sorted.slice(0, eliminateCount);
     }
-
-    // 這輪沒投稿/沒比賽紀錄的 active 報名者視為 0 分、排在墊底——報名截止時他們本來
-    // 就有機會投稿卻沒投,承擔被淘汰的風險是合理的,不用另外設計特殊豁免規則。同分
-    // 時用 registration_id 排序當穩定 tiebreak,結果不會每次重算就不一樣。
-    const sorted = [...activeIds].sort((a, b) => {
-      const totalA = totalByRegistration.get(a) ?? 0;
-      const totalB = totalByRegistration.get(b) ?? 0;
-      if (totalA !== totalB) return totalA - totalB;
-      return a < b ? -1 : a > b ? 1 : 0;
-    });
-
-    const eliminateCount = Math.floor((round.elimination_percent / 100) * activeIds.length);
-    eliminateIds = sorted.slice(0, eliminateCount);
   }
 
   const { error } = await supabase.rpc("finalize_round_results", {

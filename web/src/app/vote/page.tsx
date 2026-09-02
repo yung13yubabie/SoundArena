@@ -25,13 +25,18 @@ interface SubmissionRow {
   registration_id: string;
   user_id: string;
   suno_share_url: string;
+  team_id: string | null;
 }
 
 interface MatchRow {
   id: string;
-  registration_a_id: string;
-  registration_b_id: string;
+  registration_a_id: string | null;
+  registration_b_id: string | null;
+  team_a_id: string | null;
+  team_b_id: string | null;
   pools: { name: string } | { name: string }[] | null;
+  teams_a: { name: string } | { name: string }[] | null;
+  teams_b: { name: string } | { name: string }[] | null;
 }
 
 function one<T>(value: T | T[] | null): T | null {
@@ -179,20 +184,31 @@ export default async function VotePage({
   if (isMatchBasedRound) {
     const { data: matchRows } = await supabase
       .from("matches")
-      .select("id, registration_a_id, registration_b_id, pools(name)")
+      .select(
+        "id, registration_a_id, registration_b_id, team_a_id, team_b_id, pools(name), teams_a:teams!matches_team_a_id_fkey(name), teams_b:teams!matches_team_b_id_fkey(name)",
+      )
       .eq("round_id", roundId);
 
     const submissionByRegistration = new Map(
       ((submissions ?? []) as unknown as SubmissionRow[]).map((s) => [s.registration_id, s]),
     );
+    const submissionByTeam = new Map(
+      ((submissions ?? []) as unknown as SubmissionRow[]).filter((s) => s.team_id).map((s) => [s.team_id as string, s]),
+    );
     const registrationUserById = new Map(
       ((submissions ?? []) as unknown as SubmissionRow[]).map((s) => [s.registration_id, s.user_id]),
     );
 
-    const buildSide = (registrationId: string) => {
+    // team 賽事的「這是不是我」要看我是不是這支隊伍的成員,不是看單一 registration。
+    const { data: myTeamMemberships } = await supabase.from("team_members").select("team_id, registrations!inner(user_id)").eq("registrations.user_id", userId);
+    const myTeamIds = new Set((myTeamMemberships ?? []).map((tm) => tm.team_id as string));
+
+    const buildRegistrationSide = (registrationId: string) => {
       const sub = submissionByRegistration.get(registrationId);
       return {
         registrationId,
+        teamId: null,
+        teamName: null,
         submissionId: sub?.id ?? null,
         title: sub ? (revealed ? (sub.title ?? "未命名作品") : "— 標題於匿名階段不顯示 —") : "（這位還沒投稿)",
         isOwn: registrationUserById.get(registrationId) === userId,
@@ -200,18 +216,31 @@ export default async function VotePage({
       };
     };
 
+    const buildTeamSide = (teamId: string, teamName: string | null) => {
+      const sub = submissionByTeam.get(teamId);
+      return {
+        registrationId: sub?.registration_id ?? "",
+        teamId,
+        teamName,
+        submissionId: sub?.id ?? null,
+        title: sub ? (revealed ? (sub.title ?? "未命名作品") : "— 標題於匿名階段不顯示 —") : "（這隊還沒送出投稿)",
+        isOwn: myTeamIds.has(teamId),
+        sunoShareUrl: sub && revealed ? sub.suno_share_url : null,
+      };
+    };
+
     matchItems = ((matchRows ?? []) as unknown as MatchRow[]).map((m) => ({
       matchId: m.id,
       poolName: one(m.pools)?.name ?? "淘汰賽對戰",
-      a: buildSide(m.registration_a_id),
-      b: buildSide(m.registration_b_id),
+      a: m.team_a_id ? buildTeamSide(m.team_a_id, one(m.teams_a)?.name ?? null) : buildRegistrationSide(m.registration_a_id!),
+      b: m.team_b_id ? buildTeamSide(m.team_b_id, one(m.teams_b)?.name ?? null) : buildRegistrationSide(m.registration_b_id!),
     }));
 
     const matchIds = matchItems.map((m) => m.matchId);
     const { data: myMatchVotes } = matchIds.length
-      ? await supabase.from("match_votes").select("match_id, chosen_registration_id").eq("voter_id", userId).in("match_id", matchIds)
+      ? await supabase.from("match_votes").select("match_id, chosen_registration_id, chosen_team_id").eq("voter_id", userId).in("match_id", matchIds)
       : { data: [] };
-    initialVotedByMatch = Object.fromEntries((myMatchVotes ?? []).map((v) => [v.match_id, v.chosen_registration_id]));
+    initialVotedByMatch = Object.fromEntries((myMatchVotes ?? []).map((v) => [v.match_id, v.chosen_team_id ?? v.chosen_registration_id]));
   }
 
   return (

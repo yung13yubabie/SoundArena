@@ -1545,3 +1545,15 @@ grilling 過程中使用者兩次糾正我的初版提案:(1)循環賽不能重�
 真實PoC 14/14通過(涵蓋每個發現的正向拒絕、反向拒絕、對照組)。`security-regression.mjs` 新增9項,合計98/98全部通過。`tsc`/`eslint`/`build`全程乾淨。
 
 **未涵蓋**:Finding 2 只做了「禁止不相容組合」的防呆,沒有做「真正支援隊伍為對戰單位」的完整功能——這是獨立的規模不小的功能,之後有需求再設計。這批修復的UI層面(錯誤訊息實際顯示效果)沒有經過瀏覽器肉眼驗證。
+
+## 08-30(完成):隊伍賽真正支援對戰單位
+
+完整設計/實作/驗證見 **`docs/adr/0054-team-match-participant.md`**——grilling 十輪以上收斂的設計決策、9 個 migration + TS 層改動清單、驗證方式與過程中抓到的 3 個真實 bug 都寫在裡面,這裡不重複。
+
+**狀態**:後端(migration+lib層)、UI(`/submit`/`/vote`/`/admin/format`)、`security-regression.mjs` 新增的 21 項隊伍賽情境測試(118/118 全綠)、`tsc`/`eslint`/`next build` 全部完成並通過。
+
+**收尾階段額外抓到、ADR 裡沒展開的細節**:
+- `admin/format/AdminFormatClient.tsx` 的 `MatchData`/`page.tsx` 的 `MatchRow` 原本只有個人專用的 `registrationAId`/`registrationADisplayName` 等欄位,後台的三個對戰配對面板(循環賽/單敗/雙敗)完全沒有 team-aware——這是收尾驗證時才發現漏掉的部分,不在原本 9 個 migration 的規劃內。已泛化成 `aId`/`aLabel`/`bId`/`bLabel`/`winnerId`,後台三個面板改用泛化欄位,不分個人/隊伍都能正確顯示。
+- `TeamRosterPanel` 加上隊長標示(徽章)與轉讓下拉選單,對應新增的 `admin/format/actions.ts` 的 `transferTeamCaptain()`。
+
+**尚未驗證**(誠實揭露,ADR-0054 也有記錄):UI 沒有經過瀏覽器肉眼操作;`judge/actions.ts` 的 `finalizeRoundResults()` team 分岔、`lib/singleElimination.ts`/`doubleElimination.ts` 的 team 分岔只做了程式碼審閱 + 型別檢查,沒有像 `lib/wildcardRevival.ts` 當初那樣寫一次性 PoC 對照真實資料庫獨立驗證排序/展開邏輯——如果之後這條路徑出問題,先從這裡查起。

@@ -147,6 +147,7 @@ export interface SubmitEntryInput {
   audioObjectKey: string | null;
   processDoc: string;
   ethicalSourcingDeclared: boolean;
+  teamId: string | null;
 }
 
 export async function submitEntry(input: SubmitEntryInput): Promise<ActionResult> {
@@ -214,6 +215,7 @@ export async function submitEntry(input: SubmitEntryInput): Promise<ActionResult
     p_audio_object_key: input.audioObjectKey,
     p_process_doc: input.processDoc.trim() || null,
     p_ethical_sourcing_declared: input.ethicalSourcingDeclared,
+    p_team_id: input.teamId,
   });
 
   if (error) {
@@ -222,6 +224,7 @@ export async function submitEntry(input: SubmitEntryInput): Promise<ActionResult
         { test: (_m, c) => c === "23505", friendly: "這個輪次你已經投稿過了" },
         { test: (m) => m.includes("submissions have not opened yet"), friendly: "這一輪還沒開放投稿" },
         { test: (m) => m.includes("submission window has closed"), friendly: "這一輪投稿已經截止" },
+        { test: (m) => m.includes("you are not a member of this team"), friendly: "你不是這支隊伍的成員" },
       ]),
     };
   }
@@ -287,5 +290,53 @@ export async function deleteMySubmission(submissionId: string): Promise<ActionRe
 
   revalidatePath("/status");
   revalidatePath("/submit");
+  return { success: true };
+}
+
+// 隊長從候選版本裡選一筆正式送出——只有隊長本人能執行(RPC 內部驗證),不是
+// 隊長呼叫會被拒絕。
+export async function selectTeamSubmission(submissionId: string): Promise<ActionResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "請先登入" };
+
+  const { error } = await supabase.rpc("select_team_submission", {
+    p_submission_id: submissionId,
+    p_caller_user_id: user.id,
+  });
+  if (error) {
+    return {
+      error: toFriendlyError(error, [
+        { test: (m) => m.includes("only the team captain can select"), friendly: "只有隊長可以選定正式送出的版本" },
+      ]),
+    };
+  }
+
+  revalidatePath("/submit");
+  revalidatePath("/status");
+  return { success: true };
+}
+
+// 隊長轉讓——呼叫者必須是目前的隊長,或對這場比賽有 review 權限的主辦人/協作者。
+export async function transferTeamCaptain(teamId: string, newCaptainRegistrationId: string): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("transfer_team_captain", {
+    p_team_id: teamId,
+    p_new_captain_registration_id: newCaptainRegistrationId,
+  });
+  if (error) {
+    return {
+      error: toFriendlyError(error, [
+        { test: (m) => m.includes("insufficient permission to transfer"), friendly: "只有隊長本人或主辦人可以轉讓隊長" },
+        { test: (m) => m.includes("new captain must be an existing member"), friendly: "新隊長必須是這支隊伍現有的成員" },
+      ]),
+    };
+  }
+
+  revalidatePath("/submit");
+  revalidatePath("/status");
+  revalidatePath("/admin/format");
   return { success: true };
 }

@@ -438,6 +438,18 @@ export async function swapTeamMember(registrationId: string, newTeamId: string):
   return { success: true };
 }
 
+export async function transferTeamCaptain(teamId: string, newCaptainRegistrationId: string): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("transfer_team_captain", {
+    p_team_id: teamId,
+    p_new_captain_registration_id: newCaptainRegistrationId,
+  });
+  if (error) return { error: toFriendlyError(error) };
+
+  revalidatePath("/admin/format");
+  return { success: true };
+}
+
 // 外卡復活——候選名單是「觸發當下最近一次確認結果的那一輪」,取前 candidateN 名
 // (離晉級線最近),整場比賽限用一次(RPC 端用 unique(competition_id) 保證)。
 export async function openWildcardRevival(competitionId: string, candidateN: number, opensAt: string, closesAt: string): Promise<ActionResult> {

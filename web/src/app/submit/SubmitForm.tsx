@@ -2,10 +2,24 @@
 
 import { useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { SiteHeader } from "@/components/SiteHeader";
 import { Icon } from "@/lib/icons";
-import { submitEntry, verifySunoSharer, requestAudioUpload } from "./actions";
+import { submitEntry, verifySunoSharer, requestAudioUpload, selectTeamSubmission } from "./actions";
 import { ALLOWED_AUDIO_TYPES, MAX_AUDIO_FILE_SIZE } from "@/lib/audioUpload";
+
+export interface TeamMember {
+  registrationId: string;
+  displayName: string;
+}
+
+export interface TeamCandidate {
+  submissionId: string;
+  title: string | null;
+  uploaderDisplayName: string;
+  isSelected: boolean;
+  sunoShareUrl: string;
+}
 
 export interface RoundOption {
   roundId: string;
@@ -13,6 +27,14 @@ export interface RoundOption {
   sunoHandle: string;
   label: string;
   theme: { type: string; value: string } | null;
+  team: {
+    teamId: string;
+    teamName: string;
+    isCaptain: boolean;
+    captainDisplayName: string;
+    members: TeamMember[];
+    candidates: TeamCandidate[];
+  } | null;
 }
 
 type ParseResult =
@@ -37,6 +59,7 @@ type ParseState = "idle" | "loading" | "ok" | "mismatch" | "invalid" | "not_foun
 type UploadState = "idle" | "uploading" | "done" | "error";
 
 export function SubmitForm({ options }: { options: RoundOption[] }) {
+  const router = useRouter();
   const [selected, setSelected] = useState(options[0]);
   const [url, setUrl] = useState("");
   const [title, setTitle] = useState("");
@@ -49,6 +72,20 @@ export function SubmitForm({ options }: { options: RoundOption[] }) {
   const [submitted, setSubmitted] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectingId, setSelectingId] = useState<string | null>(null);
+  const [selectError, setSelectError] = useState<string | null>(null);
+
+  async function handleSelectCandidate(submissionId: string) {
+    setSelectingId(submissionId);
+    setSelectError(null);
+    const result = await selectTeamSubmission(submissionId);
+    setSelectingId(null);
+    if ("error" in result) {
+      setSelectError(result.error);
+    } else {
+      router.refresh();
+    }
+  }
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadState, setUploadState] = useState<UploadState>("idle");
@@ -152,6 +189,7 @@ export function SubmitForm({ options }: { options: RoundOption[] }) {
       audioObjectKey,
       processDoc,
       ethicalSourcingDeclared,
+      teamId: selected.team?.teamId ?? null,
     });
     setPending(false);
     if ("error" in result) {
@@ -172,7 +210,9 @@ export function SubmitForm({ options }: { options: RoundOption[] }) {
           <div className="glass max-w-[560px] p-7">
             <div className="flex items-center gap-2.5 rounded-[10px] border border-ok/30 bg-ok/10 p-3.5 text-[12.5px] text-ok">
               <Icon name="check" />
-              「{title}」已送出，狀態轉為「待人工審核」
+              {selected.team
+                ? `「${title}」已送出，成為隊伍候選版本，待隊長選定為正式投稿`
+                : `「${title}」已送出，狀態轉為「待人工審核」`}
             </div>
             <Link
               href="/status"
@@ -230,6 +270,56 @@ export function SubmitForm({ options }: { options: RoundOption[] }) {
                 </div>
               )}
             </div>
+
+            {selected.team && (
+              <div className="mb-5 rounded-[10px] border border-panel-border bg-white/[0.02] p-4">
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-1.5">
+                  <span className="text-[13px] font-semibold text-ink">隊伍：{selected.team.teamName}</span>
+                  <span className="text-[11.5px] text-ink-faint">
+                    隊長：{selected.team.captainDisplayName}
+                    {selected.team.isCaptain && "（就是你）"}
+                  </span>
+                </div>
+                <div className="mb-2.5 text-[11.5px] text-ink-faint">
+                  隊員：{selected.team.members.map((m) => m.displayName).join("、")}
+                </div>
+                {selected.team.candidates.length > 0 && (
+                  <div className="mb-2.5 flex flex-col gap-1.5">
+                    <div className="text-[11px] tracking-wide text-ink-faint uppercase">隊伍候選版本</div>
+                    {selected.team.candidates.map((c) => (
+                      <div
+                        key={c.submissionId}
+                        className="flex items-center justify-between gap-2 rounded-[8px] border border-panel-border bg-black/20 px-3 py-2 text-[12px]"
+                      >
+                        <span className="min-w-0 truncate">
+                          {c.title ?? "未命名作品"} <span className="text-ink-faint">by {c.uploaderDisplayName}</span>
+                        </span>
+                        {c.isSelected ? (
+                          <span className="flex-none rounded-full border border-ok/35 bg-ok/8 px-2 py-0.5 text-[10.5px] text-ok">
+                            目前送出
+                          </span>
+                        ) : selected.team!.isCaptain ? (
+                          <button
+                            type="button"
+                            disabled={selectingId === c.submissionId}
+                            onClick={() => handleSelectCandidate(c.submissionId)}
+                            className="flex-none rounded-full border border-accent/35 bg-accent/8 px-2 py-0.5 text-[10.5px] text-accent disabled:opacity-45"
+                          >
+                            {selectingId === c.submissionId ? "設定中…" : "選為正式投稿"}
+                          </button>
+                        ) : (
+                          <span className="flex-none text-[10.5px] text-ink-faint">候選中</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {selectError && <p className="mb-1 text-[11.5px] text-bad">{selectError}</p>}
+                <div className="text-[11.5px] leading-relaxed text-ink-faint">
+                  隊伍賽一隊共用一筆正式投稿：隊員都可以上傳候選版本，最終由隊長選定其中一筆送出；截止前沒選的話，系統會自動選最後上傳的一筆。
+                </div>
+              </div>
+            )}
 
             <div className="mb-5">
               <label className="mb-1.5 block text-[12.5px] font-semibold text-ink-dim">Suno 作品分享連結</label>

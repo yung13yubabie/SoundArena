@@ -5,11 +5,17 @@ import { computeRanking } from "@/lib/ranking";
 import { getJudgeScoringData, getPeriodicAccumulationStageRoundIds, mergeJudgeScoringData } from "@/lib/judgeScoring";
 import { isRoundRobinRound } from "@/lib/roundRobin";
 import { isSingleEliminationRound } from "@/lib/singleElimination";
+import { isTeamGroupingRound, getTeamStageStartRoundId, computeTeamScoreTotals } from "@/lib/teamGrouping";
 
 // 外卡復活候選名單——「離晉級線最近」的排序演算法依 source_round 用的賽制分岔:
 // 循環賽用勝場數(含平局0.5勝)由高到低、單敗淘汰用場次票數差距由小到大(輸得越
 // 驚險排越前面)、月週期累積制/一般%淘汰用累積分數由高到低。回傳依此排序後取前
 // topN 的 registration id——只回傳「這一輪真的被淘汰的人」,不做其他篩選。
+//
+// team 賽事下,候選單位還是「個人」(grilling 確認,不是整隊復活),但排序依據是
+// 「他所屬隊伍」的戰績/分數——同一支隊伍的全部現役成員排序值相同,取前 topN 支
+// 隊伍、展開成這些隊伍已淘汰成員的清單(實際候選人數可能超過 topN,因為單位是
+// 「隊」不是「人」,這是 team 模式下的自然語意轉換)。
 //
 // supabase 參數要傳呼叫端(主辦人)自己的 session client,不能是 service client——
 // 月週期累積制/一般%淘汰分支重用 getJudgeScoringData(),裡面呼叫的
@@ -33,6 +39,69 @@ export async function computeWildcardRevivalCandidates(
   if (eliminatedIds.size === 0) return [];
 
   const service = createServiceClient();
+  const isTeamRound = await isTeamGroupingRound(supabase, sourceRoundId);
+
+  if (isTeamRound) {
+    const stageStartRoundId = await getTeamStageStartRoundId(supabase, sourceRoundId);
+    const { data: memberRows } = await service
+      .from("team_members")
+      .select("team_id, registration_id")
+      .eq("round_id", stageStartRoundId ?? sourceRoundId)
+      .in("registration_id", Array.from(eliminatedIds));
+    const teamIdByRegistration = new Map((memberRows ?? []).map((m) => [m.registration_id, m.team_id as string]));
+    const eliminatedTeamIds = Array.from(new Set((memberRows ?? []).map((m) => m.team_id as string)));
+    if (eliminatedTeamIds.length === 0) return [];
+
+    let sortedTeamIds: string[];
+
+    if (await isSingleEliminationRound(sourceRoundId)) {
+      const { data: matches } = await service.from("matches").select("id, team_a_id, team_b_id, winner_team_id").eq("round_id", sourceRoundId);
+      const matchIds = (matches ?? []).map((m) => m.id);
+      const { data: voteRows } = matchIds.length
+        ? await service.from("match_votes").select("match_id, chosen_team_id").in("match_id", matchIds)
+        : { data: [] };
+      const countsByMatch = new Map<string, Map<string, number>>();
+      for (const v of voteRows ?? []) {
+        if (!v.chosen_team_id) continue;
+        const counts = countsByMatch.get(v.match_id) ?? new Map<string, number>();
+        counts.set(v.chosen_team_id, (counts.get(v.chosen_team_id) ?? 0) + 1);
+        countsByMatch.set(v.match_id, counts);
+      }
+      const marginByTeam = new Map<string, number>();
+      for (const m of matches ?? []) {
+        if (!m.team_a_id || !m.team_b_id) continue;
+        const loserTeamId = m.winner_team_id === m.team_a_id ? m.team_b_id : m.team_a_id;
+        if (!eliminatedTeamIds.includes(loserTeamId)) continue;
+        const counts = countsByMatch.get(m.id);
+        const votesA = counts?.get(m.team_a_id) ?? 0;
+        const votesB = counts?.get(m.team_b_id) ?? 0;
+        marginByTeam.set(loserTeamId, Math.abs(votesA - votesB));
+      }
+      sortedTeamIds = [...eliminatedTeamIds].sort((a, b) => (marginByTeam.get(a) ?? Infinity) - (marginByTeam.get(b) ?? Infinity));
+    } else if (await isRoundRobinRound(sourceRoundId)) {
+      const { data: matches } = await service.from("matches").select("team_a_id, team_b_id, winner_team_id").eq("round_id", sourceRoundId);
+      const winsByTeam = new Map<string, number>();
+      for (const m of matches ?? []) {
+        if (!m.team_a_id || !m.team_b_id) continue;
+        if (m.winner_team_id === null) {
+          winsByTeam.set(m.team_a_id, (winsByTeam.get(m.team_a_id) ?? 0) + 0.5);
+          winsByTeam.set(m.team_b_id, (winsByTeam.get(m.team_b_id) ?? 0) + 0.5);
+        } else {
+          winsByTeam.set(m.winner_team_id, (winsByTeam.get(m.winner_team_id) ?? 0) + 1);
+        }
+      }
+      sortedTeamIds = [...eliminatedTeamIds].sort((a, b) => (winsByTeam.get(b) ?? 0) - (winsByTeam.get(a) ?? 0));
+    } else {
+      const scoreByTeam = await computeTeamScoreTotals(supabase, competitionId, sourceRoundId, eliminatedTeamIds);
+      sortedTeamIds = [...eliminatedTeamIds].sort((a, b) => (scoreByTeam.get(b) ?? 0) - (scoreByTeam.get(a) ?? 0));
+    }
+
+    const topTeamIds = new Set(sortedTeamIds.slice(0, topN));
+    return Array.from(eliminatedIds).filter((id) => {
+      const teamId = teamIdByRegistration.get(id);
+      return teamId && topTeamIds.has(teamId);
+    });
+  }
 
   if (await isSingleEliminationRound(sourceRoundId)) {
     const { data: matches } = await service.from("matches").select("id, registration_a_id, registration_b_id, winner_registration_id").eq("round_id", sourceRoundId);
@@ -42,6 +111,7 @@ export async function computeWildcardRevivalCandidates(
       : { data: [] };
     const countsByMatch = new Map<string, Map<string, number>>();
     for (const v of voteRows ?? []) {
+      if (!v.chosen_registration_id) continue;
       const counts = countsByMatch.get(v.match_id) ?? new Map<string, number>();
       counts.set(v.chosen_registration_id, (counts.get(v.chosen_registration_id) ?? 0) + 1);
       countsByMatch.set(v.match_id, counts);
@@ -49,10 +119,10 @@ export async function computeWildcardRevivalCandidates(
     const marginByRegistration = new Map<string, number>();
     for (const m of matches ?? []) {
       const loserId = m.winner_registration_id === m.registration_a_id ? m.registration_b_id : m.registration_a_id;
-      if (!eliminatedIds.has(loserId)) continue;
+      if (!loserId || !eliminatedIds.has(loserId)) continue;
       const counts = countsByMatch.get(m.id);
-      const votesA = counts?.get(m.registration_a_id) ?? 0;
-      const votesB = counts?.get(m.registration_b_id) ?? 0;
+      const votesA = counts?.get(m.registration_a_id!) ?? 0;
+      const votesB = counts?.get(m.registration_b_id!) ?? 0;
       marginByRegistration.set(loserId, Math.abs(votesA - votesB));
     }
     return Array.from(eliminatedIds)
@@ -64,6 +134,7 @@ export async function computeWildcardRevivalCandidates(
     const { data: matches } = await service.from("matches").select("registration_a_id, registration_b_id, winner_registration_id").eq("round_id", sourceRoundId);
     const winsByRegistration = new Map<string, number>();
     for (const m of matches ?? []) {
+      if (!m.registration_a_id || !m.registration_b_id) continue;
       if (m.winner_registration_id === null) {
         winsByRegistration.set(m.registration_a_id, (winsByRegistration.get(m.registration_a_id) ?? 0) + 0.5);
         winsByRegistration.set(m.registration_b_id, (winsByRegistration.get(m.registration_b_id) ?? 0) + 0.5);
@@ -102,6 +173,8 @@ export type WildcardRevivalOutcome =
 
 // 確認外卡復活結果——票數最高的候選人贏,平手(最高票不只一人)整個擋下,
 // 邏輯比照 single_elimination/double_elimination「確認本輪結果」的平手處理。
+// 候選人一律是個人(即使來源輪次是 team 模式),投票也是投給候選人「個人」,
+// 不需要 team-aware 分支。
 export async function computeWildcardRevivalOutcome(eventId: string): Promise<WildcardRevivalOutcome> {
   const service = createServiceClient();
 

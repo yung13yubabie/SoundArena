@@ -22,6 +22,7 @@ import {
   deleteCompetition,
   cleanupNonFinalistAudio,
   swapTeamMember,
+  transferTeamCaptain,
   setRoundEliminationPercent,
   openWildcardRevival,
   extendWildcardRevivalVoting,
@@ -55,6 +56,7 @@ export interface TeamMemberData {
 export interface TeamData {
   id: string;
   name: string;
+  captainRegistrationId: string | null;
   members: TeamMemberData[];
 }
 
@@ -67,11 +69,11 @@ export interface PoolData {
 export interface MatchData {
   id: string;
   poolName: string;
-  registrationAId: string;
-  registrationADisplayName: string;
-  registrationBId: string;
-  registrationBDisplayName: string;
-  winnerRegistrationId: string | null;
+  aId: string;
+  aLabel: string;
+  bId: string;
+  bLabel: string;
+  winnerId: string | null;
   bracket: "winners" | "losers" | "final" | null;
 }
 
@@ -478,17 +480,46 @@ function TeamRosterPanel({ teams }: { teams: TeamData[] }) {
     });
   };
 
+  const transferCaptain = (teamId: string, newCaptainRegistrationId: string) => {
+    setError(null);
+    startTransition(async () => {
+      const result = await transferTeamCaptain(teamId, newCaptainRegistrationId);
+      if ("error" in result) setError(result.error);
+    });
+  };
+
   return (
     <div className="glass mt-2 mb-3.5 px-4 py-3.5">
-      <div className="mb-2.5 text-[11.5px] text-ink-faint">目前分組——可以用下拉選單手動換組，換組後會通知異動雙方</div>
+      <div className="mb-2.5 text-[11.5px] text-ink-faint">
+        目前分組——可以用下拉選單手動換組，換組後會通知異動雙方；隊長可以轉讓給隊上任何一人（換組不會自動跟著轉讓隊長）
+      </div>
       {error && <p className="mb-2.5 text-[12px] text-bad">{error}</p>}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {teams.map((team) => (
           <div key={team.id} className="rounded-[10px] border border-panel-border bg-white/[0.02] p-3">
-            <div className="mb-1.5 text-[12.5px] font-semibold">{team.name}</div>
+            <div className="mb-1.5 flex items-center justify-between gap-2">
+              <span className="text-[12.5px] font-semibold">{team.name}</span>
+              <select
+                value={team.captainRegistrationId ?? ""}
+                disabled={isPending || team.members.length === 0}
+                onChange={(e) => transferCaptain(team.id, e.target.value)}
+                className="rounded-lg border border-panel-border bg-black/25 px-2 py-1 text-[11px] text-ink [color-scheme:dark] disabled:opacity-45"
+              >
+                {team.members.map((m) => (
+                  <option key={m.registrationId} value={m.registrationId}>
+                    隊長：{m.displayName}
+                  </option>
+                ))}
+              </select>
+            </div>
             {team.members.map((m) => (
               <div key={m.registrationId} className="flex items-center justify-between gap-2 py-1">
-                <span className="text-[12.5px]">{m.displayName}</span>
+                <span className="text-[12.5px]">
+                  {m.displayName}
+                  {m.registrationId === team.captainRegistrationId && (
+                    <span className="ml-1.5 rounded-full border border-accent/35 bg-accent/8 px-1.5 py-0.25 text-[10px] text-accent">隊長</span>
+                  )}
+                </span>
                 <select
                   value={team.id}
                   disabled={isPending}
@@ -574,14 +605,14 @@ function MatchesPanel({ pools, matches }: { pools: PoolData[]; matches: MatchDat
                 <div className="border-t border-panel-border pt-2">
                   {poolMatches.map((m) => (
                     <div key={m.id} className="py-0.75 text-[11.5px]">
-                      <span className={m.winnerRegistrationId === m.registrationAId ? "font-semibold text-accent" : "text-ink-dim"}>
-                        {m.registrationADisplayName}
+                      <span className={m.winnerId === m.aId ? "font-semibold text-accent" : "text-ink-dim"}>
+                        {m.aLabel}
                       </span>
                       <span className="text-ink-faint"> vs </span>
-                      <span className={m.winnerRegistrationId === m.registrationBId ? "font-semibold text-accent" : "text-ink-dim"}>
-                        {m.registrationBDisplayName}
+                      <span className={m.winnerId === m.bId ? "font-semibold text-accent" : "text-ink-dim"}>
+                        {m.bLabel}
                       </span>
-                      {m.winnerRegistrationId === null && <span className="ml-1.5 text-ink-faint">（尚未結算或平局）</span>}
+                      {m.winnerId === null && <span className="ml-1.5 text-ink-faint">（尚未結算或平局）</span>}
                     </div>
                   ))}
                 </div>
@@ -611,14 +642,14 @@ function SingleEliminationPanel({ matches }: { matches: MatchData[] }) {
       </div>
       {matches.map((m) => (
         <div key={m.id} className="py-0.75 text-[12px]">
-          <span className={m.winnerRegistrationId === m.registrationAId ? "font-semibold text-accent" : "text-ink-dim"}>
-            {m.registrationADisplayName}
+          <span className={m.winnerId === m.aId ? "font-semibold text-accent" : "text-ink-dim"}>
+            {m.aLabel}
           </span>
           <span className="text-ink-faint"> vs </span>
-          <span className={m.winnerRegistrationId === m.registrationBId ? "font-semibold text-accent" : "text-ink-dim"}>
-            {m.registrationBDisplayName}
+          <span className={m.winnerId === m.bId ? "font-semibold text-accent" : "text-ink-dim"}>
+            {m.bLabel}
           </span>
-          {m.winnerRegistrationId === null && <span className="ml-1.5 text-ink-faint">（尚未結算或平手）</span>}
+          {m.winnerId === null && <span className="ml-1.5 text-ink-faint">（尚未結算或平手）</span>}
         </div>
       ))}
     </div>
@@ -651,14 +682,14 @@ function DoubleEliminationPanel({ matches }: { matches: MatchData[] }) {
           <div className="mb-0.5 text-[11px] font-semibold text-ink-faint">{g.label}</div>
           {g.matches.map((m) => (
             <div key={m.id} className="py-0.75 text-[12px]">
-              <span className={m.winnerRegistrationId === m.registrationAId ? "font-semibold text-accent" : "text-ink-dim"}>
-                {m.registrationADisplayName}
+              <span className={m.winnerId === m.aId ? "font-semibold text-accent" : "text-ink-dim"}>
+                {m.aLabel}
               </span>
               <span className="text-ink-faint"> vs </span>
-              <span className={m.winnerRegistrationId === m.registrationBId ? "font-semibold text-accent" : "text-ink-dim"}>
-                {m.registrationBDisplayName}
+              <span className={m.winnerId === m.bId ? "font-semibold text-accent" : "text-ink-dim"}>
+                {m.bLabel}
               </span>
-              {m.winnerRegistrationId === null && <span className="ml-1.5 text-ink-faint">（尚未結算或平手）</span>}
+              {m.winnerId === null && <span className="ml-1.5 text-ink-faint">（尚未結算或平手）</span>}
             </div>
           ))}
         </div>

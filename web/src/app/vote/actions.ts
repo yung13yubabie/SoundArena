@@ -95,6 +95,42 @@ export async function castMatchVote(matchId: string, chosenRegistrationId: strin
   return { success: true };
 }
 
+// team 賽事的配對投票——跟 castMatchVote() 同一套基礎設施,差別只在投給
+// chosen_team_id 而不是 chosen_registration_id。獨立成一支函式而不是在
+// castMatchVote() 裡加參數,維持個人賽事路徑完全不受影響。
+export async function castTeamMatchVote(matchId: string, chosenTeamId: string): Promise<ActionResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "請先登入" };
+
+  const voterIp = await getClientIp();
+
+  const serviceClient = createServiceClient();
+  const { error } = await serviceClient.from("match_votes").insert({
+    match_id: matchId,
+    voter_id: user.id,
+    voter_ip: voterIp,
+    chosen_team_id: chosenTeamId,
+  });
+
+  if (error) {
+    return {
+      error: toFriendlyError(error, [
+        { test: (_m, c) => c === "23505", friendly: (error.message.includes("voter_ip")
+          ? "這個網路連線已經投過這一場了（同網路只能投一票，避免灌票）——如果你是跟朋友共用 wifi，可以試試切換成行動網路再投一次"
+          : "你已經投過這一場了") },
+        { test: (m) => m.includes("cannot vote on your own team's match"), friendly: "不能投自己隊伍參與的場次" },
+        { test: (m) => m.includes("chosen team is not part of this match"), friendly: "選擇的隊伍不在這場配對裡" },
+      ]),
+    };
+  }
+
+  revalidatePath("/vote");
+  return { success: true };
+}
+
 // 外卡復活投票——同一個理由:wildcard_revival_votes 沒有開放任何 authenticated
 // INSERT policy,寫入一定要走 service_role。
 export async function castWildcardRevivalVote(eventId: string, chosenRegistrationId: string): Promise<ActionResult> {
